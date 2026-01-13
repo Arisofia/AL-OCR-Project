@@ -9,9 +9,13 @@ logger = logging.getLogger("ocr-service.engine")
 
 # Try to import the packaged reconstruction pipeline (optional)
 try:
-    from ocr_reconstruct.modules.pipeline import process_bytes as recon_process_bytes  # type: ignore
+    from ocr_reconstruct import process_bytes as recon_process_bytes
     RECON_AVAILABLE = True
-except Exception:
+except ImportError:
+    recon_process_bytes = None
+    RECON_AVAILABLE = False
+except Exception as e:
+    logger.warning(f"Error importing ocr_reconstruct: {e}")
     recon_process_bytes = None
     RECON_AVAILABLE = False
 

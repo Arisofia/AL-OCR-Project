@@ -133,7 +133,7 @@ async def perform_ocr(
 
     except Exception as e:
         logger.error(f"Failed to process {file.filename}: {e}")
-        raise HTTPException(status_code=500, detail="Internal processing error")
+        raise HTTPException(status_code=500, detail="Internal processing error") from e
 
 # Lambda Handler
 handler = Mangum(app)

@@ -4,7 +4,7 @@
 
 namespace DefaultPublisher.ALProject1;
 
-pageextension 50100 CustomerListExt extends "Customer List"
+pageextension 50100 CustomerListExt extends 22 // "Customer List" (use page ID to avoid localization issues)
 {
     trigger OnOpenPage();
     begin
