@@ -6,6 +6,11 @@ venv/
 .env.local
 .env.*.local
 
+# Package build artifacts
+*.egg-info/
+build/
+dist/
+
 # Node
 node_modules/
 dist/
