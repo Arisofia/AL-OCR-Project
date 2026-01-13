@@ -66,7 +66,8 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/ocr-service
         working-directory: ./ocr-service
         run: |
-          python - <<'PY'
+          # Run quick import checks and save output to a debug file for artifact upload
+          python - <<'PY' > debug_imports.txt
           import os, sys, importlib
           print('OCR_API_KEY:', os.getenv('OCR_API_KEY'))
           print('PYTHONPATH:', os.getenv('PYTHONPATH'))
@@ -79,4 +80,11 @@ jobs:
                   print('IMPORT ERROR', name, type(e), e)
           PY
 
+          # Show the debug file for logs and then run tests
+          cat debug_imports.txt || true
           pytest tests -q
+      - name: Upload ocr-service debug artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ocr-service-debug
+          path: ./ocr-service/debug_imports.txt
