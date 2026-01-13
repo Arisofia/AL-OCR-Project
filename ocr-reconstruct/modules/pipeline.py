@@ -69,3 +69,57 @@ class IterativeOCR:
                 break
 
         return best_text.strip(), {"iterations": meta["iterations"]}
+
+
+def process_bytes(image_bytes: bytes, iterations: int = 3, save_iterations: bool = False):
+    """Process an image provided as bytes. Returns (best_text, processed_image_bytes, meta).
+
+    processed_image_bytes is a PNG-encoded image of the final processed grayscale or reconstructed image.
+    """
+    import numpy as np
+    import cv2
+
+    nparr = np.frombuffer(image_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if img is None:
+        return "", None, {"iterations": []}
+
+    current = to_gray(img)
+    best_text = ""
+    meta = {"iterations": []}
+
+    for i in range(iterations):
+        enhanced = sharpen(current)
+        den = denoise(enhanced)
+        th = adaptive_threshold(den)
+
+        text = image_to_text(th)
+        meta["iterations"].append({"iteration": i + 1, "text": text})
+
+        if len(text) < 10:
+            dep = depixelate_naive(current)
+            dep_th = adaptive_threshold(dep)
+            maybe_text = image_to_text(dep_th)
+            meta["iterations"].append({"iteration": f"depixelate_{i+1}", "text": maybe_text})
+            if len(maybe_text) > len(text):
+                text = maybe_text
+                current = dep
+            else:
+                mask = (th == 255).astype('uint8')*255
+                inpainted = inpaint_bbox(current, mask)
+                maybe_text2 = image_to_text(adaptive_threshold(inpainted))
+                meta["iterations"].append({"iteration": f"inpaint_{i+1}", "text": maybe_text2})
+                if len(maybe_text2) > len(text):
+                    text = maybe_text2
+                    current = inpainted
+
+        if len(text) > len(best_text):
+            best_text = text
+
+        if len(best_text) > 20:
+            break
+
+    # Encode processed image to bytes (PNG)
+    success, buf = cv2.imencode('.png', current)
+    img_bytes = buf.tobytes() if success else None
+    return best_text.strip(), img_bytes, {"iterations": meta["iterations"]}
