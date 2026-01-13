@@ -1,0 +1,9 @@
+opencv-python-headless
+pytesseract
+numpy
+pillow
+matplotlib
+pytest
+scikit-image
+scipy
+tqdm
