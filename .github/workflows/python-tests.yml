@@ -52,6 +52,22 @@ jobs:
         run: |
           pip install -r ocr-service/requirements.txt
 
+      - name: Save ocr-service pip environment (debug)
+        if: ${{ always() }}
+        run: |
+          mkdir -p artifacts || true
+          pip --version > artifacts/pip_version.txt || true
+          pip freeze > artifacts/pip_freeze.txt || true
+          python -V > artifacts/python_version.txt || true
+          env > artifacts/env.txt || true
+
+      - name: Upload ocr-service pip debug artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ocr-service-pip-debug
+          path: artifacts
+
       - name: Generate sample images
         run: |
           python ocr_reconstruct/tests/generate_samples.py
