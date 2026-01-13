@@ -8,3 +8,4 @@ pydantic
 python-dotenv
 mangum
 boto3
+scikit-learn
