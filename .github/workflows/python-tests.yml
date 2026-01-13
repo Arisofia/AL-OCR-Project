@@ -66,4 +66,17 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/ocr-service
         working-directory: ./ocr-service
         run: |
+          python - <<'PY'
+          import os, sys, importlib
+          print('OCR_API_KEY:', os.getenv('OCR_API_KEY'))
+          print('PYTHONPATH:', os.getenv('PYTHONPATH'))
+          print('sys.path:', sys.path)
+          for name in ('services', 'modules', 'main', 'lambda_handler'):
+              try:
+                  m = importlib.import_module(name)
+                  print(name, '->', getattr(m, '__file__', '<builtin>'))
+              except Exception as e:
+                  print('IMPORT ERROR', name, type(e), e)
+          PY
+
           pytest tests -q
