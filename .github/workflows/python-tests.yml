@@ -60,10 +60,14 @@ jobs:
         run: |
           pytest ocr_reconstruct/tests -q
 
+      - name: Uninstall editable ocr_reconstruct to avoid module name collisions
+        run: |
+          pip uninstall -y ocr_reconstruct || true
+
       - name: Run ocr-service tests
         env:
           OCR_API_KEY: default_secret_key
-          PYTHONPATH: ${{ github.workspace }}/ocr-service
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/ocr-service
         working-directory: ./ocr-service
         run: |
           # Run quick import checks and save output to a debug file for artifact upload
