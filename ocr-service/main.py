@@ -75,9 +75,27 @@ async def get_api_key(header_value: str = Security(api_key_header)):
         return header_value
     raise HTTPException(status_code=403, detail="Invalid API Key")
 
+# Recon package availability (best-effort detection)
+try:
+    import ocr_reconstruct as _ocr_reconstruct_pkg  # type: ignore
+    RECON_PKG_AVAILABLE = True
+    RECON_PKG_VERSION = getattr(_ocr_reconstruct_pkg, "__version__", None)
+except Exception:
+    RECON_PKG_AVAILABLE = False
+    RECON_PKG_VERSION = None
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "timestamp": time.time()}
+
+@app.get("/recon/status")
+async def recon_status():
+    """Return reconstruction availability and package metadata."""
+    return {
+        "reconstruction_enabled": ENABLE_RECONSTRUCTION,
+        "package_installed": RECON_PKG_AVAILABLE,
+        "package_version": RECON_PKG_VERSION
+    }
 
 @app.post("/ocr", response_model=OCRResponse)
 async def perform_ocr(
