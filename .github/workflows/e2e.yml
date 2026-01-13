@@ -34,23 +34,54 @@ jobs:
           pip install -r ocr-service/requirements.txt
           pip install -r ocr_reconstruct/requirements.txt
 
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
       - name: Install Node deps
         working-directory: ./frontend
         run: |
           npm ci
-          npx playwright install --with-deps
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright browsers
+        working-directory: ./frontend
+        run: npx playwright install --with-deps
 
       - name: Start backend
         working-directory: ./ocr-service
         run: |
           nohup uvicorn main:app --host 0.0.0.0 --port 8000 &
-          sleep 2
+          # Wait for health endpoint
+          for i in {1..15}; do
+            if curl -sS http://localhost:8000/health >/dev/null; then
+              echo "Backend healthy" && break
+            fi
+            sleep 1
+          done
 
       - name: Start frontend
         working-directory: ./frontend
         run: |
           nohup npm run dev -- --host &
-          sleep 4
+          # Wait for Vite dev server
+          for i in {1..20}; do
+            if curl -sS http://localhost:5173 >/dev/null; then
+              echo "Frontend healthy" && break
+            fi
+            sleep 1
+          done
 
       - name: Run Playwright tests
         working-directory: ./frontend
