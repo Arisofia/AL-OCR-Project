@@ -141,7 +141,7 @@ function App() {
               <h2>Extracted Information</h2>
               {result && (
                 <div className="stats">
-                  <span><Zap size={12} style={{ display: 'inline' }} /> {result.strategy_used}</span>
+                  <span>{result.iterations?.length} iterations</span>
                   <span>{result.processing_time}s</span>
                 </div>
               )}
@@ -167,6 +167,19 @@ function App() {
                   className="result-content"
                   style={{ display: 'flex', flexDirection: 'column', flex: 1 }}
                 >
+                  <div className="iteration-pills" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                    {result.iterations?.map((it) => (
+                      <span key={it.iteration} style={{ 
+                        fontSize: '0.7rem', 
+                        padding: '2px 8px', 
+                        background: '#e2e8f0', 
+                        borderRadius: '4px',
+                        color: '#475569'
+                      }}>
+                        Iteration {it.iteration}: {it.text_length} chars
+                      </span>
+                    ))}
+                  </div>
                   <pre className="ocr-text">{result.text}</pre>
                 </motion.div>
               ) : (
