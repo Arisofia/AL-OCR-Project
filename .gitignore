@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+.env.local
+.env.*.local
+
+# Node
+node_modules/
+dist/
+.build/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+
+# OS
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Docker
+docker-compose.override.yml
+
+# IDE
+.vscode/
+.idea/
+
+# AWS CLI
+*.pem
+
