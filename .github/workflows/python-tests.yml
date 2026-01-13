@@ -63,5 +63,7 @@ jobs:
       - name: Run ocr-service tests
         env:
           OCR_API_KEY: default_secret_key
+          PYTHONPATH: ${{ github.workspace }}/ocr-service
+        working-directory: ./ocr-service
         run: |
-          pytest ocr-service/tests -q
+          pytest tests -q
