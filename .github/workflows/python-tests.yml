@@ -45,8 +45,16 @@ jobs:
 
       - name: Install ocr_reconstruct (editable) and deps
         run: |
-          python -m pip install -e ./ocr_reconstruct
-          pip install -r ocr_reconstruct/requirements.txt
+          set -x
+          python -m pip install -e ./ocr_reconstruct 2>&1 | tee ocr_reconstruct_install.log || true
+          pip install -r ocr_reconstruct/requirements.txt 2>&1 | tee -a ocr_reconstruct_install.log || true
+
+      - name: Upload ocr_reconstruct install log
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ocr_reconstruct-install-log
+          path: ocr_reconstruct_install.log
 
       - name: Install OCR service test deps (minimal)
         run: |
