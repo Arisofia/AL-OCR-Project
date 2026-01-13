@@ -1,22 +1,16 @@
 import logging
-import os
 import time
-import uuid
-from typing import List, Optional
+from typing import Optional
 
-import boto3
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Security
-from fastapi.security.api_key import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from dotenv import load_dotenv
+from fastapi.security.api_key import APIKeyHeader
 from mangum import Mangum
 
-# Import our custom iterative modules
+from config import get_settings, Settings
+from schemas import OCRResponse, HealthResponse, ReconStatusResponse
+from services.storage import StorageService
 from modules.ocr_engine import IterativeOCREngine
-
-# Load environment variables
-load_dotenv()
 
 # Setup logging
 logging.basicConfig(
@@ -25,26 +19,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ocr-service")
 
+settings = get_settings()
+
 app = FastAPI(
-    title="AL Financial OCR Project",
-    description="Professional Iterative OCR & Pixel Reconstruction Service",
-    version="1.2.0"
+    title=settings.app_name,
+    description=settings.app_description,
+    version=settings.version
 )
-
-# Configuration
-API_KEY = os.getenv("OCR_API_KEY", "default_secret_key")
-API_KEY_NAME = "X-API-KEY"
-api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
-
-S3_BUCKET = os.getenv("S3_BUCKET_NAME")
-s3_client = boto3.client('s3')
-
-# Feature flag: reconstruction
-ENABLE_RECONSTRUCTION = os.getenv("ENABLE_RECONSTRUCTION", "false").lower() in ("1", "true", "yes")
-RECON_ITERATIONS = int(os.getenv("RECON_ITERATIONS", os.getenv("OCR_ITERATIONS", 3)))
-
-# Initialize Engine
-ocr_engine = IterativeOCREngine(iterations=int(os.getenv("OCR_ITERATIONS", 3)))
 
 # CORS configuration
 app.add_middleware(
@@ -55,23 +36,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Models
-class OCRIteration(BaseModel):
-    iteration: int
-    text_length: int
-    preview_text: str
+# Dependency Providers
+def get_storage_service(settings: Settings = Depends(get_settings)):
+    return StorageService(bucket_name=settings.s3_bucket_name)
 
-class OCRResponse(BaseModel):
-    filename: str
-    text: str
-    iterations: List[OCRIteration]
-    processing_time: float
-    s3_key: Optional[str] = None
-    reconstruction: Optional[dict] = None  # optional reconstruction metadata
+def get_ocr_engine(settings: Settings = Depends(get_settings)):
+    return IterativeOCREngine(iterations=settings.ocr_iterations)
 
 # Security
-async def get_api_key(header_value: str = Security(api_key_header)):
-    if header_value == API_KEY:
+api_key_header = APIKeyHeader(name=settings.api_key_header_name, auto_error=False)
+
+async def get_api_key(
+    header_value: str = Security(api_key_header),
+    settings: Settings = Depends(get_settings)
+):
+    if header_value == settings.ocr_api_key:
         return header_value
     raise HTTPException(status_code=403, detail="Invalid API Key")
 
@@ -84,24 +63,29 @@ except Exception:
     RECON_PKG_AVAILABLE = False
     RECON_PKG_VERSION = None
 
-@app.get("/health")
+@app.get("/health", response_model=HealthResponse)
 async def health_check():
-    return {"status": "healthy", "timestamp": time.time()}
+    return HealthResponse(status="healthy", timestamp=time.time())
 
-@app.get("/recon/status")
-async def recon_status():
+@app.get("/recon/status", response_model=ReconStatusResponse)
+async def recon_status(settings: Settings = Depends(get_settings)):
     """Return reconstruction availability and package metadata."""
-    return {
-        "reconstruction_enabled": ENABLE_RECONSTRUCTION,
-        "package_installed": RECON_PKG_AVAILABLE,
-        "package_version": RECON_PKG_VERSION
-    }
+    return ReconStatusResponse(
+        reconstruction_enabled=settings.enable_reconstruction,
+        package_installed=RECON_PKG_AVAILABLE,
+        package_version=RECON_PKG_VERSION
+    )
 
 @app.post("/ocr", response_model=OCRResponse)
 async def perform_ocr(
     file: UploadFile = File(...), 
     reconstruct: bool = False,
-    api_key: str = Depends(get_api_key)
+    advanced: bool = False,
+    doc_type: str = "generic",
+    api_key: str = Depends(get_api_key),
+    settings: Settings = Depends(get_settings),
+    storage_service: StorageService = Depends(get_storage_service),
+    ocr_engine: IterativeOCREngine = Depends(get_ocr_engine)
 ):
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
@@ -110,48 +94,44 @@ async def perform_ocr(
     contents = await file.read()
     
     try:
-        # Process using the new Iterative Engine
-        use_recon = reconstruct or ENABLE_RECONSTRUCTION
-        result = ocr_engine.process_image(contents, use_reconstruction=use_recon)
+        if advanced:
+            # Use Advanced AI-driven reconstruction with continuous learning
+            result = await ocr_engine.process_image_advanced(contents, doc_type=doc_type)
+        else:
+            # Process using the standard Iterative Engine
+            use_recon = reconstruct or settings.enable_reconstruction
+            result = ocr_engine.process_image(contents, use_reconstruction=use_recon)
         
         if "error" in result:
             raise HTTPException(status_code=400, detail=result["error"])
 
-        s3_key = None
-        recon_s3_key = None
-        if S3_BUCKET:
-            s3_key = f"processed/{uuid.uuid4()}-{file.filename}"
-            s3_client.put_object(
-                Bucket=S3_BUCKET,
-                Key=s3_key,
-                Body=contents,
-                ContentType=file.content_type
+        s3_key = storage_service.upload_file(
+            content=contents,
+            filename=file.filename,
+            content_type=file.content_type
+        )
+        
+        if result.get("reconstruction") and result["reconstruction"].get("meta"):
+            storage_service.upload_json(
+                data=result["reconstruction"],
+                filename=file.filename
             )
-            # Store reconstructed image if present in result
-            if result.get("reconstruction") and result["reconstruction"].get("meta"):
-                # If the reconstruction produced an in-memory image, engine may include it under meta
-                # For now we store the reconstruction preview text and meta only
-                recon_s3_key = f"recon_meta/{uuid.uuid4()}-{file.filename}.json"
-                s3_client.put_object(
-                    Bucket=S3_BUCKET,
-                    Key=recon_s3_key,
-                    Body=str(result["reconstruction"]).encode("utf-8"),
-                    ContentType="application/json"
-                )
 
         processing_time = round(time.time() - start_time, 3)
         return OCRResponse(
             filename=file.filename,
             text=result["text"],
-            iterations=result["iterations"],
+            iterations=result.get("iterations", []),
             processing_time=processing_time,
             s3_key=s3_key,
             reconstruction=result.get("reconstruction")
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to process {file.filename}: {e}")
-        raise HTTPException(status_code=500, detail="Internal processing error") from e
+        raise HTTPException(status_code=500, detail="Internal processing error")
 
 # Lambda Handler
 handler = Mangum(app)

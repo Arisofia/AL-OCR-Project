@@ -5,7 +5,12 @@ opencv-python-headless
 pytesseract
 numpy
 pydantic
+pydantic-settings
 python-dotenv
 mangum
 boto3
 scikit-learn
+supabase
+openai
+google-generativeai
+httpx
