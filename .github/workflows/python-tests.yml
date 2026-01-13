@@ -48,9 +48,10 @@ jobs:
           python -m pip install -e ./ocr_reconstruct
           pip install -r ocr_reconstruct/requirements.txt
 
-      - name: Install OCR service deps
+      - name: Install OCR service test deps (minimal)
         run: |
-          pip install -r ocr-service/requirements.txt
+          # Install only minimal deps required to run ocr-service unit tests to avoid heavy installs
+          pip install pytest pytest-mock boto3 pydantic pydantic-settings python-dotenv
 
       - name: Save ocr-service pip environment (debug)
         if: ${{ always() }}
