@@ -36,7 +36,8 @@ jobs:
           pip install -r ocr-service/requirements.txt pytest
 
       - name: Run tests
+        working-directory: ocr-service
         run: |
-          pytest ocr-service/tests -q
+          python -m pytest -q
         env:
           TZ: UTC
