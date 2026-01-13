@@ -29,6 +29,4 @@ def adaptive_threshold(img_gray):
 def upscale_and_smooth(img_gray, scale=2):
     # Upsample then apply median blur to reduce pixelation
     h, w = img_gray.shape[:2]
-    up = cv2.resize(img_gray, (w*scale, h*scale), interpolation=cv2.INTER_CUBIC)
-    smooth = cv2.medianBlur(up, 3)
-    return smooth
+    return cv2.medianBlur(cv2.resize(img_gray, (w*scale, h*scale), interpolation=cv2.INTER_CUBIC), 3)

@@ -4,12 +4,15 @@ A concise, research-oriented Python project that implements an iterative OCR pip
 
 IMPORTANT: This project is for research, education, and lawful uses only. Do not use it to attempt to reverse intentional redactions or to breach privacy.
 
+
 Features
+
 - Iterative pipeline using OpenCV for preprocessing (grayscale, sharpening, denoising, thresholding) and Tesseract for OCR
 - Basic pixel reconstruction heuristics (upsampling + smoothing) and inpainting for partial occlusions
 - CLI for single-image and batch runs
 - Synthetic data generator for tests (pixelation/blur overlays)
 - Pytest unit tests demonstrating expected behavior on synthetic inputs
+
 
 Quickstart
 

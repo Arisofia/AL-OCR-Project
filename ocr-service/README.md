@@ -3,9 +3,11 @@
 This document describes how to set up the minimal infra and deploy the OCR Lambda container.
 
 Prerequisites:
+
 - AWS CLI configured with an account that has privileges to create resources.
 - Docker and buildx installed locally.
 - git repo for commit-tag image tagging.
+
 
 Quick setup (local):
 

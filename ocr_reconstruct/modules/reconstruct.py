@@ -14,9 +14,7 @@ def depixelate_naive(img_gray, block=6):
         return img_gray
 
     # Resize using INTER_CUBIC
-    up = cv2.resize(img_gray, (w*2, h*2), interpolation=cv2.INTER_CUBIC)
-    out = cv2.medianBlur(up, 3)
-    return out
+    return cv2.medianBlur(cv2.resize(img_gray, (w*2, h*2), interpolation=cv2.INTER_CUBIC), 3)
 
 
 def inpaint_bbox(img, mask):
@@ -37,9 +35,7 @@ def deblur_wiener(img, kernel=None):
     # FFT-based deconvolution (naive)
     try:
         import scipy.signal as signal
-        deconv = signal.wiener(img_f)
-        res = np.clip(deconv*255.0, 0, 255).astype('uint8')
-        return res
+        return np.clip(signal.wiener(img_f)*255.0, 0, 255).astype('uint8')
     except Exception:
         # fallback to sharpening if scipy not available
         return cv2.filter2D(img, -1, np.array([[-1,-1,-1],[-1,9,-1],[-1,-1,-1]]))
