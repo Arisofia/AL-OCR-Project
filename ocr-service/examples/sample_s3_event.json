@@ -1,0 +1,14 @@
+{
+  "Records": [
+    {
+      "s3": {
+        "bucket": {
+          "name": "al-financial-documents-510701314494"
+        },
+        "object": {
+          "key": "example_invoice.jpg"
+        }
+      }
+    }
+  ]
+}
