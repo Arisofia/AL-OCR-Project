@@ -47,7 +47,7 @@ class ReconStatusResponse(BaseModel):
     """
     reconstruction_enabled: bool
     package_installed: bool
-    package_version: Optional[str]
+    package_version: Optional[str] = None
 
 
 class PresignRequest(BaseModel):

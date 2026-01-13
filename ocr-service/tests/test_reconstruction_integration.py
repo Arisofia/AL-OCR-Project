@@ -1,22 +1,21 @@
 import os
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from main import app
 
-def test_reconstruction_enabled(tmp_path):
+def test_reconstruction_enabled(tmp_path, monkeypatch):
     # Clear lru_cache for settings to ensure environment variables are picked up
     from config import get_settings
     get_settings.cache_clear()
     
-    # Ensure reconstruction feature is enabled for the test
-    os.environ["ENABLE_RECONSTRUCTION"] = "true"
-    os.environ["OCR_ITERATIONS"] = "1"
+    # Ensure reconstruction feature is enabled for the test using monkeypatch for cleanup
+    monkeypatch.setenv("ENABLE_RECONSTRUCTION", "true")
+    monkeypatch.setenv("OCR_ITERATIONS", "1")
 
     client = TestClient(app)
 
-    # Use the synthetic pixelated sample generated in ocr-reconstruct tests
-    sample = os.path.join(os.path.dirname(__file__), "..", "..", "ocr-reconstruct", "tests", "data", "sample_pixelated.png")
+    # Use the synthetic pixelated sample generated in ocr_reconstruct tests
+    sample = os.path.join(os.path.dirname(__file__), "..", "..", "ocr_reconstruct", "tests", "data", "sample_pixelated.png")
     
     if not os.path.exists(sample):
         # Create a dummy image for the test if the sample is missing
