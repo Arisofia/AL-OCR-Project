@@ -59,8 +59,8 @@ jobs:
 
       - name: Install OCR service test deps (minimal)
         run: |
-          # Install only minimal deps required to run ocr-service unit tests to avoid heavy installs
-          pip install pytest pytest-mock boto3 pydantic pydantic-settings python-dotenv
+          # Install deps required to run ocr-service unit tests (kept minimal to speed up CI)
+          pip install pytest pytest-mock boto3 pydantic pydantic-settings python-dotenv numpy fastapi scikit-learn
 
       - name: Save ocr-service pip environment (debug)
         if: ${{ always() }}
