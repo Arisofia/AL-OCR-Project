@@ -6,7 +6,7 @@ test('upload and extract text flow', async ({ page, baseURL }) => {
 
   // Ensure the file input is present
   const fileInput = await page.locator('input[type=file]');
-  const samplePath = path.resolve(process.cwd(), '../../ocr-reconstruct/tests/data/sample_pixelated.png');
+  const samplePath = path.resolve(process.cwd(), '../../ocr_reconstruct/tests/data/sample_pixelated.png');
 
   // Set file and preview
   await fileInput.setInputFiles(samplePath);
