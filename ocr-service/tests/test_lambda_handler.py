@@ -1,5 +1,4 @@
 import pytest
-import json
 from unittest.mock import MagicMock, patch
 from lambda_handler import handler
 
@@ -42,9 +41,8 @@ def test_handler_textract_failure(s3_event):
         
         response = handler(s3_event, None)
         
-        assert response == {"status": "ok"} # Handler catches individual record failures
-        # Should have called save_json twice (one for output, one for error? No, just once for error in this case)
-        # Wait, if analyze_document fails, it goes to except block and calls save_json with err_obj
+        # Handler should report the partial failure and count it
+        assert response == {"status": "partial_failure", "failed": 1}
         mock_storage.save_json.assert_called_once()
         args, _ = mock_storage.save_json.call_args
         assert "error" in args[0]

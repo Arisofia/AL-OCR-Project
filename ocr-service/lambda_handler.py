@@ -80,7 +80,12 @@ def process_record(record: Dict[str, Any]) -> None:
             'error': f'processing_failed: {str(e)}', 
             'input': {'bucket': bucket, 'key': key}
         }
-        storage_service.save_json(err_obj, out_key)
+        try:
+            storage_service.save_json(err_obj, out_key)
+        except Exception as se:
+            logger.error("Failed to save error object to S3: %s", se)
+        # Re-raise to allow the caller (handler) to track failures and decide on retries
+        raise
 
 
 def handler(event: Dict[str, Any], _context: Any) -> Dict[str, str]:
