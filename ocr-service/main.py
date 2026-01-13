@@ -67,7 +67,7 @@ class OCRResponse(BaseModel):
     iterations: List[OCRIteration]
     processing_time: float
     s3_key: Optional[str] = None
-    reconstruction: Optional[dict] = None  # populated when reconstruction preprocessor runs
+    reconstruction: Optional[dict] = None  # optional reconstruction metadata
 
 # Security
 async def get_api_key(header_value: str = Security(api_key_header)):
@@ -82,6 +82,7 @@ async def health_check():
 @app.post("/ocr", response_model=OCRResponse)
 async def perform_ocr(
     file: UploadFile = File(...), 
+    reconstruct: bool = False,
     api_key: str = Depends(get_api_key)
 ):
     if not file.content_type.startswith("image/"):
@@ -89,33 +90,11 @@ async def perform_ocr(
     
     start_time = time.time()
     contents = await file.read()
-    reconstruction_info = None
-
+    
     try:
-        # Optional reconstruction preprocessor
-        if ENABLE_RECONSTRUCTION:
-            try:
-                # Dynamically import the reconstruction helper to avoid hard dependency
-                import importlib.util
-                recon_path = os.path.join(os.path.dirname(__file__), "..", "ocr-reconstruct", "modules", "pipeline.py")
-                recon_path = os.path.normpath(recon_path)
-                spec = importlib.util.spec_from_file_location("recon_pipeline", recon_path)
-                recon_mod = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(recon_mod)
-
-                if hasattr(recon_mod, "process_bytes"):
-                    recon_text, recon_img_bytes, recon_meta = recon_mod.process_bytes(contents, iterations=RECON_ITERATIONS)
-                    reconstruction_info = {"preview_text": recon_text, "meta": recon_meta}
-                    # If reconstruction produced an image, use it for the OCR engine
-                    if recon_img_bytes:
-                        contents = recon_img_bytes
-                else:
-                    logger.warning("Reconstruction module lacks process_bytes; skipping")
-            except Exception as e:
-                logger.error(f"Reconstruction preprocessing failed: {e}")
-
         # Process using the new Iterative Engine
-        result = ocr_engine.process_image(contents)
+        use_recon = reconstruct or ENABLE_RECONSTRUCTION
+        result = ocr_engine.process_image(contents, use_reconstruction=use_recon)
         
         if "error" in result:
             raise HTTPException(status_code=400, detail=result["error"])
@@ -130,30 +109,27 @@ async def perform_ocr(
                 Body=contents,
                 ContentType=file.content_type
             )
-            # If we have an image from reconstruction, store it separately
-            if reconstruction_info and reconstruction_info.get("meta") and recon_img_bytes:
-                recon_s3_key = f"reconstructed/{uuid.uuid4()}-{file.filename}.png"
+            # Store reconstructed image if present in result
+            if result.get("reconstruction") and result["reconstruction"].get("meta"):
+                # If the reconstruction produced an in-memory image, engine may include it under meta
+                # For now we store the reconstruction preview text and meta only
+                recon_s3_key = f"recon_meta/{uuid.uuid4()}-{file.filename}.json"
                 s3_client.put_object(
                     Bucket=S3_BUCKET,
                     Key=recon_s3_key,
-                    Body=recon_img_bytes,
-                    ContentType="image/png"
+                    Body=str(result["reconstruction"]).encode("utf-8"),
+                    ContentType="application/json"
                 )
 
         processing_time = round(time.time() - start_time, 3)
-        resp = OCRResponse(
+        return OCRResponse(
             filename=file.filename,
             text=result["text"],
             iterations=result["iterations"],
             processing_time=processing_time,
             s3_key=s3_key,
-            reconstruction=reconstruction_info
+            reconstruction=result.get("reconstruction")
         )
-        # Attach reconstructed s3 key if present
-        if recon_s3_key:
-            resp.reconstruction["s3_key"] = recon_s3_key
-
-        return resp
 
     except Exception as e:
         logger.error(f"Failed to process {file.filename}: {e}")

@@ -1,0 +1,6 @@
+opencv-python-headless
+pytesseract
+numpy
+pillow
+scikit-image
+scipy
