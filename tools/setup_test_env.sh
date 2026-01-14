@@ -28,10 +28,11 @@ if [ -n "${PYTHON_BIN}" ]; then
   PIP_BIN="${VENV_DIR}/bin/pip"
   "${PIP_BIN}" install --upgrade pip
   "${PIP_BIN}" install -r "${SERVICE_DIR}/requirements.txt"
+  "${PIP_BIN}" install -e "${PROJECT_ROOT}/ocr_reconstruct"
   "${PIP_BIN}" install pytest
   echo "Running pytest (local venv) from ${SERVICE_DIR}"
   pushd "${SERVICE_DIR}" >/dev/null
-  "${PY_BIN}" -m pytest -q
+  PYTHONPATH="${PROJECT_ROOT}:${SERVICE_DIR}" "${PY_BIN}" -m pytest -q
   popd >/dev/null
 else
   echo "Python 3.11 not found. Trying Docker fallback."
@@ -40,5 +41,5 @@ else
     exit 2
   fi
 
-  docker run --rm -v "${PROJECT_ROOT}":/app -w /app python:3.11 bash -lc "python -m pip install -U pip && python -m pip install -r ocr-service/requirements.txt pytest && PYTHONPATH=ocr-service python -m pytest -q"
+  docker run --rm -v "${PROJECT_ROOT}":/app -w /app python:3.11 bash -lc "python -m pip install -U pip && python -m pip install -r ocr-service/requirements.txt pytest && python -m pip install -e ocr_reconstruct && PYTHONPATH=/app/ocr-service:/app python -m pytest -q"
 fi

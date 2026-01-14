@@ -4,22 +4,25 @@ Main entry point for the OCR FastAPI service.
 
 import logging
 import time
-from typing import Any
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Security, Body
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Security
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
 from mangum import Mangum
+import boto3  # third-party import
 
 from config import get_settings, Settings
-from schemas import OCRResponse, HealthResponse, ReconStatusResponse
+from schemas import (
+    OCRResponse,
+    HealthResponse,
+    ReconStatusResponse,
+    PresignRequest,
+    PresignResponse,
+)
 from services.storage import StorageService
 from modules.ocr_engine import IterativeOCREngine
 from modules.ocr_config import EngineConfig
 from modules.processor import OCRProcessor
-import boto3
-from typing import Dict
-from schemas import PresignRequest, PresignResponse
 
 # Setup logging
 logging.basicConfig(
@@ -33,7 +36,7 @@ settings = get_settings()
 app = FastAPI(
     title=settings.app_name,
     description=settings.app_description,
-    version=settings.version
+    version=settings.version,
 )
 
 # CORS configuration
@@ -136,9 +139,9 @@ async def perform_ocr(
     reconstruct: bool = False,
     advanced: bool = False,
     doc_type: str = "generic",
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
     curr_settings: Settings = Depends(get_settings),
-    processor: OCRProcessor = Depends(get_ocr_processor)
+    processor: OCRProcessor = Depends(get_ocr_processor),
 ) -> OCRResponse:
     """
     Performs OCR on the uploaded file with optional reconstruction.
@@ -157,7 +160,7 @@ async def perform_ocr(
 @app.post("/presign", response_model=PresignResponse)
 async def generate_presigned_post(
     req: PresignRequest,
-    api_key: str = Depends(get_api_key),
+    _api_key: str = Depends(get_api_key),
     curr_settings: Settings = Depends(get_settings),
 ) -> PresignResponse:
     """
@@ -181,7 +184,9 @@ async def generate_presigned_post(
         )
     except Exception as exc:  # pragma: no cover - Boto3 behavior
         logger.exception("Failed to generate presigned post")
-        raise HTTPException(status_code=500, detail="Failed to generate presigned post")
+        raise HTTPException(
+            status_code=500, detail="Failed to generate presigned post"
+        ) from exc
 
     return PresignResponse(url=post["url"], fields=post["fields"])
 
@@ -189,5 +194,6 @@ async def generate_presigned_post(
 handler = Mangum(app)
 
 if __name__ == "__main__":
-    import uvicorn
+    import uvicorn  # type: ignore
+
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

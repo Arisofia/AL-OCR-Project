@@ -1,7 +1,7 @@
 """
 Core OCR engine managing iterative processing and reconstruction loops.
 
-This module coordinates image enhancement, layout analysis, 
+This module coordinates image enhancement, layout analysis,
 reconstruction, and OCR iterations to achieve high-confidence results.
 """
 
@@ -125,7 +125,8 @@ class IterativeOCREngine:
         try:
             text = pytesseract.image_to_string(
                 thresh, config=self.ocr_config.flags
-            ).strip()
+            )
+            text = text.strip()
         except Exception as e:
             logger.error("Tesseract whole-page OCR failed: %s", e)
             text = ""
@@ -140,7 +141,7 @@ class IterativeOCREngine:
 
         for region in regions:
             x, y, w, h = region["bbox"]
-            roi = thresh[y:y+h, x:x+w]
+            roi = thresh[y : y + h, x : x + w]
             if roi.size == 0:
                 continue
 
@@ -150,16 +151,24 @@ class IterativeOCREngine:
             try:
                 text = pytesseract.image_to_string(
                     roi, config=self.ocr_config.flags
-                ).strip()
+                )
+                text = text.strip()
                 if text:
                     combined_text.append(text)
             except Exception as e:
-                logger.warning("Tesseract region OCR failed for region %s: %s", region.get("id"), e)
+                logger.warning(
+                    "Tesseract region OCR failed for region %s: %s",
+                    region.get("id"),
+                    e,
+                )
 
         return "\n\n".join(combined_text)
 
-    def process_image(self, image_bytes: bytes, 
-                      use_reconstruction: bool = False) -> dict:
+    def process_image(
+        self,
+        image_bytes: bytes,
+        use_reconstruction: bool = False,
+    ) -> dict:
         """
         Runs the iterative pipeline on the provided image bytes.
         """
@@ -194,8 +203,7 @@ class IterativeOCREngine:
         layout_regions = DocumentLayoutAnalyzer.detect_regions(image_bytes)
 
         for i in range(self.config.max_iterations):
-            logger.info("Starting iteration %s/%s", i + 1, 
-                        self.config.max_iterations)
+            logger.info("Starting iteration %s/%s", i + 1, self.config.max_iterations)
 
             try:
                 text, thresh = self._perform_ocr_iteration(
@@ -204,23 +212,27 @@ class IterativeOCREngine:
 
                 # Region-based fallback for low confidence
                 should_use_regions = (
-                    i == 1 and 
-                    best_confidence < self.config.confidence_threshold and 
-                    len(layout_regions) > 1
+                    i == 1
+                    and best_confidence < self.config.confidence_threshold
+                    and len(layout_regions) > 1
                 )
-                
+
                 if should_use_regions:
                     logger.info("Confidence low, attempting region-based OCR")
                     text = self._ocr_regions(thresh, layout_regions)
 
                 confidence = self.confidence_scorer.calculate(text)
 
-                preview = text[:50] + "..." if len(text) > 50 else text
+                if len(text) > 50:
+                    preview = text[:50] + "..."
+                else:
+                    preview = text
+                method = "region-based" if should_use_regions else "full-page"
                 iteration_history.append({
                     "iteration": i + 1,
                     "text_length": len(text),
                     "confidence": confidence,
-                    "method": "region-based" if should_use_regions else "full-page",
+                    "method": method,
                     "preview_text": preview
                 })
 
@@ -250,11 +262,12 @@ class IterativeOCREngine:
         doc_type: Optional[str] = None
     ) -> dict:
         """
-        Advanced async pipeline that applies AI reconstruction and learning.
+        Advanced async pipeline that applies AI reconstruction
+        and learning.
         """
         doc_type = doc_type or self.config.default_doc_type
-        
-        # 0. Validate input to avoid passing empty or oversized data to the AI reconstructor
+
+        # 0. Validate input for AI reconstructor
         validation_error = ImageToolkit.validate_image(
             image_bytes, max_size_mb=self.config.max_image_size_mb
         )

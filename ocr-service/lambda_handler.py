@@ -1,7 +1,7 @@
 """
 AWS Lambda handler for the OCR service.
 
-This module processes S3 events, triggers Amazon Textract for OCR, 
+This module processes S3 events, triggers Amazon Textract for OCR,
 and saves the results back to S3.
 """
 
@@ -72,17 +72,17 @@ def process_record(record: Dict[str, Any]) -> None:
         else:
             logger.info("Wrote output to s3://%s/%s", bucket, out_key)
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logger.exception(
             "Error processing object %s from bucket %s", key, bucket
         )
         err_obj = {
-            'error': f'processing_failed: {str(e)}', 
-            'input': {'bucket': bucket, 'key': key}
+            "error": f"processing_failed: {e}",
+            "input": {"bucket": bucket, "key": key},
         }
         try:
             storage_service.save_json(err_obj, out_key)
-        except Exception as se:
+        except Exception as se:  # pylint: disable=broad-exception-caught
             logger.error("Failed to save error object to S3: %s", se)
         # Re-raise to allow the caller (handler) to track failures and decide on retries
         raise
@@ -100,7 +100,7 @@ def handler(event: Dict[str, Any], _context: Any) -> Dict[str, str]:
     for record in records:
         try:
             process_record(record)
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             failures += 1
 
     if failures:

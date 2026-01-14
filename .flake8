@@ -1,0 +1,4 @@
+[flake8]
+max-line-length = 88
+exclude = .venv, .venv_test, .venv311, .venv*, ocr-service/.venv_test, ocr-service/.venv, .git, __pycache__, build, dist
+ignore = E203, W503

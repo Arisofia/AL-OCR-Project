@@ -4,7 +4,8 @@ try:
     from ocr_reconstruct.modules.enhance import ImageEnhancer
     from ocr_reconstruct.modules.reconstruct import PixelReconstructor
 except ImportError:
-    # Provide lightweight fallbacks so the ocr-service can run without the optional ocr_reconstruct package.
+    # Provide lightweight fallbacks so the ocr-service can run
+    # without the optional ocr_reconstruct package.
     import cv2
     import numpy as _np
 

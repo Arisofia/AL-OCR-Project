@@ -1,33 +1,64 @@
-from unittest.mock import MagicMock, patch
-import sys
+"""
+Manual test script for verifying AWS services integration.
+Uses mocking to simulate AWS interactions without requiring real credentials.
+"""
 
-# Inject a fake boto3 module to avoid installation/typing issues in this environment
+import sys
+import os
+from unittest.mock import MagicMock
+
+# Add ocr-service to path
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "ocr-service"))
+
+
 class FakeBoto3Module:
+    """
+    Fake boto3 module to avoid installation/typing issues in this environment.
+    """
+
     def __init__(self):
         self._mocks = {}
-    def client(self, name, *args, **kwargs):
+
+    def client(self, name, *args, **kwargs):  # pylint: disable=unused-argument
+        """
+        Returns a mocked client.
+        """
         if name not in self._mocks:
             self._mocks[name] = MagicMock()
         return self._mocks[name]
 
+
+# Inject fake boto3 BEFORE importing services
 sys.modules['boto3'] = FakeBoto3Module()
+sys.modules['botocore'] = MagicMock()
+sys.modules['botocore.exceptions'] = MagicMock()
+sys.modules['botocore.config'] = MagicMock()
 
-from services.storage import StorageService
-from services.textract import TextractService
+# pylint: disable=wrong-import-position
+from services.storage import StorageService  # noqa: E402
+from services.textract import TextractService  # noqa: E402
 
-# Now run tests with the fake boto3
-mock_s3 = sys.modules['boto3'].client('s3')
-mock_tex = sys.modules['boto3'].client('textract')
 
-# Test StorageService
-s = StorageService(bucket_name='test-bucket')
-key = s.upload_file(b'content', 'file.png', 'image/png')
-print('upload_file returned key:', key)
-saved = s.save_json({'a': 1}, 'out.json')
-print('save_json returned:', saved)
+def run_tests():
+    """
+    Executes a basic set of tests for storage and textract services.
+    """
+    # Now run tests with the fake boto3
+    mock_tex = sys.modules['boto3'].client('textract')
 
-# Test Textract
-mock_tex.analyze_document.return_value = {'Blocks': []}
-t = TextractService()
-res = t.analyze_document('b', 'k')
-print('analyze_document returned:', res)
+    # Test StorageService
+    storage = StorageService(bucket_name='test-bucket')
+    key = storage.upload_file(b'content', 'file.png', 'image/png')
+    print('upload_file returned key:', key)
+    saved = storage.save_json({'a': 1}, 'out.json')
+    print('save_json returned:', saved)
+
+    # Test Textract
+    mock_tex.analyze_document.return_value = {'Blocks': []}
+    textract = TextractService()
+    res = textract.analyze_document(b'b', 'k')
+    print('analyze_document returned:', res)
+
+
+if __name__ == "__main__":
+    run_tests()

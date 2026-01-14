@@ -57,8 +57,11 @@ class LearningEngine:
         }
 
         try:
-            # Upsert into a 'learning_patterns' table in a thread to avoid blocking the event loop
-            await asyncio.to_thread(lambda: self.client.table("learning_patterns").upsert(data).execute())
+            # Upsert into 'learning_patterns' in a background thread
+            def _upsert():
+                self.client.table("learning_patterns").upsert(data).execute()
+
+            await asyncio.to_thread(_upsert)
         except Exception as e:
             logger.warning("Failed to record learning data: %s", e)
 

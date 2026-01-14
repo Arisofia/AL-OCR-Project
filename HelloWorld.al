@@ -4,10 +4,33 @@
 
 namespace DefaultPublisher.ALProject1;
 
-pageextension 50100 CustomerListExt extends 22 // "Customer List" (use page ID to avoid localization issues)
+pageextension 50100 CustomerListExt extends "Customer List"
 {
-    trigger OnOpenPage();
-    begin
-        Message('App published: Hello world');
-    end;
+    actions
+    {
+        addlast(processing)
+        {
+            action(ScanDocument)
+            {
+                ApplicationArea = All;
+                Caption = 'Scan Document';
+                Image = Document;
+                Promoted = true;
+                PromotedCategory = Process;
+
+                trigger OnAction()
+                var
+                    OCRServiceMgt: Codeunit "OCR Service Mgt.";
+                    InStream: InStream;
+                    FileName: Text;
+                    ResultText: Text;
+                begin
+                    if UploadIntoStream('Select Image', '', 'All Files (*.*)|*.*', FileName, InStream) then begin
+                        ResultText := OCRServiceMgt.UploadAndProcessOCR(InStream);
+                        Message('OCR Result: %1', ResultText);
+                    end;
+                end;
+            }
+        }
+    }
 }

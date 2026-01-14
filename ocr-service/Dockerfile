@@ -13,7 +13,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the application code
-COPY main.py .
+COPY . .
 
 # Set the CMD to the Lambda S3/Textract handler
 CMD [ "lambda_handler.handler" ]

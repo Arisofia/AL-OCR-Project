@@ -41,3 +41,4 @@ jobs:
           python -m pytest -q
         env:
           TZ: UTC
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/ocr-service

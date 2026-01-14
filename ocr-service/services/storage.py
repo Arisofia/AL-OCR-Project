@@ -22,7 +22,11 @@ class StorageService:
     Retries are performed locally on transient ClientError exceptions (e.g. throttling).
     """
 
-    def __init__(self, bucket_name: Optional[str] = None, settings: Optional[Any] = None):
+    def __init__(
+        self,
+        bucket_name: Optional[str] = None,
+        settings: Optional[Any] = None,
+    ):
         """
         Initializes the StorageService with S3 client and configuration.
         """
@@ -43,7 +47,11 @@ class StorageService:
             }
         )
         self.s3_client = (
-            boto3.client('s3', config=config, region_name=self.region) if self.bucket_name else None
+            boto3.client(
+                's3',
+                config=config,
+                region_name=self.region,
+            ) if self.bucket_name else None
         )
 
     def upload_file(

@@ -30,19 +30,21 @@ class TextractService:
         # Ensure a sane fallback for retries
         self.max_retries = (getattr(settings, "aws_max_retries", None) or 3)
 
-        # When using manual retry loops, keep botocore retries minimal to avoid doubled retries
+        # Keep botocore retries minimal when using manual retry loops
         config = Config(
             retries={
                 'max_attempts': 1,
                 'mode': 'standard'
             }
         )
-        self.client = boto3.client('textract', config=config, region_name=getattr(settings, "aws_region", "us-east-1"))
+        self.client = boto3.client(
+            'textract',
+            config=config,
+            region_name=getattr(settings, "aws_region", "us-east-1"),
+        )
 
     def start_detection(self, bucket: str, key: str) -> Optional[str]:
-        """
-        Starts asynchronous document text detection and returns JobId or None on failure.
-        """
+        """Starts async document text detection and returns JobId or None."""
         attempt = 0
         while attempt < self.max_retries:
             try:
@@ -69,7 +71,8 @@ class TextractService:
         features: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
-        Performs synchronous document analysis. Raises RuntimeError on persistent failures.
+        Performs synchronous document analysis.
+        Raises RuntimeError on persistent failures.
         """
         if features is None:
             features = ['TABLES', 'FORMS']
@@ -78,8 +81,10 @@ class TextractService:
         while attempt < self.max_retries:
             try:
                 return self.client.analyze_document(
-                    Document={'S3Object': {'Bucket': bucket, 'Name': key}},
-                    FeatureTypes=features
+                    Document={
+                        'S3Object': {'Bucket': bucket, 'Name': key}
+                    },
+                    FeatureTypes=features,
                 )
             except ClientError as e:
                 attempt += 1
@@ -113,15 +118,22 @@ class TextractService:
                 raise
         raise RuntimeError(f"Timeout waiting for job {job_id}")
 
-    def _collect_all_pages(self, job_id: str, first_response: Dict[str, Any]) -> Dict[str, Any]:
+    def _collect_all_pages(
+        self,
+        job_id: str,
+        first_response: Dict[str, Any],
+    ) -> Dict[str, Any]:
         """Collects all pages of results using NextToken pagination."""
         blocks = first_response.get('Blocks', [])
         next_token = first_response.get('NextToken')
-        
+
         while next_token:
-            resp = self.client.get_document_text_detection(JobId=job_id, NextToken=next_token)
+            resp = self.client.get_document_text_detection(
+                JobId=job_id,
+                NextToken=next_token,
+            )
             blocks.extend(resp.get('Blocks', []))
             next_token = resp.get('NextToken')
-        
+
         first_response['Blocks'] = blocks
         return first_response

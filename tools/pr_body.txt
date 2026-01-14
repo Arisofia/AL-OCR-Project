@@ -1,0 +1,10 @@
+Improvements:
+- Add retries & exponential backoff to S3 put operations
+- Add retries/error handling for Textract calls
+- Improved lambda error handling when saving outputs
+- Add unit tests for retries and error flows
+- Add `tools/setup_test_env.sh` to standardize local Python 3.11 test setup
+- Add GitHub Actions workflow to run pytest on Python 3.11
+- Add `.gitignore` entry for `.venv`
+
+All tests pass locally (15 passed).
