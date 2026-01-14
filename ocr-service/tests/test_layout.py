@@ -8,6 +8,7 @@ def test_detect_regions_empty():
     regions = DocumentLayoutAnalyzer.detect_regions(b"")
     assert regions == []
 
+
 def test_detect_regions_real_image():
     # Create a dummy image with two white blocks on black background
     img = np.zeros((100, 100, 3), dtype=np.uint8)
@@ -24,6 +25,7 @@ def test_detect_regions_real_image():
         assert "bbox" in r
         assert "rel_bbox" in r
         assert "area_ratio" in r
+
 
 def test_classify_layout():
     regions = [{"area_ratio": 0.01}] * 25

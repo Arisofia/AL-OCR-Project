@@ -44,7 +44,6 @@ jobs:
             ${{ runner.os }}-pip-
 
       - name: Install ocr_reconstruct (editable) and deps
-        if: false # TEMP: Skip heavy ocr_reconstruct install while CI stabilizes; follow-up: re-enable and investigate install failures
         run: |
           set -x
           python -m pip install -e ./ocr_reconstruct 2>&1 | tee ocr_reconstruct_install.log || true
@@ -54,7 +53,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ocr_reconstruct-install-log
+          name: ocr_reconstruct-install-log-${{ matrix.python-version }}
           path: ocr_reconstruct_install.log
 
       - name: Install OCR service test deps (minimal)
@@ -75,16 +74,14 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ocr-service-pip-debug
+          name: ocr-service-pip-debug-${{ matrix.python-version }}
           path: artifacts
 
       - name: Generate sample images
-        if: false # TEMP: Skip generating samples until ocr_reconstruct is re-enabled
         run: |
           python ocr_reconstruct/tests/generate_samples.py
 
       - name: Run ocr_reconstruct tests
-        if: false # TEMP: Skip ocr_reconstruct tests to let ocr-service tests run first
         run: |
           pytest ocr_reconstruct/tests -q
 
@@ -116,7 +113,8 @@ jobs:
           cat debug_imports.txt || true
           pytest tests -q
       - name: Upload ocr-service debug artifact
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ocr-service-debug
+          name: ocr-service-debug-${{ matrix.python-version }}
           path: ./ocr-service/debug_imports.txt

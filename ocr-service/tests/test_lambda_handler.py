@@ -17,7 +17,6 @@ def s3_event():
     }
 
 
-
 def test_handler_success(s3_event):
     with patch('lambda_handler.get_services') as mock_get_services:
         mock_textract = MagicMock()
@@ -33,6 +32,7 @@ def test_handler_success(s3_event):
         mock_textract.analyze_document.assert_called_once()
         mock_storage.save_json.assert_called_once()
 
+
 def test_handler_textract_failure(s3_event):
     with patch('lambda_handler.get_services') as mock_get_services:
         mock_textract = MagicMock()
@@ -44,14 +44,12 @@ def test_handler_textract_failure(s3_event):
 
         response = handler(s3_event, None)
 
-
         # Handler should report the partial failure and count it
         assert response == {"status": "partial_failure", "failed": 1}
         mock_storage.save_json.assert_called_once()
         args, _ = mock_storage.save_json.call_args
         assert "error" in args[0]
         assert "Textract boom" in args[0]["error"]
-
 
 
 def test_handler_missing_info():

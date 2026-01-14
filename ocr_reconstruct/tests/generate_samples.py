@@ -11,6 +11,7 @@ try:
 except Exception:
     FONT = None
 
+
 def make_base(text="HELLO WORLD", size=(400, 120)):
     img = Image.new("RGB", size, color=(255, 255, 255))
     d = ImageDraw.Draw(img)
@@ -18,6 +19,7 @@ def make_base(text="HELLO WORLD", size=(400, 120)):
     path = os.path.join(OUT_DIR, "sample_clean.png")
     img.save(path)
     return path
+
 
 def pixelate(input_path, block=8):
     img = Image.open(input_path)
@@ -30,6 +32,7 @@ def pixelate(input_path, block=8):
     up.save(out_path)
     return out_path
 
+
 def blur(input_path, radius=3):
     img = Image.open(input_path).filter(
         Image.Filter.GaussianBlur(radius)
@@ -37,6 +40,7 @@ def blur(input_path, radius=3):
     out_path = os.path.join(OUT_DIR, "sample_blurred.png")
     img.save(out_path)
     return out_path
+
 
 if __name__ == "__main__":
     base = make_base()

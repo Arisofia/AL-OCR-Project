@@ -40,6 +40,7 @@ def test_generate_presigned_post_success(mock_boto):
     assert "url" in data and "fields" in data
     assert data["url"] == "https://s3.example.com/bucket"
 
+
 @patch("boto3.client")
 def test_generate_presigned_post_missing_bucket(mock_boto):
     settings = get_settings()

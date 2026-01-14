@@ -52,7 +52,7 @@ class IterativeOCR:
         iteration: int,
     ) -> Tuple[str, np.ndarray, List[Dict[str, Any]]]:
         """
-        Applies heuristic strategies like depixelation and inpainting 
+        Applies heuristic strategies like depixelation and inpainting
         when initial OCR confidence is low.
         """
         strategies_meta = []
@@ -63,7 +63,7 @@ class IterativeOCR:
         depixelated = self.reconstructor.depixelate_naive(current)
         dep_th = self.enhancer.apply_threshold(depixelated)
         text_dep = image_to_text(dep_th)
-        
+
         strategies_meta.append({
             "strategy": "depixelate",
             "iteration": iteration + 1,
@@ -106,10 +106,10 @@ class IterativeOCR:
             enhanced = self.enhancer.sharpen(current)
             denoised = self.enhancer.denoise(enhanced)
             thresholded = self.enhancer.apply_threshold(denoised)
-            
+
             text = image_to_text(thresholded)
             self._save_debug_image(thresholded, i)
-            
+
             current_meta = {"iteration": i + 1, "type": "standard", "text": text}
             meta["iterations"].append(current_meta)
 
@@ -123,7 +123,7 @@ class IterativeOCR:
                     )
                 )
                 meta["iterations"].extend(fb_meta)
-                
+
                 if len(fb_text) > len(text):
                     text = fb_text
                     current = fb_img
@@ -150,7 +150,14 @@ class IterativeOCR:
         text, _, meta = self.process_image(img)
         return text, meta
 
-    def process_bytes(self, image_bytes: bytes) -> Tuple[str, Optional[bytes], Dict[str, Any]]:
+    def process_bytes(
+        self,
+        image_bytes: bytes,
+    ) -> Tuple[
+        str,
+        Optional[bytes],
+        Dict[str, Any],
+    ]:
         """Processes an image provided as bytes."""
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)

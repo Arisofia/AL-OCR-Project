@@ -25,6 +25,7 @@ def test_ocr_engine_invalid_input():
     assert "error" in result
     assert "exceeds 10MB" in result["error"]
 
+
 def test_image_enhancer_sharpen():
     """
     Tests the sharpening effect of the ImageEnhancer.
@@ -39,6 +40,7 @@ def test_image_enhancer_sharpen():
 
     assert sharpened.shape == img.shape
     assert np.any(sharpened != img)
+
 
 def test_image_enhancer_threshold():
     """

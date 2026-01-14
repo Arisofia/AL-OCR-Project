@@ -9,8 +9,14 @@ def test_import_and_process_sample():
     if os.path.exists(gen):
         os.system(f"python {gen}")
 
-    sample = os.path.join(os.path.dirname(__file__), "data", "sample_pixelated.png")
-    assert os.path.exists(sample), "Sample image missing; ensure generate_samples.py was run"
+    sample = os.path.join(
+        os.path.dirname(__file__),
+        "data",
+        "sample_pixelated.png",
+    )
+    assert os.path.exists(sample), (
+        "Sample image missing; ensure generate_samples.py was run"
+    )
 
     with open(sample, "rb") as fh:
         img_bytes = fh.read()

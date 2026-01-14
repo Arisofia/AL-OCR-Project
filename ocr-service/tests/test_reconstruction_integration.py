@@ -19,7 +19,12 @@ def test_reconstruction_enabled(tmp_path, monkeypatch):
     base_dir = os.path.dirname(__file__)
     sample = os.path.join(
         base_dir,
-        "..", "..", "ocr_reconstruct", "tests", "data", "sample_pixelated.png"
+        "..",
+        "..",
+        "ocr_reconstruct",
+        "tests",
+        "data",
+        "sample_pixelated.png",
     )
     if not os.path.exists(sample):
         # Create a dummy image for the test if the sample is missing
@@ -42,15 +47,16 @@ def test_reconstruction_enabled(tmp_path, monkeypatch):
         files = {
             "file": ("sample_pixelated.png", fh, "image/png"),
         }
-        headers = {
-            "X-API-KEY": os.getenv(
-                "OCR_API_KEY",
-                "default_secret_key",
-            )
-        }
+        api_key = os.getenv(
+            "OCR_API_KEY",
+            "default_secret_key",
+        )
+        headers = {"X-API-KEY": api_key}
 
         # Mock the engine's run_reconstruction to return something
-        with patch("modules.ocr_engine.IterativeOCREngine._run_reconstruction") as mock_recon:
+        with patch(
+            "modules.ocr_engine.IterativeOCREngine._run_reconstruction"
+        ) as mock_recon:
             mock_recon.return_value = (
                 {"preview_text": "recon text", "meta": "data"},
                 None,
