@@ -53,7 +53,9 @@ def process_record(record: Dict[str, Any]) -> None:
         if key.lower().endswith('.pdf'):
             job_id = textract_service.start_detection(bucket, key)
             if not job_id:
-                raise RuntimeError(f"Failed to start Textract detection job for {key}")
+                raise RuntimeError(
+                    f"Failed to start Textract detection job for {key}"
+                )
             output = {
                 'jobId': job_id,
                 'status': 'STARTED',
@@ -84,7 +86,8 @@ def process_record(record: Dict[str, Any]) -> None:
             storage_service.save_json(err_obj, out_key)
         except Exception as se:  # pylint: disable=broad-exception-caught
             logger.error("Failed to save error object to S3: %s", se)
-        # Re-raise to allow the caller (handler) to track failures and decide on retries
+        # Re-raise to allow the caller (handler) to track failures
+        # and decide on retries
         raise
 
 
