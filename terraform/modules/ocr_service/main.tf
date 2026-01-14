@@ -151,7 +151,8 @@ resource "aws_iam_role_policy" "github_actions_policy" {
           "ecr:DescribeRepositories",
           "ecr:CreateRepository"
         ]
-        Resource = "*" # ECR actions often need broad access or specific ARNs; here we allow all ECR for simplicity in the repo
+        # Restrict to the specific ECR repository used by this project for least privilege
+        Resource = [aws_ecr_repository.ocr_repo.arn]
       },
       {
         Effect = "Allow"
@@ -161,8 +162,8 @@ resource "aws_iam_role_policy" "github_actions_policy" {
           "lambda:GetFunction",
           "lambda:GetFunctionConfiguration"
         ]
-        # Use wildcard to ensure CI can update the target Lambda without ARN mismatch or propagation delays
-        Resource = "*"
+        # Restrict to functions with the al-ocr- prefix in this account (safer than '*')
+        Resource = ["arn:aws:lambda:${var.aws_region}:${var.account_id}:function:al-ocr-*"]
       },
       {
         Effect = "Allow"
