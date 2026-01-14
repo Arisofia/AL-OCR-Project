@@ -55,7 +55,7 @@ jobs:
           # On non-push events, we just build to verify the Dockerfile
 
       - name: Update Lambda image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         run: |
           COMMIT_TAG=$(git rev-parse --short HEAD)
           IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${COMMIT_TAG}
