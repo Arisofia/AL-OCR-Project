@@ -1,6 +1,6 @@
 """
 Event-driven AWS Lambda entry point for automated document intelligence processing.
-Orchestrates S3 lifecycle events to trigger multi-page Textract analysis and 
+Orchestrates S3 lifecycle events to trigger multi-page Textract analysis and
 persistence.
 """
 
@@ -8,6 +8,8 @@ import logging
 import os
 import urllib.parse
 from typing import Dict, Any, Tuple
+
+from botocore.exceptions import ClientError
 
 from services.textract import TextractService
 from services.storage import StorageService
@@ -26,7 +28,7 @@ def get_services(bucket_name: str) -> Tuple[TextractService, StorageService]:
     return TextractService(), StorageService(bucket_name=bucket_name)
 
 
-def process_record(record: Dict[str, Any]) -> None:
+def process_record(record: Dict[str, Any], request_id: str = "N/A") -> None:
     """
     Processes an individual S3 document record with error isolation and traceability.
     """
@@ -56,11 +58,13 @@ def process_record(record: Dict[str, Any]) -> None:
             output = {
                 "jobId": job_id,
                 "status": "STARTED",
+                "requestId": request_id,
                 "input": {"bucket": bucket, "key": key},
             }
             logger.info("Async processing initiated | JobId: %s | Key: %s", job_id, key)
         else:
             output = textract_service.analyze_document(bucket, key)
+            output["requestId"] = request_id
             logger.info("Sync analysis completed | Key: %s", key)
 
         # Persist extracted intelligence to enterprise storage
@@ -70,16 +74,26 @@ def process_record(record: Dict[str, Any]) -> None:
         else:
             logger.info("Result persisted | Path: s3://%s/%s", bucket, out_key)
 
+    except ClientError as e:
+        request_id = e.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
+        logger.error(
+            "AWS Service Failure | Key: %s | RequestId: %s | Error: %s",
+            key, request_id, e
+        )
+        err_obj = {
+            "error": "aws_service_failure",
+            "message": str(e),
+            "requestId": request_id,
+            "input": {"bucket": bucket, "key": key},
+        }
+        storage_service.save_json(err_obj, out_key)
+        raise
     except Exception as e:
         logger.exception("Operational failure: Object %s in bucket %s", key, bucket)
-        # Extract AWS request id when available for diagnostics
-        request_id = "N/A"
-        if hasattr(e, "response"):
-            request_id = e.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
-
         err_obj = {
-            "error": f"extraction_pipeline_failed: {e}",
-            "requestId": request_id,
+            "error": "internal_pipeline_failure",
+            "message": str(e),
+            "requestId": request_id,  # From process_record argument
             "input": {"bucket": bucket, "key": key},
         }
         try:
@@ -91,18 +105,19 @@ def process_record(record: Dict[str, Any]) -> None:
         raise
 
 
-def handler(event: Dict[str, Any], _context: Any) -> Dict[str, str]:
+def handler(event: Dict[str, Any], context: Any) -> Dict[str, str]:
     """
     Main Lambda handler for orchestrating S3 document triggers.
     Ensures full traceability and partial failure reporting.
     """
+    request_id = getattr(context, "aws_request_id", "local-test")
     records = event.get('Records', [])
-    logger.info("Lambda trigger | Records detected: %d", len(records))
+    logger.info("Lambda trigger | RID: %s | Records: %d", request_id, len(records))
 
     failures = 0
     for record in records:
         try:
-            process_record(record)
+            process_record(record, request_id=request_id)
         except Exception:
             failures += 1
 

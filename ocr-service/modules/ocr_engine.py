@@ -1,6 +1,6 @@
 """
 Core OCR Orchestration Engine for high-fidelity document intelligence.
-Manages the iterative extraction cycle, layout analysis, and AI-driven pixel reconstruction.
+Manages iterative cycles, layout analysis, and pixel reconstruction.
 """
 
 import logging
@@ -13,32 +13,30 @@ import pytesseract
 try:
     from ocr_reconstruct.modules.enhance import ImageEnhancer
     from ocr_reconstruct.modules.reconstruct import PixelReconstructor
+    from ocr_reconstruct import process_bytes as recon_process_bytes
+    RECON_AVAILABLE = True
 except ImportError:
     ImageEnhancer = None
     PixelReconstructor = None
+    recon_process_bytes = None
+    RECON_AVAILABLE = False
 
+
+from services.textract import TextractService
 from .advanced_recon import AdvancedPixelReconstructor
 from .learning_engine import LearningEngine
 from .layout import DocumentLayoutAnalyzer
 from .confidence import ConfidenceScorer
 from .ocr_config import TesseractConfig, EngineConfig
 from .image_toolkit import ImageToolkit
-from services.textract import TextractService
 
 logger = logging.getLogger("ocr-service.engine")
-
-# Runtime check for optional reconstruction pipeline
-try:
-    from ocr_reconstruct import process_bytes as recon_process_bytes
-    RECON_AVAILABLE = True
-except ImportError:
-    recon_process_bytes = None
-    RECON_AVAILABLE = False
 
 
 class IterativeOCREngine:
     """
-    Advanced OCR Engine utilizing iterative feedback loops and layer elimination techniques.
+    Advanced OCR Engine utilizing iterative feedback loops
+    and layer elimination techniques.
     """
 
     def __init__(
@@ -115,8 +113,11 @@ class IterativeOCREngine:
         try:
             text = pytesseract.image_to_string(thresh, config=self.ocr_config.flags)
             text = text.strip()
-        except Exception as e:
-            logger.error("Extraction failed at iteration %s: %s", iteration, e)
+        except (pytesseract.TesseractError, RuntimeError):
+            logger.error("Extraction failed at iteration %s", iteration)
+            text = ""
+        except Exception:
+            logger.exception("Unexpected error during iteration %s", iteration)
             text = ""
 
         return text, thresh
@@ -141,38 +142,27 @@ class IterativeOCREngine:
                 text = text.strip()
                 if text:
                     combined_text.append(text)
-            except Exception as e:
+            except (pytesseract.TesseractError, RuntimeError):
                 logger.warning(
-                    "Targeted extraction failed | RegionId: %s | Error: %s",
+                    "Targeted extraction failed | RegionId: %s",
                     region.get("id"),
-                    e,
                 )
+            except Exception:
+                logger.exception("Critical failure in region-based extraction")
 
         return "\n\n".join(combined_text)
 
-    def process_image(
-        self,
-        image_bytes: bytes,
-        use_reconstruction: bool = False,
-    ) -> dict:
-        """
-        Executes the iterative OCR pipeline with confidence-based feedback loops.
-        """
-        # Stage 1: Payload Validation and Pre-processing
-        validation_error = ImageToolkit.validate_image(
-            image_bytes, max_size_mb=self.config.max_image_size_mb
-        )
-        if validation_error:
-            return {"error": validation_error}
-
+    def _get_ocr_input_image(
+        self, image_bytes: bytes, use_reconstruction: bool
+    ) -> Tuple[Optional[np.ndarray], Optional[Dict[str, Any]]]:
+        """Determines the best source image for OCR iterations."""
         img = ImageToolkit.decode_image(image_bytes)
         if img is None:
-            return {"error": "Corrupted or unsupported image format"}
+            return None, None
 
-        current_img = img.copy()
         reconstruction_info = None
+        current_img = img.copy()
 
-        # Stage 2: Pixel Reconstruction (Optional high-fidelity pass)
         if use_reconstruction:
             logger.info("Initiating pixel reconstruction sequence")
             recon_info, recon_img = self._run_reconstruction(image_bytes)
@@ -180,40 +170,54 @@ class IterativeOCREngine:
                 reconstruction_info = recon_info
             if recon_img is not None:
                 current_img = recon_img
-                logger.info("Using high-fidelity reconstructed source for iterations")
+                logger.info("Using high-fidelity reconstructed source")
 
-        best_text = ""
-        best_confidence = 0.0
+        return current_img, reconstruction_info
+
+    def process_image(
+        self,
+        image_bytes: bytes,
+        use_reconstruction: bool = False,
+    ) -> dict:
+        """
+        Executes iterative OCR pipeline with confidence-based feedback.
+        """
+        validation_error = ImageToolkit.validate_image(
+            image_bytes, max_size_mb=self.config.max_image_size_mb
+        )
+        if validation_error:
+            return {"error": validation_error}
+
+        current_img, recon_info = self._get_ocr_input_image(
+            image_bytes, use_reconstruction
+        )
+        if current_img is None:
+            return {"error": "Corrupted or unsupported image format"}
+
+        best_text, best_confidence = "", 0.0
         iteration_history = []
-
-        # Stage 3: Document Layout Decomposition
         layout_regions = DocumentLayoutAnalyzer.detect_regions(image_bytes)
 
-        # Stage 4: Iterative Optimization Loop
         for i in range(self.config.max_iterations):
-            logger.info("Iteration loop | Progress: %s/%s", i + 1, self.config.max_iterations)
-
+            logger.info(
+                "Iteration loop | Progress: %s/%s",
+                i + 1, self.config.max_iterations
+            )
             try:
                 text, thresh = self._perform_ocr_iteration(
                     current_img, i, use_reconstruction
                 )
 
-                # Execute fallback to targeted extraction if global confidence is insufficient
-                should_use_regions = (
-                    i == 1
-                    and best_confidence < self.config.confidence_threshold
-                    and len(layout_regions) > 1
-                )
-
-                if should_use_regions:
-                    logger.info("Confidence below threshold | Engaging targeted region extraction")
+                if (i == 1 and best_confidence < self.config.confidence_threshold
+                        and len(layout_regions) > 1):
+                    logger.info("Engaging targeted region extraction")
                     text = self._ocr_regions(thresh, layout_regions)
 
                 confidence = self.confidence_scorer.calculate(text)
-
                 preview = text[:50] + "..." if len(text) > 50 else text
-                method = "region-based" if should_use_regions else "full-page"
-                
+
+                is_region = i == 1 and len(layout_regions) > 1
+                method = "region-based" if is_region else "full-page"
                 iteration_history.append({
                     "iteration": i + 1,
                     "text_length": len(text),
@@ -223,14 +227,12 @@ class IterativeOCREngine:
                 })
 
                 if confidence > best_confidence:
-                    best_text = text
-                    best_confidence = confidence
+                    best_text, best_confidence = text, confidence
 
-                # Apply iterative enhancement for subsequent cycle
                 current_img = ImageToolkit.enhance_iteration(current_img)
-            except Exception as e:
-                logger.error("Failure in iteration %s: %s", i + 1, e)
-                iteration_history.append({"iteration": i + 1, "error": str(e)})
+            except Exception:
+                logger.error("Failure in iteration %s", i + 1)
+                iteration_history.append({"iteration": i + 1, "error": "failed"})
 
         resp = {
             "text": best_text,
@@ -238,15 +240,15 @@ class IterativeOCREngine:
             "iterations": iteration_history,
             "success": len(best_text) > 0,
         }
-        if reconstruction_info:
-            resp["reconstruction"] = reconstruction_info
+        if recon_info:
+            resp["reconstruction"] = recon_info
         return resp
 
     async def process_image_advanced(
         self, image_bytes: bytes, doc_type: Optional[str] = None
     ) -> dict:
         """
-        Advanced autonomous pipeline leveraging AI reconstruction and continuous learning.
+        AI pipeline with reconstruction and continuous learning.
         """
         doc_type = doc_type or self.config.default_doc_type
 
@@ -259,7 +261,7 @@ class IterativeOCREngine:
         # Step 1: Structural Layout Analysis
         layout_regions = DocumentLayoutAnalyzer.detect_regions(image_bytes)
         layout_type = DocumentLayoutAnalyzer.classify_layout(layout_regions)
-        logger.info("Structural analysis complete | Type: %s | Regions: %s", layout_type, len(layout_regions))
+        logger.info("Structural analysis complete | Regions: %s", len(layout_regions))
 
         # Step 2: Contextual Knowledge Retrieval
         pattern = await self.learning_engine.get_pattern_knowledge(doc_type)

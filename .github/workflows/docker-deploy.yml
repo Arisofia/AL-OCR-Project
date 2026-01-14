@@ -27,15 +27,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Configure AWS Credentials
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: us-east-1
-      - name: Confirm AWS identity (debug)
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-        run: |
-          echo "Confirming AWS identity (debug)"
-          aws sts get-caller-identity || true
       - name: Login to ECR
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         run: |
@@ -53,17 +48,6 @@ jobs:
             docker buildx build --platform linux/amd64 -t $IMAGE_URI --load ./ocr-service
           fi
           # On non-push events, we just build to verify the Dockerfile
-
-      - name: Check Lambda access (debug)
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-        run: |
-          echo "Checking access to Lambda (debug)"
-          echo "Caller:"
-          aws sts get-caller-identity || true
-          echo "Get function (should succeed if GetFunction is allowed):"
-          aws lambda get-function --function-name al-ocr-processor || true
-          echo "Get function configuration:"
-          aws lambda get-function-configuration --function-name al-ocr-processor || true
 
       - name: Update Lambda image
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

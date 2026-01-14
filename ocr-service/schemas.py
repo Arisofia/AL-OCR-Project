@@ -33,6 +33,7 @@ class OCRResponse(BaseModel):
     reconstruction: Optional[dict] = None
     layout_analysis: Optional[dict] = None
     method: Optional[str] = None
+    request_id: Optional[str] = None
 
 
 class HealthResponse(BaseModel):

@@ -15,7 +15,7 @@ logger = logging.getLogger("ocr-service.textract")
 
 class TextractService:
     """
-    Orchestrates AWS Textract interactions with robust error handling and exponential backoff.
+    Orchestrates AWS Textract interactions with error handling and backoff.
     """
 
     MAX_POLL_ATTEMPTS = 30
@@ -27,7 +27,7 @@ class TextractService:
             settings = get_settings()
 
         self.max_retries = getattr(settings, "aws_max_retries", 3)
-        
+
         # Optimize botocore configuration for deterministic retry management
         config = Config(retries={"max_attempts": 1, "mode": "standard"})
         self.client = boto3.client(
@@ -37,7 +37,7 @@ class TextractService:
         )
 
     def start_detection(self, bucket: str, key: str) -> Optional[str]:
-        """Initiates asynchronous document text detection. Returns JobId or None on failure."""
+        """Initiates async text detection. Returns JobId or None on failure."""
         attempt = 0
         while attempt < self.max_retries:
             try:
@@ -56,7 +56,7 @@ class TextractService:
                 )
                 time.sleep(0.1 * (2 ** (attempt - 1)))
             except Exception as e:
-                logger.exception("Unexpected execution error in start_detection: %s", e)
+                logger.exception("Unexpected error in start_detection: %s", e)
                 break
         return None
 
@@ -85,9 +85,9 @@ class TextractService:
                 )
                 time.sleep(0.1 * (2 ** (attempt - 1)))
             except Exception as e:
-                logger.exception("Unexpected execution error in analyze_document: %s", e)
-                raise RuntimeError("Critical Textract service failure") from e
-        raise RuntimeError("Service failure: Max retry threshold reached for synchronous analysis")
+                logger.exception("Unexpected error in analyze_document: %s", e)
+                raise RuntimeError("Critical Textract failure") from e
+        raise RuntimeError("Service failure: Max retry threshold reached")
 
     def get_job_results(self, job_id: str) -> Dict[str, Any]:
         """Polls for asynchronous job completion and aggregates paginated results."""
@@ -99,24 +99,24 @@ class TextractService:
                 if status == "SUCCEEDED":
                     return self._collect_all_pages(job_id, resp)
                 if status == "FAILED":
-                    request_id = resp.get("ResponseMetadata", {}).get("RequestId")
-                    raise RuntimeError(f"Textract job failed | JobId: {job_id} | RequestId: {request_id}")
+                    rid = resp.get("ResponseMetadata", {}).get("RequestId")
+                    raise RuntimeError(f"Job failed | JobId: {job_id} | RID: {rid}")
 
-                logger.info("Job status polling | JobId: %s | Status: %s", job_id, status)
+                logger.info("Polling | JobId: %s | Status: %s", job_id, status)
                 time.sleep(self.POLL_INTERVAL_SECONDS)
                 attempt += 1
             except ClientError as e:
-                request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
-                logger.error("Result retrieval failed | JobId: %s | RequestId: %s | Error: %s", job_id, request_id, e)
+                rid = e.response.get("ResponseMetadata", {}).get("RequestId")
+                logger.error("Failed | JobId: %s | RID: %s | Error: %s", job_id, rid, e)
                 raise
-        raise RuntimeError(f"Job timeout: Result aggregation exceeded temporal limits for {job_id}")
+        raise RuntimeError(f"Timeout: Result aggregation exceeded for {job_id}")
 
     def _collect_all_pages(
         self,
         job_id: str,
         first_response: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Aggregates all paginated blocks using native AWS SDK paginators for stability."""
+        """Aggregates all paginated blocks using native SDK paginators."""
         blocks = first_response.get("Blocks", [])
         next_token = first_response.get("NextToken")
 

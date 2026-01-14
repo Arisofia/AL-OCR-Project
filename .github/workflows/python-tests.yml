@@ -43,6 +43,21 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
+      - name: Install Linting Tools
+        run: |
+          pip install flake8 pylint
+
+      - name: Run Linting (flake8)
+        run: |
+          # Use the root .flake8 config if it exists
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 ocr-service ocr_reconstruct --count --max-complexity=10 --max-line-length=88 --statistics
+
+      - name: Run Linting (pylint)
+        run: |
+          # Only lint the core service folders
+          pylint ocr-service ocr_reconstruct --fail-under=8.0
+
       - name: Install ocr_reconstruct (editable) and deps
         run: |
           set -x

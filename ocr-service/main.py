@@ -1,16 +1,17 @@
 """
 Core API Gateway for the AL Financial OCR Service.
-Provides endpoints for document intelligence, pixel reconstruction, and S3 lifecycle management.
+Provides endpoints for document intelligence and S3 lifecycle management.
 """
 
 import logging
 import time
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Security
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Security, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
 from mangum import Mangum
 import boto3
+from botocore.exceptions import ClientError
 
 from config import get_settings, Settings
 from schemas import (
@@ -89,7 +90,17 @@ async def get_api_key(
     """Enforces API Key authentication for protected resources."""
     if header_value == curr_settings.ocr_api_key:
         return header_value
-    raise HTTPException(status_code=403, detail="Unauthorized: Invalid or missing API Key")
+    raise HTTPException(
+        status_code=403, detail="Unauthorized: Invalid or missing API Key"
+    )
+
+
+def get_request_id(request: Request) -> str:
+    """Extracts AWS Request ID from Mangum scope or defaults to local trace."""
+    scope = request.scope
+    if "aws.context" in scope:
+        return scope["aws.context"].aws_request_id
+    return "local-development"
 
 
 # Runtime Package Detection
@@ -128,11 +139,12 @@ async def perform_ocr(
     advanced: bool = False,
     doc_type: str = "generic",
     _api_key: str = Depends(get_api_key),
+    request_id: str = Depends(get_request_id),
     curr_settings: Settings = Depends(get_settings),
     processor: OCRProcessor = Depends(get_ocr_processor),
 ) -> OCRResponse:
     """
-    Primary OCR entry point. 
+    Primary OCR entry point.
     Processes uploaded documents with optional AI-driven pixel reconstruction.
     """
     result = await processor.process(
@@ -141,6 +153,7 @@ async def perform_ocr(
         advanced=advanced,
         doc_type=doc_type,
         enable_reconstruction_config=curr_settings.enable_reconstruction,
+        request_id=request_id,
     )
 
     return OCRResponse(**result)
@@ -158,7 +171,9 @@ async def generate_presigned_post(
     """
     bucket = curr_settings.s3_bucket_name
     if not bucket:
-        raise HTTPException(status_code=500, detail="Infrastructure failure: S3 bucket not configured")
+        raise HTTPException(
+            status_code=500, detail="S3 bucket not configured"
+        )
 
     s3 = boto3.client("s3", region_name=curr_settings.aws_region)
 
@@ -170,10 +185,18 @@ async def generate_presigned_post(
             Conditions=[["starts-with", "$Content-Type", req.content_type]],
             ExpiresIn=req.expires_in,
         )
-    except Exception as exc:
-        logger.exception("Failed to generate presigned credentials")
+    except ClientError as exc:
+        request_id = exc.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
+        logger.error("S3 Presign failed | RequestId: %s | Error: %s", request_id, exc)
         raise HTTPException(
-            status_code=500, detail="External service failure: Could not generate presigned post"
+            status_code=500,
+            detail=f"S3 rejected request [{request_id}]"
+        ) from exc
+    except Exception as exc:
+        logger.exception("Unexpected failure during presign generation")
+        raise HTTPException(
+            status_code=500,
+            detail="Could not generate presigned post"
         ) from exc
 
     return PresignResponse(url=post["url"], fields=post["fields"])

@@ -1,6 +1,6 @@
 """
-Orchestration layer for document intelligence workflows and result persistence.
-Coordinates synchronous and advanced OCR pipelines with automated S3 storage integration.
+Orchestration layer for document intelligence workflows.
+Coordinates OCR pipelines with automated S3 storage integration.
 """
 
 import logging
@@ -17,7 +17,7 @@ logger = logging.getLogger("ocr-service.processor")
 
 class OCRProcessor:
     """
-    Main orchestrator for the OCR lifecycle, managing data extraction and storage synchronization.
+    Orchestrates the OCR lifecycle, managing extraction and storage.
     """
 
     def __init__(
@@ -35,12 +35,16 @@ class OCRProcessor:
         advanced: bool = False,
         doc_type: str = "generic",
         enable_reconstruction_config: bool = False,
+        request_id: str = "N/A",
     ) -> Dict[str, Any]:
         """
         Executes the full OCR pipeline: Validation, Extraction, and Cloud Persistence.
         """
         if not file.content_type.startswith("image/"):
-            raise HTTPException(status_code=400, detail="Protocol Violation: File must be a valid image format")
+            raise HTTPException(
+                status_code=400,
+                detail="File must be a valid image format"
+            )
 
         start_time = time.time()
         contents = await file.read()
@@ -58,7 +62,10 @@ class OCRProcessor:
                 )
 
             if "error" in result:
-                raise HTTPException(status_code=400, detail=f"Extraction failure: {result['error']}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Extraction failure: {result['error']}"
+                )
 
             # Synchronize raw document and extracted intelligence to S3
             s3_key = self.storage_service.upload_file(
@@ -71,12 +78,13 @@ class OCRProcessor:
                 )
 
             processing_time = round(time.time() - start_time, 3)
-            
+
             # Enrich response with traceability metadata
             result.update({
                 "filename": file.filename,
                 "processing_time": processing_time,
-                "s3_key": s3_key
+                "s3_key": s3_key,
+                "request_id": request_id
             })
             return result
 
