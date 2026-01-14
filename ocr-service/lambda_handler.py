@@ -1,8 +1,6 @@
 """
-AWS Lambda handler for the OCR service.
-
-This module processes S3 events, triggers Amazon Textract for OCR,
-and saves the results back to S3.
+Event-driven AWS Lambda entry point for automated document intelligence processing.
+Orchestrates S3 lifecycle events to trigger multi-page Textract analysis and persistence.
 """
 
 import logging
@@ -22,90 +20,87 @@ settings = get_settings()
 
 def get_services(bucket_name: str) -> Tuple[TextractService, StorageService]:
     """
-    Initializes and returns the Textract and Storage services.
+    Dependency factory for AWS integration services.
     """
     return TextractService(), StorageService(bucket_name=bucket_name)
 
 
 def process_record(record: Dict[str, Any]) -> None:
     """
-    Processes a single S3 record from the Lambda event.
+    Processes an individual S3 document record with error isolation and traceability.
     """
     s3_info = record.get("s3", {})
     bucket = s3_info.get("bucket", {}).get("name")
     key = urllib.parse.unquote_plus(s3_info.get("object", {}).get("key", ""))
 
     if not bucket or not key:
-        logger.warning("Missing bucket or key in event record")
+        logger.warning('Payload error: Missing S3 bucket or key reference')
         return
 
     textract_service, storage_service = get_services(bucket)
 
-    # Build a stable S3 key
-    out_key = f"{settings.output_prefix.rstrip('/')}/{os.path.basename(key)}.json"
+    # Standardize output naming convention for deterministic downstream consumption
+    out_key = (
+        f"{settings.output_prefix.rstrip('/')}/"
+        f"{os.path.basename(key)}.json"
+    )
 
     try:
-        if key.lower().endswith(".pdf"):
+        # Route documents based on format requirements (Async for PDFs, Sync for images)
+        if key.lower().endswith('.pdf'):
             job_id = textract_service.start_detection(bucket, key)
             if not job_id:
-                raise RuntimeError(f"Failed to start Textract detection job for {key}")
+                raise RuntimeError(f"Textract job initiation failure for {key}")
+
             output = {
                 "jobId": job_id,
                 "status": "STARTED",
                 "input": {"bucket": bucket, "key": key},
             }
-            logger.info("Started Textract job %s for %s", job_id, key)
+            logger.info("Async processing initiated | JobId: %s | Key: %s", job_id, key)
         else:
             output = textract_service.analyze_document(bucket, key)
-            logger.info("Completed Textract analyze for %s", key)
+            logger.info("Sync analysis completed | Key: %s", key)
 
+        # Persist extracted intelligence to enterprise storage
         saved = storage_service.save_json(output, out_key)
         if not saved:
-            logger.error("Failed to save Textract output for %s to %s", key, out_key)
+            logger.error("Storage failure: Could not persist extraction for %s", key)
         else:
-            logger.info("Wrote output to s3://%s/%s", bucket, out_key)
+            logger.info("Result persisted | Path: s3://%s/%s", bucket, out_key)
 
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        request_id = "N/A"
-        if hasattr(e, "response"):
-            request_id = e.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
-
-        logger.exception(
-            "Error processing object %s from bucket %s. RequestId: %s",
-            key,
-            bucket,
-            request_id,
-        )
+    except Exception as e:
+        logger.exception("Operational failure: Object %s in bucket %s", key, bucket)
         err_obj = {
-            "error": f"processing_failed: {e}",
-            "requestId": request_id,
+            "error": f"extraction_pipeline_failed: {e}",
             "input": {"bucket": bucket, "key": key},
         }
         try:
             storage_service.save_json(err_obj, out_key)
-        except Exception as se:  # pylint: disable=broad-exception-caught
-            logger.error("Failed to save error object to S3: %s", se)
-        # Re-raise to allow the caller (handler) to track failures
-        # and decide on retries
+        except Exception as se:
+            logger.error("Critical storage failure during error logging: %s", se)
+
+        # Propagate exception for Lambda retry visibility
         raise
 
 
 def handler(event: Dict[str, Any], _context: Any) -> Dict[str, str]:
     """
-    Main Lambda handler entry point.
-
-    Processes each record in the incoming S3 event.
+    Main Lambda handler for orchestrating S3 document triggers.
+    Ensures full traceability and partial failure reporting.
     """
-    records = event.get("Records", [])
-    logger.info("Received event with %d record(s)", len(records))
+    records = event.get('Records', [])
+    logger.info("Lambda trigger | Records detected: %d", len(records))
+
     failures = 0
     for record in records:
         try:
             process_record(record)
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             failures += 1
 
     if failures:
-        logger.warning("Processing completed with %d failure(s)", failures)
+        logger.warning("Batch completion with partial failures | Failed: %d", failures)
         return {"status": "partial_failure", "failed": failures}
+
     return {"status": "ok"}

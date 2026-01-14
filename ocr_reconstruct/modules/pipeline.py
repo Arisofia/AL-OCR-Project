@@ -1,5 +1,6 @@
 """
-High-level iterative pipeline orchestrating enhancement, reconstruction and OCR.
+High-fidelity iterative orchestration pipeline.
+Coordinates image enhancement, pixel reconstruction, and Tesseract-based OCR loops.
 """
 
 import os
@@ -17,7 +18,7 @@ logger = logging.getLogger("ocr-reconstruct.pipeline")
 
 class IterativeOCR:
     """
-    Main pipeline for iterative OCR processing with enhancement and reconstruction.
+    Core pipeline for managing the iterative extraction and reconstruction lifecycle.
     """
 
     def __init__(
@@ -27,7 +28,7 @@ class IterativeOCR:
         output_dir: str = "./iterations",
     ):
         """
-        Initializes the pipeline with settings.
+        Initializes the pipeline with enterprise-grade orchestration settings.
         """
         self.iterations = iterations
         self.save_iterations = save_iterations
@@ -39,7 +40,7 @@ class IterativeOCR:
             os.makedirs(self.output_dir, exist_ok=True)
 
     def _save_debug_image(self, img: np.ndarray, iteration: int, suffix: str = ""):
-        """Saves image for debugging if requested."""
+        """Saves intermediate transformation states for forensic audit and debugging."""
         if self.save_iterations:
             filename = f"iter_{iteration + 1}{suffix}.png"
             path = os.path.join(self.output_dir, filename)
@@ -52,13 +53,13 @@ class IterativeOCR:
         iteration: int,
     ) -> Tuple[str, np.ndarray, List[Dict[str, Any]]]:
         """
-        Applies heuristic strategies like depixelation and inpainting
+        Applies advanced heuristic strategies (Depixelation, Inpainting) for low-confidence scenarios.
         """
         strategies_meta = []
         best_local_text = ""
         best_local_img = current
 
-        # Strategy 1: Depixelation
+        # Strategy Phase 1: Naive Depixelation for pattern recovery
         depixelated = self.reconstructor.depixelate_naive(current)
         dep_th = self.enhancer.apply_threshold(depixelated)
         text_dep = image_to_text(dep_th)
@@ -71,8 +72,8 @@ class IterativeOCR:
             best_local_text = text_dep
             best_local_img = depixelated
 
-        # Strategy 2: Inpainting
-        mask = (thresholded == 255).astype("uint8") * 255
+        # Strategy Phase 2: Telea Inpainting for foreground isolation
+        mask = (thresholded == 255).astype('uint8') * 255
         inpainted = cv2.inpaint(current, mask, 3, cv2.INPAINT_TELEA)
         inp_th = self.enhancer.apply_threshold(inpainted)
         text_inp = image_to_text(inp_th)
@@ -89,15 +90,14 @@ class IterativeOCR:
 
     def process_image(self, img: np.ndarray) -> Tuple[str, np.ndarray, Dict[str, Any]]:
         """
-        Internal core logic for processing an image (numpy array).
-        Returns best text found, final processed image, and metadata.
+        Internal orchestration logic for executing the iterative extraction loop.
         """
         current = self.enhancer.to_gray(img)
         best_overall_text = ""
         meta = {"iterations": []}
 
         for i in range(self.iterations):
-            # 1. Standard Enhancement & OCR
+            # Step 1: Sequential Enhancement and Extraction
             enhanced = self.enhancer.sharpen(current)
             denoised = self.enhancer.denoise(enhanced)
             thresholded = self.enhancer.apply_threshold(denoised)
@@ -108,7 +108,7 @@ class IterativeOCR:
             current_meta = {"iteration": i + 1, "type": "standard", "text": text}
             meta["iterations"].append(current_meta)
 
-            # 2. Feedback Loop / Heuristics
+            # Step 2: Trigger Heuristic Feedback Loop for sparse results
             if len(text) < 10:
                 fb_text, fb_img, fb_meta = self._apply_feedback_strategies(
                     current,
@@ -121,24 +121,24 @@ class IterativeOCR:
                     text = fb_text
                     current = fb_img
 
-            # 3. Update global best
+            # Step 3: Best result retention logic
             if len(text) > len(best_overall_text):
                 best_overall_text = text
 
-            # 4. Early exit if we found a strong result
+            # Step 4: Early exit strategy for high-confidence matches
             if len(best_overall_text) > 20:
                 break
 
         return best_overall_text.strip(), current, meta
 
     def process_file(self, image_path: str) -> Tuple[str, Dict[str, Any]]:
-        """Processes an image from a file path."""
+        """Orchestrates extraction from a local file path with full traceability."""
         if not os.path.exists(image_path):
-            raise FileNotFoundError(image_path)
+            raise FileNotFoundError(f"Source file not found: {image_path}")
 
         img = cv2.imread(image_path)
         if img is None:
-            raise ValueError(f"Could not load image from {image_path}")
+            raise ValueError(f"Payload error: Could not decode source image from {image_path}")
 
         text, _, meta = self.process_image(img)
         return text, meta
@@ -151,20 +151,20 @@ class IterativeOCR:
         Optional[bytes],
         Dict[str, Any],
     ]:
-        """Processes an image provided as bytes."""
+        """Synchronous byte-stream processing for integration in real-time APIs."""
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if img is None:
             return (
                 "",
                 None,
-                {"iterations": [], "error": "Invalid image bytes"},
+                {"iterations": [], "error": "Invalid byte stream payload"},
             )
 
         text, final_img, meta = self.process_image(img)
 
-        # Encode processed image back to bytes
-        success, buf = cv2.imencode(".png", final_img)
+        # Re-encode for downstream presentation or storage
+        success, buf = cv2.imencode('.png', final_img)
         img_bytes = buf.tobytes() if success else None
 
         return text, img_bytes, meta
@@ -173,6 +173,9 @@ class IterativeOCR:
 def process_bytes(
     image_bytes: bytes, iterations: int = 3, save_iterations: bool = False
 ) -> Tuple[str, Optional[bytes], Dict[str, Any]]:
-    """Stand-alone function for processing image bytes."""
-    pipeline = IterativeOCR(iterations=iterations, save_iterations=save_iterations)
+    """Stateless entry point for ephemeral image byte processing."""
+    pipeline = IterativeOCR(
+        iterations=iterations,
+        save_iterations=save_iterations
+    )
     return pipeline.process_bytes(image_bytes)
