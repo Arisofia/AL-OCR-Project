@@ -155,7 +155,10 @@ resource "aws_iam_role_policy" "github_deploy_policy" {
           "lambda:UpdateFunctionConfiguration",
           "lambda:GetFunction"
         ]
-        Resource = "arn:aws:lambda:${var.aws_region}:${var.account_id}:function:al-ocr-service"
+        Resource = [
+          "arn:aws:lambda:${var.aws_region}:${var.account_id}:function:al-ocr-service",
+          "arn:aws:lambda:${var.aws_region}:${var.account_id}:function:al-ocr-processor"
+        ]
       }
     ]
   })

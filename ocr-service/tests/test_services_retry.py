@@ -92,7 +92,7 @@ def test_textract_analyze_persistent_failure(mock_textract_client):
     )
 
     with patch("time.sleep", return_value=None):
-        with pytest.raises(RuntimeError, match="Textract analysis failed"):
+        with pytest.raises(RuntimeError, match="Service failure: Max retry threshold reached for synchronous analysis"):
             service.analyze_document("bucket", "key")
 
     assert mock_textract_client.analyze_document.call_count == 2

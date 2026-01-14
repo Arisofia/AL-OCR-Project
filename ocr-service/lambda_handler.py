@@ -71,8 +71,14 @@ def process_record(record: Dict[str, Any]) -> None:
 
     except Exception as e:
         logger.exception("Operational failure: Object %s in bucket %s", key, bucket)
+        # Extract AWS request id when available for diagnostics
+        request_id = "N/A"
+        if hasattr(e, "response"):
+            request_id = e.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
+
         err_obj = {
             "error": f"extraction_pipeline_failed: {e}",
+            "requestId": request_id,
             "input": {"bucket": bucket, "key": key},
         }
         try:

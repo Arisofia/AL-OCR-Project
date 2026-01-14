@@ -51,4 +51,4 @@ def test_generate_presigned_post_missing_bucket(mock_boto):
 
     response = client.post("/presign", json=body, headers=headers)
     assert response.status_code == 500
-    assert response.json()["detail"] == "S3 bucket not configured"
+    assert response.json()["detail"] == "Infrastructure failure: S3 bucket not configured"

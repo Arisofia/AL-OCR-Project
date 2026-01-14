@@ -34,7 +34,9 @@ class Settings(BaseSettings):
     app_description: str = "Professional Iterative OCR & Pixel Reconstruction Service"
     version: str = "1.2.0"
 
-    ocr_api_key: str = Field(..., description="Secret key for OCR authentication")
+    ocr_api_key: str = Field(
+        "default_secret_key", description="Secret key for OCR authentication"
+    )
     api_key_header_name: str = "X-API-KEY"
 
     s3_bucket_name: Optional[str] = None
