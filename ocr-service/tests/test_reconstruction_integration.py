@@ -58,7 +58,6 @@ def test_reconstruction_enabled(tmp_path, monkeypatch):
             resp = client.post("/ocr", files=files, headers=headers)
 
     assert resp.status_code == 200
-    assert resp.ok, resp.text
     data = resp.json()
     assert "reconstruction" in data
     assert data["reconstruction"] is not None
