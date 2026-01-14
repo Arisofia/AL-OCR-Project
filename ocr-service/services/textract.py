@@ -1,5 +1,5 @@
 """
-Service for interacting with Amazon Textract.
+Amazon Textract integration service for high-throughput financial document intelligence.
 """
 
 import time
@@ -15,23 +15,20 @@ logger = logging.getLogger("ocr-service.textract")
 
 class TextractService:
     """
-    Wrapper around boto3 textract client with simple error handling and retries.
+    Orchestrates AWS Textract interactions with robust error handling and exponential backoff.
     """
 
-    # Polling and retry constants
     MAX_POLL_ATTEMPTS = 30
     POLL_INTERVAL_SECONDS = 2
 
     def __init__(self, settings: Optional[Any] = None):
         if not settings:
             from config import get_settings
-
             settings = get_settings()
 
-        # Ensure a sane fallback for retries
-        self.max_retries = getattr(settings, "aws_max_retries", None) or 3
-
-        # Keep botocore retries minimal when using manual retry loops
+        self.max_retries = getattr(settings, "aws_max_retries", 3)
+        
+        # Optimize botocore configuration for deterministic retry management
         config = Config(retries={"max_attempts": 1, "mode": "standard"})
         self.client = boto3.client(
             "textract",
@@ -40,7 +37,7 @@ class TextractService:
         )
 
     def start_detection(self, bucket: str, key: str) -> Optional[str]:
-        """Starts async document text detection and returns JobId or None."""
+        """Initiates asynchronous document text detection. Returns JobId or None on failure."""
         attempt = 0
         while attempt < self.max_retries:
             try:
@@ -52,25 +49,21 @@ class TextractService:
                 attempt += 1
                 request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
                 logger.warning(
-                    "start_detection attempt %s failed. RequestId: %s, Error: %s",
+                    "Start detection failed | Attempt: %s | RequestId: %s | Error: %s",
                     attempt,
                     request_id,
                     e,
                 )
                 time.sleep(0.1 * (2 ** (attempt - 1)))
             except Exception as e:
-                logger.exception("Unexpected error during start_detection: %s", e)
+                logger.exception("Unexpected execution error in start_detection: %s", e)
                 break
-        logger.error("start_detection failed after retries")
         return None
 
     def analyze_document(
         self, bucket: str, key: str, features: Optional[List[str]] = None
     ) -> Dict[str, Any]:
-        """
-        Performs synchronous document analysis.
-        Raises RuntimeError on persistent failures.
-        """
+        """Performs synchronous document analysis for real-time processing pipelines."""
         if features is None:
             features = ["TABLES", "FORMS"]
 
@@ -85,22 +78,19 @@ class TextractService:
                 attempt += 1
                 request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
                 logger.warning(
-                    "analyze_document attempt %s failed. RequestId: %s, Error: %s",
+                    "Analyze document failed | Attempt: %s | RequestId: %s | Error: %s",
                     attempt,
                     request_id,
                     e,
                 )
                 time.sleep(0.1 * (2 ** (attempt - 1)))
             except Exception as e:
-                logger.exception("Unexpected error during analyze_document: %s", e)
-                raise RuntimeError("Textract analysis failed") from e
-        logger.error("analyze_document failed after retries")
-        raise RuntimeError("Textract analysis failed after retries")
+                logger.exception("Unexpected execution error in analyze_document: %s", e)
+                raise RuntimeError("Critical Textract service failure") from e
+        raise RuntimeError("Service failure: Max retry threshold reached for synchronous analysis")
 
     def get_job_results(self, job_id: str) -> Dict[str, Any]:
-        """
-        Retrieves results of an asynchronous job with polling/waiting.
-        """
+        """Polls for asynchronous job completion and aggregates paginated results."""
         attempt = 0
         while attempt < self.MAX_POLL_ATTEMPTS:
             try:
@@ -110,29 +100,23 @@ class TextractService:
                     return self._collect_all_pages(job_id, resp)
                 if status == "FAILED":
                     request_id = resp.get("ResponseMetadata", {}).get("RequestId")
-                    msg = f"Textract job {job_id} failed. RequestId: {request_id}"
-                    raise RuntimeError(msg)
+                    raise RuntimeError(f"Textract job failed | JobId: {job_id} | RequestId: {request_id}")
 
-                logger.info("Job %s status: %s. Waiting...", job_id, status)
+                logger.info("Job status polling | JobId: %s | Status: %s", job_id, status)
                 time.sleep(self.POLL_INTERVAL_SECONDS)
                 attempt += 1
             except ClientError as e:
                 request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
-                logger.error(
-                    "Error getting results for job %s. RequestId: %s, Error: %s",
-                    job_id,
-                    request_id,
-                    e,
-                )
+                logger.error("Result retrieval failed | JobId: %s | RequestId: %s | Error: %s", job_id, request_id, e)
                 raise
-        raise RuntimeError(f"Timeout waiting for job {job_id}")
+        raise RuntimeError(f"Job timeout: Result aggregation exceeded temporal limits for {job_id}")
 
     def _collect_all_pages(
         self,
         job_id: str,
         first_response: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Collects all pages of results using native boto3 Paginator."""
+        """Aggregates all paginated blocks using native AWS SDK paginators for stability."""
         blocks = first_response.get("Blocks", [])
         next_token = first_response.get("NextToken")
 
@@ -148,6 +132,5 @@ class TextractService:
             blocks.extend(page.get("Blocks", []))
 
         first_response["Blocks"] = blocks
-        # Remove NextToken since we've collected everything
         first_response.pop("NextToken", None)
         return first_response
