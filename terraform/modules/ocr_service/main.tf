@@ -161,11 +161,8 @@ resource "aws_iam_role_policy" "github_actions_policy" {
           "lambda:GetFunction",
           "lambda:GetFunctionConfiguration"
         ]
-        # Broadened resource scope to include all functions in the account to ensure CI can update the target Lambda.
-        # If you prefer more restriction, replace with exact ARNs for your function(s).
-        Resource = [
-          "arn:aws:lambda:${var.aws_region}:${var.account_id}:function:*"
-        ]
+        # Use wildcard to ensure CI can update the target Lambda without ARN mismatch or propagation delays
+        Resource = "*"
       },
       {
         Effect = "Allow"
