@@ -54,6 +54,17 @@ jobs:
           fi
           # On non-push events, we just build to verify the Dockerfile
 
+      - name: Check Lambda access (debug)
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: |
+          echo "Checking access to Lambda (debug)"
+          echo "Caller:"
+          aws sts get-caller-identity || true
+          echo "Get function (should succeed if GetFunction is allowed):"
+          aws lambda get-function --function-name al-ocr-processor || true
+          echo "Get function configuration:"
+          aws lambda get-function-configuration --function-name al-ocr-processor || true
+
       - name: Update Lambda image
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         run: |

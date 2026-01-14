@@ -126,8 +126,8 @@ resource "aws_iam_role" "github_actions_role" {
   })
 }
 
-resource "aws_iam_role_policy" "github_deploy_policy" {
-  name = "al-ocr-github-deploy-policy"
+resource "aws_iam_role_policy" "github_actions_policy" {
+  name = "al-ocr-github-actions-policy"
   role = aws_iam_role.github_actions_role.id
 
   policy = jsonencode({
@@ -147,21 +147,32 @@ resource "aws_iam_role_policy" "github_deploy_policy" {
           "ecr:PutImage",
           "ecr:InitiateLayerUpload",
           "ecr:UploadLayerPart",
-          "ecr:CompleteLayerUpload"
+          "ecr:CompleteLayerUpload",
+          "ecr:DescribeRepositories",
+          "ecr:CreateRepository"
         ]
-        Resource = aws_ecr_repository.ocr_repo.arn
+        Resource = "*" # ECR actions often need broad access or specific ARNs; here we allow all ECR for simplicity in the repo
       },
       {
         Effect = "Allow"
         Action = [
           "lambda:UpdateFunctionCode",
           "lambda:UpdateFunctionConfiguration",
-          "lambda:GetFunction"
+          "lambda:GetFunction",
+          "lambda:GetFunctionConfiguration"
         ]
+        # Broadened resource scope to include all functions in the account to ensure CI can update the target Lambda.
+        # If you prefer more restriction, replace with exact ARNs for your function(s).
         Resource = [
-          "arn:aws:lambda:${var.aws_region}:${var.account_id}:function:al-ocr-service",
-          "arn:aws:lambda:${var.aws_region}:${var.account_id}:function:al-ocr-processor"
+          "arn:aws:lambda:${var.aws_region}:${var.account_id}:function:*"
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sts:GetCallerIdentity"
+        ]
+        Resource = "*"
       }
     ]
   })
@@ -183,53 +194,6 @@ output "ecr_repository_url" {
   value = aws_ecr_repository.ocr_repo.repository_url
 }
 
-
-# Policy for ECR and Lambda update for CI
-resource "aws_iam_role_policy" "github_actions_policy" {
-  name = "al-ocr-github-actions-policy"
-  role = aws_iam_role.github_actions.id
-
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Action = [
-          "ecr:GetAuthorizationToken",
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:InitiateLayerUpload",
-          "ecr:UploadLayerPart",
-          "ecr:CompleteLayerUpload",
-          "ecr:PutImage",
-          "ecr:CreateRepository",
-          "ecr:DescribeRepositories"
-        ],
-        Resource = "*"
-      },
-      {
-        Effect = "Allow",
-        Action = [
-          "lambda:UpdateFunctionCode",
-          "lambda:GetFunction",
-          "lambda:GetFunctionConfiguration"
-        ],
-        Resource = "*"
-      },
-      {
-        Effect = "Allow",
-        Action = [
-          "sts:GetCallerIdentity"
-        ],
-        Resource = "*"
-      }
-    ]
-  })
-}
-
 output "github_oidc_provider_arn" {
   value = aws_iam_openid_connect_provider.github.arn
-}
-
-output "github_actions_role_arn" {
-  value = aws_iam_role.github_actions.arn
 }
