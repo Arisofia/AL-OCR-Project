@@ -58,7 +58,9 @@ jobs:
 
       - name: Install OCR service test deps
         run: |
-          pip install -r ocr-service/requirements.txt
+          pip install --no-cache-dir -r ocr-service/requirements.txt
+          # Verify critical dependencies
+          python -c "import supabase; import mangum; print('Dependencies verified')"
 
       - name: Save ocr-service pip environment (debug)
         if: ${{ always() }}
