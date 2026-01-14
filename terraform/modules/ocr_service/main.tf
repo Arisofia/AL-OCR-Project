@@ -102,3 +102,87 @@ output "s3_bucket_arn" {
 output "ecr_repository_url" {
   value = aws_ecr_repository.ocr_repo.repository_url
 }
+
+# GitHub OIDC provider for GitHub Actions (optional; creates provider if missing)
+resource "aws_iam_openid_connect_provider" "github" {
+  url             = "https://token.actions.githubusercontent.com"
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+}
+
+# IAM role assumed by GitHub Actions via OIDC
+resource "aws_iam_role" "github_actions" {
+  name = "al-ocr-github-actions-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = aws_iam_openid_connect_provider.github.arn
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringLike = {
+            # Restrict to this repository; adjust if you want to allow more refs
+            "token.actions.githubusercontent.com:sub" = "repo:Arisofia/AL-OCR-Project:*"
+          }
+          StringEquals = {
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+}
+
+# Policy for ECR and Lambda update for CI
+resource "aws_iam_role_policy" "github_actions_policy" {
+  name = "al-ocr-github-actions-policy"
+  role = aws_iam_role.github_actions.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:PutImage",
+          "ecr:CreateRepository",
+          "ecr:DescribeRepositories"
+        ],
+        Resource = "*"
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "lambda:UpdateFunctionCode",
+          "lambda:GetFunction",
+          "lambda:GetFunctionConfiguration"
+        ],
+        Resource = "*"
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "sts:GetCallerIdentity"
+        ],
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+output "github_oidc_provider_arn" {
+  value = aws_iam_openid_connect_provider.github.arn
+}
+
+output "github_actions_role_arn" {
+  value = aws_iam_role.github_actions.arn
+}
