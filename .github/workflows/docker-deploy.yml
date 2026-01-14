@@ -46,6 +46,7 @@ jobs:
           IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${COMMIT_TAG}
           docker buildx create --use || true
           docker buildx build --platform linux/amd64 -t $IMAGE_URI ./ocr-service
+          # On non-push events, we just build to verify the Dockerfile
       - name: Push image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
