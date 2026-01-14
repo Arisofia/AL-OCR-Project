@@ -10,7 +10,7 @@ def s3_event():
             {
                 "s3": {
                     "bucket": {"name": "test-bucket"},
-                    "object": {"key": "test-file.jpg"}
+                    "object": {"key": "test-file.jpg"},
                 }
             }
         ]
@@ -18,7 +18,8 @@ def s3_event():
 
 
 def test_handler_success(s3_event):
-    with patch('lambda_handler.get_services') as mock_get_services:
+    """Test successful handler execution."""
+    with patch("lambda_handler.get_services") as mock_get_services:
         mock_textract = MagicMock()
         mock_storage = MagicMock()
         mock_get_services.return_value = (mock_textract, mock_storage)
@@ -34,7 +35,8 @@ def test_handler_success(s3_event):
 
 
 def test_handler_textract_failure(s3_event):
-    with patch('lambda_handler.get_services') as mock_get_services:
+    """Test handler behavior when Textract fails."""
+    with patch("lambda_handler.get_services") as mock_get_services:
         mock_textract = MagicMock()
         mock_storage = MagicMock()
         mock_get_services.return_value = (mock_textract, mock_storage)
@@ -53,8 +55,9 @@ def test_handler_textract_failure(s3_event):
 
 
 def test_handler_missing_info():
+    """Test handler with missing bucket or key."""
     bad_event = {"Records": [{"s3": {}}]}
-    with patch('lambda_handler.logger') as mock_logger:
+    with patch("lambda_handler.logger") as mock_logger:
         response = handler(bad_event, None)
         assert response == {"status": "ok"}
-        mock_logger.warning.assert_called_with('Missing bucket or key in event record')
+        mock_logger.warning.assert_called_with("Missing bucket or key in event record")

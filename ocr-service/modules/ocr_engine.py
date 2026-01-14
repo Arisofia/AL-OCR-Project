@@ -32,6 +32,7 @@ logger = logging.getLogger("ocr-service.engine")
 # Try to import the packaged reconstruction pipeline (optional)
 try:
     from ocr_reconstruct import process_bytes as recon_process_bytes
+
     RECON_AVAILABLE = True
 except ImportError:
     recon_process_bytes = None
@@ -52,15 +53,15 @@ class IterativeOCREngine:
         learning_engine: Optional[LearningEngine] = None,
         textract_service: Optional[TextractService] = None,
         confidence_scorer: Optional[ConfidenceScorer] = None,
-        ocr_config: Optional[TesseractConfig] = None
+        ocr_config: Optional[TesseractConfig] = None,
     ):
         """
         Initializes the OCR engine with necessary components and configuration.
         """
         self.config = config or EngineConfig()
         self.enhancer = enhancer or (ImageEnhancer() if ImageEnhancer else None)
-        self.reconstructor = (
-            reconstructor or (PixelReconstructor() if PixelReconstructor else None)
+        self.reconstructor = reconstructor or (
+            PixelReconstructor() if PixelReconstructor else None
         )
         self.advanced_reconstructor = (
             advanced_reconstructor or AdvancedPixelReconstructor()
@@ -71,8 +72,7 @@ class IterativeOCREngine:
         self.ocr_config = ocr_config or TesseractConfig()
 
     def _run_reconstruction(
-        self,
-        image_bytes: bytes
+        self, image_bytes: bytes
     ) -> Tuple[Optional[Dict[str, Any]], Optional[np.ndarray]]:
         """
         Runs the optional reconstruction preprocessor.
@@ -83,8 +83,7 @@ class IterativeOCREngine:
         try:
             logger.info("Running packaged reconstruction preprocessor")
             recon_text, recon_img_bytes, recon_meta = recon_process_bytes(
-                image_bytes,
-                iterations=self.config.max_iterations
+                image_bytes, iterations=self.config.max_iterations
             )
 
             rec_img = None
@@ -97,18 +96,13 @@ class IterativeOCREngine:
             return None, None
 
     def _perform_ocr_iteration(
-        self,
-        img: np.ndarray,
-        iteration: int,
-        use_reconstruction: bool
+        self, img: np.ndarray, iteration: int, use_reconstruction: bool
     ) -> Tuple[str, np.ndarray]:
         """
         Executes a single OCR iteration including enhancement and thresholding.
         """
         # 1. Enhancement Pass
-        enhanced = (
-            self.enhancer.sharpen(img) if self.enhancer else img
-        )
+        enhanced = self.enhancer.sharpen(img) if self.enhancer else img
 
         if use_reconstruction and iteration == 0 and self.reconstructor:
             # Use advanced overlay removal for the first pass
@@ -116,16 +110,11 @@ class IterativeOCREngine:
             thresh = self.reconstructor.remove_color_overlay(img)
         else:
             gray = cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY)
-            thresh = (
-                self.enhancer.apply_threshold(gray)
-                if self.enhancer else gray
-            )
+            thresh = self.enhancer.apply_threshold(gray) if self.enhancer else gray
 
         # 2. Whole-image OCR
         try:
-            text = pytesseract.image_to_string(
-                thresh, config=self.ocr_config.flags
-            )
+            text = pytesseract.image_to_string(thresh, config=self.ocr_config.flags)
             text = text.strip()
         except Exception as e:
             logger.error("Tesseract whole-page OCR failed: %s", e)
@@ -149,9 +138,7 @@ class IterativeOCREngine:
             roi = ImageToolkit.prepare_roi(roi)
 
             try:
-                text = pytesseract.image_to_string(
-                    roi, config=self.ocr_config.flags
-                )
+                text = pytesseract.image_to_string(roi, config=self.ocr_config.flags)
                 text = text.strip()
                 if text:
                     combined_text.append(text)
@@ -228,13 +215,15 @@ class IterativeOCREngine:
                 else:
                     preview = text
                 method = "region-based" if should_use_regions else "full-page"
-                iteration_history.append({
-                    "iteration": i + 1,
-                    "text_length": len(text),
-                    "confidence": confidence,
-                    "method": method,
-                    "preview_text": preview
-                })
+                iteration_history.append(
+                    {
+                        "iteration": i + 1,
+                        "text_length": len(text),
+                        "confidence": confidence,
+                        "method": method,
+                        "preview_text": preview,
+                    }
+                )
 
                 if confidence > best_confidence:
                     best_text = text
@@ -250,16 +239,14 @@ class IterativeOCREngine:
             "text": best_text,
             "confidence": best_confidence,
             "iterations": iteration_history,
-            "success": len(best_text) > 0
+            "success": len(best_text) > 0,
         }
         if reconstruction_info:
             resp["reconstruction"] = reconstruction_info
         return resp
 
     async def process_image_advanced(
-        self,
-        image_bytes: bytes,
-        doc_type: Optional[str] = None
+        self, image_bytes: bytes, doc_type: Optional[str] = None
     ) -> dict:
         """
         Advanced async pipeline that applies AI reconstruction
@@ -278,9 +265,7 @@ class IterativeOCREngine:
         layout_regions = DocumentLayoutAnalyzer.detect_regions(image_bytes)
         layout_type = DocumentLayoutAnalyzer.classify_layout(layout_regions)
         logger.info(
-            "Detected layout type: %s with %s regions",
-            layout_type,
-            len(layout_regions)
+            "Detected layout type: %s with %s regions", layout_type, len(layout_regions)
         )
 
         # 2. Check learned patterns
@@ -290,14 +275,12 @@ class IterativeOCREngine:
 
         # 3. Layer elimination using AI reconstruction
         context = pattern or {}
-        context.update({
-            "layout_type": layout_type,
-            "region_count": len(layout_regions)
-        })
+        context.update(
+            {"layout_type": layout_type, "region_count": len(layout_regions)}
+        )
 
         ai_result = await self.advanced_reconstructor.reconstruct_with_ai(
-            image_bytes,
-            context=context
+            image_bytes, context=context
         )
 
         if "error" in ai_result:
@@ -314,18 +297,15 @@ class IterativeOCREngine:
             font_meta={
                 "source": "ai_reconstruction",
                 "model": ai_result.get("model", "unknown"),
-                "layout": layout_type
+                "layout": layout_type,
             },
-            accuracy_score=confidence
+            accuracy_score=confidence,
         )
 
         return {
             "text": extracted_text,
             "method": "advanced_ai_reconstruction",
             "confidence": confidence,
-            "layout_analysis": {
-                "type": layout_type,
-                "regions": len(layout_regions)
-            },
-            "success": True
+            "layout_analysis": {"type": layout_type, "regions": len(layout_regions)},
+            "success": True,
         }

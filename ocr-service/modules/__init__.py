@@ -4,6 +4,7 @@ Entry point for ocr-service modules.
 
 from .ocr_engine import IterativeOCREngine
 from .advanced_recon import AdvancedPixelReconstructor
+
 try:
     from ocr_reconstruct.modules.enhance import ImageEnhancer
     from ocr_reconstruct.modules.reconstruct import PixelReconstructor
@@ -16,6 +17,7 @@ except ImportError:
 
     class ImageEnhancer:
         """Minimal ImageEnhancer fallback used for tests and lightweight deployments."""
+
         def sharpen(self, img: _np.ndarray) -> _np.ndarray:
             """Simple sharpening pass."""
             kernel = _np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=_np.float32)
@@ -32,9 +34,12 @@ except ImportError:
 
     class PixelReconstructor:
         """Very small stub of PixelReconstructor to satisfy imports in tests."""
+
         def reconstruct(self, img: _np.ndarray) -> _np.ndarray:
             """Passthrough reconstruction stub."""
             return img
+
+
 from .learning_engine import LearningEngine
 from .processor import OCRProcessor
 
@@ -44,5 +49,5 @@ __all__ = [
     "ImageEnhancer",
     "PixelReconstructor",
     "LearningEngine",
-    "OCRProcessor"
+    "OCRProcessor",
 ]

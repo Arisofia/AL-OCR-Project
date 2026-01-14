@@ -80,9 +80,7 @@ class PixelReconstructor:
         _, mask = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY_INV)
 
         # Filter for rectangular shapes (redactions are usually blocks)
-        contours, _ = cv2.findContours(
-            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         final_mask = np.zeros_like(mask)
         for cnt in contours:
             x_coord, y_coord, width, height = cv2.boundingRect(cnt)
@@ -93,7 +91,7 @@ class PixelReconstructor:
                     (x_coord, y_coord),
                     (x_coord + width, y_coord + height),
                     255,
-                    -1
+                    -1,
                 )
 
         # Inpaint
@@ -117,9 +115,7 @@ class PixelReconstructor:
         if block <= 1:
             return img_gray
         upscaled = cv2.resize(
-            img_gray,
-            (width * 2, height * 2),
-            interpolation=cv2.INTER_CUBIC
+            img_gray, (width * 2, height * 2), interpolation=cv2.INTER_CUBIC
         )
         return cv2.medianBlur(upscaled, 3)
 
@@ -138,16 +134,14 @@ def inpaint_bbox(img: np.ndarray, mask: np.ndarray) -> np.ndarray:
 def deblur_wiener(img: np.ndarray, kernel: np.ndarray = None) -> np.ndarray:
     """A very simple Wiener-like deconvolution using a small kernel heuristic."""
     if kernel is None:
-        kernel = np.array(
-            [[1, 1, 1], [1, 4, 1], [1, 1, 1]],
-            dtype='float32'
-        ) / 12.0
+        kernel = np.array([[1, 1, 1], [1, 4, 1], [1, 1, 1]], dtype="float32") / 12.0
 
-    img_f = img.astype('float32') / 255.0
+    img_f = img.astype("float32") / 255.0
     try:
         import scipy.signal as signal
+
         wiener_filtered = signal.wiener(img_f)
-        return np.clip(wiener_filtered * 255.0, 0, 255).astype('uint8')
+        return np.clip(wiener_filtered * 255.0, 0, 255).astype("uint8")
     except (ImportError, Exception):
         # Fallback to a simple sharpening filter
         sharpen_kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])

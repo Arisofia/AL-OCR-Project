@@ -1,4 +1,5 @@
 """Generate synthetic images (clean, blurred, pixelated) for tests."""
+
 from PIL import Image, ImageDraw, ImageFont
 import os
 
@@ -13,6 +14,7 @@ except Exception:
 
 
 def make_base(text="HELLO WORLD", size=(400, 120)):
+    """Creates a base image with text."""
     img = Image.new("RGB", size, color=(255, 255, 255))
     d = ImageDraw.Draw(img)
     d.text((10, 40), text, fill=(0, 0, 0), font=FONT)
@@ -22,6 +24,7 @@ def make_base(text="HELLO WORLD", size=(400, 120)):
 
 
 def pixelate(input_path, block=8):
+    """Applies pixelation to an image."""
     img = Image.open(input_path)
     small = img.resize(
         (img.width // block, img.height // block),
@@ -34,9 +37,8 @@ def pixelate(input_path, block=8):
 
 
 def blur(input_path, radius=3):
-    img = Image.open(input_path).filter(
-        Image.Filter.GaussianBlur(radius)
-    )
+    """Applies Gaussian blur to an image."""
+    img = Image.open(input_path).filter(Image.Filter.GaussianBlur(radius))
     out_path = os.path.join(OUT_DIR, "sample_blurred.png")
     img.save(out_path)
     return out_path

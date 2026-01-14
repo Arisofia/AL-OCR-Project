@@ -31,35 +31,28 @@ def process_record(record: Dict[str, Any]) -> None:
     """
     Processes a single S3 record from the Lambda event.
     """
-    s3_info = record.get('s3', {})
-    bucket = s3_info.get('bucket', {}).get('name')
-    key = urllib.parse.unquote_plus(
-        s3_info.get('object', {}).get('key', '')
-    )
+    s3_info = record.get("s3", {})
+    bucket = s3_info.get("bucket", {}).get("name")
+    key = urllib.parse.unquote_plus(s3_info.get("object", {}).get("key", ""))
 
     if not bucket or not key:
-        logger.warning('Missing bucket or key in event record')
+        logger.warning("Missing bucket or key in event record")
         return
 
     textract_service, storage_service = get_services(bucket)
 
     # Build a stable S3 key
-    out_key = (
-        f"{settings.output_prefix.rstrip('/')}/"
-        f"{os.path.basename(key)}.json"
-    )
+    out_key = f"{settings.output_prefix.rstrip('/')}/{os.path.basename(key)}.json"
 
     try:
-        if key.lower().endswith('.pdf'):
+        if key.lower().endswith(".pdf"):
             job_id = textract_service.start_detection(bucket, key)
             if not job_id:
-                raise RuntimeError(
-                    f"Failed to start Textract detection job for {key}"
-                )
+                raise RuntimeError(f"Failed to start Textract detection job for {key}")
             output = {
-                'jobId': job_id,
-                'status': 'STARTED',
-                'input': {'bucket': bucket, 'key': key},
+                "jobId": job_id,
+                "status": "STARTED",
+                "input": {"bucket": bucket, "key": key},
             }
             logger.info("Started Textract job %s for %s", job_id, key)
         else:
@@ -68,18 +61,24 @@ def process_record(record: Dict[str, Any]) -> None:
 
         saved = storage_service.save_json(output, out_key)
         if not saved:
-            logger.error(
-                "Failed to save Textract output for %s to %s", key, out_key
-            )
+            logger.error("Failed to save Textract output for %s to %s", key, out_key)
         else:
             logger.info("Wrote output to s3://%s/%s", bucket, out_key)
 
     except Exception as e:  # pylint: disable=broad-exception-caught
+        request_id = "N/A"
+        if hasattr(e, "response"):
+            request_id = e.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
+
         logger.exception(
-            "Error processing object %s from bucket %s", key, bucket
+            "Error processing object %s from bucket %s. RequestId: %s",
+            key,
+            bucket,
+            request_id,
         )
         err_obj = {
             "error": f"processing_failed: {e}",
+            "requestId": request_id,
             "input": {"bucket": bucket, "key": key},
         }
         try:
@@ -97,7 +96,7 @@ def handler(event: Dict[str, Any], _context: Any) -> Dict[str, str]:
 
     Processes each record in the incoming S3 event.
     """
-    records = event.get('Records', [])
+    records = event.get("Records", [])
     logger.info("Received event with %d record(s)", len(records))
     failures = 0
     for record in records:

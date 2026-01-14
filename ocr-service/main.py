@@ -26,8 +26,7 @@ from modules.processor import OCRProcessor
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("ocr-service")
 
@@ -51,33 +50,32 @@ app.add_middleware(
 
 # Dependency Providers
 def get_storage_service(
-    curr_settings: Settings = Depends(get_settings)
+    curr_settings: Settings = Depends(get_settings),
 ) -> StorageService:
     """
     Dependency provider for StorageService.
     """
     return StorageService(
-        bucket_name=curr_settings.s3_bucket_name,
-        settings=curr_settings
+        bucket_name=curr_settings.s3_bucket_name, settings=curr_settings
     )
 
 
 def get_ocr_engine(
-    curr_settings: Settings = Depends(get_settings)
+    curr_settings: Settings = Depends(get_settings),
 ) -> IterativeOCREngine:
     """
     Dependency provider for IterativeOCREngine.
     """
     config = EngineConfig(
         max_iterations=curr_settings.ocr_iterations,
-        enable_reconstruction=curr_settings.enable_reconstruction
+        enable_reconstruction=curr_settings.enable_reconstruction,
     )
     return IterativeOCREngine(config=config)
 
 
 def get_ocr_processor(
     engine: IterativeOCREngine = Depends(get_ocr_engine),
-    storage: StorageService = Depends(get_storage_service)
+    storage: StorageService = Depends(get_storage_service),
 ) -> OCRProcessor:
     """
     Dependency provider for OCRProcessor.
@@ -91,7 +89,7 @@ api_key_header = APIKeyHeader(name=settings.api_key_header_name, auto_error=Fals
 
 async def get_api_key(
     header_value: str = Security(api_key_header),
-    curr_settings: Settings = Depends(get_settings)
+    curr_settings: Settings = Depends(get_settings),
 ) -> str:
     """
     Validates the API key from the request header.
@@ -104,6 +102,7 @@ async def get_api_key(
 # Recon package availability (best-effort detection)
 try:
     import ocr_reconstruct as _ocr_reconstruct_pkg  # type: ignore
+
     RECON_PKG_AVAILABLE = True
     RECON_PKG_VERSION = getattr(_ocr_reconstruct_pkg, "__version__", "unknown")
 except (ImportError, Exception):
@@ -121,7 +120,7 @@ async def health_check() -> HealthResponse:
 
 @app.get("/recon/status", response_model=ReconStatusResponse)
 async def recon_status(
-    curr_settings: Settings = Depends(get_settings)
+    curr_settings: Settings = Depends(get_settings),
 ) -> ReconStatusResponse:
     """
     Return reconstruction availability and package metadata.
@@ -129,7 +128,7 @@ async def recon_status(
     return ReconStatusResponse(
         reconstruction_enabled=curr_settings.enable_reconstruction,
         package_installed=RECON_PKG_AVAILABLE,
-        package_version=RECON_PKG_VERSION
+        package_version=RECON_PKG_VERSION,
     )
 
 
@@ -151,7 +150,7 @@ async def perform_ocr(
         reconstruct=reconstruct,
         advanced=advanced,
         doc_type=doc_type,
-        enable_reconstruction_config=curr_settings.enable_reconstruction
+        enable_reconstruction_config=curr_settings.enable_reconstruction,
     )
 
     return OCRResponse(**result)
@@ -189,6 +188,7 @@ async def generate_presigned_post(
         ) from exc
 
     return PresignResponse(url=post["url"], fields=post["fields"])
+
 
 # Lambda Handler
 handler = Mangum(app)

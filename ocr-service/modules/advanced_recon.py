@@ -44,7 +44,7 @@ class AdvancedPixelReconstructor:
         image_bytes: bytes,
         provider: str = "openai",
         context: Optional[Dict[str, Any]] = None,
-        fallback: bool = True
+        fallback: bool = True,
     ) -> Dict[str, Any]:
         """
         Uses advanced AI models to 'see' through layers and reconstruct content.
@@ -56,9 +56,7 @@ class AdvancedPixelReconstructor:
                 return {"error": "No AI providers configured"}
             primary = list(self.providers.keys())[0]
             logger.info(
-                "Requested provider %s unavailable, using %s",
-                provider,
-                primary
+                "Requested provider %s unavailable, using %s", provider, primary
             )
 
         prompt = (
@@ -69,8 +67,8 @@ class AdvancedPixelReconstructor:
         )
 
         if context:
-            font_meta = context.get('font_metadata', 'No font metadata available')
-            acc_score = context.get('accuracy_score', 'N/A')
+            font_meta = context.get("font_metadata", "No font metadata available")
+            acc_score = context.get("accuracy_score", "N/A")
             prompt += (
                 f"\n\nContext from similar documents: {font_meta}. "
                 f"Accuracy of previous similar reconstructions: {acc_score}."
@@ -88,10 +86,7 @@ class AdvancedPixelReconstructor:
             return {"error": str(e)}
 
     async def _try_fallback(
-        self,
-        image_bytes: bytes,
-        prompt: str,
-        exclude: str
+        self, image_bytes: bytes, prompt: str, exclude: str
     ) -> Dict[str, Any]:
         """
         Attempts to use an alternative provider when the primary fails.

@@ -17,8 +17,17 @@ class ConfidenceScorer:
         Initializes the scorer with a set of document markers.
         """
         self.markers = markers or [
-            "date", "fecha", "total", "invoice", "factura",
-            "name", "nombre", "id", "dni", "tax", "iva"
+            "date",
+            "fecha",
+            "total",
+            "invoice",
+            "factura",
+            "name",
+            "nombre",
+            "id",
+            "dni",
+            "tax",
+            "iva",
         ]
 
     def calculate(self, text: str) -> float:
@@ -33,7 +42,7 @@ class ConfidenceScorer:
         density = alnum_count / len(text)
 
         # 2. Word-like patterns (sequences of letters)
-        words = re.findall(r'\b[a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]{2,}\b', text)
+        words = re.findall(r"\b[a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]{2,}\b", text)
         word_count = len(words)
 
         # 3. Document marker detection

@@ -38,10 +38,10 @@ class OpenAIVisionProvider(VisionProvider):
         """
         Sends an image to OpenAI for reconstruction.
         """
-        base64_image = base64.b64encode(image_bytes).decode('utf-8')
+        base64_image = base64.b64encode(image_bytes).decode("utf-8")
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}"
+            "Authorization": f"Bearer {self.api_key}",
         }
         payload = {
             "model": "gpt-4o",
@@ -54,12 +54,12 @@ class OpenAIVisionProvider(VisionProvider):
                             "type": "image_url",
                             "image_url": {
                                 "url": f"data:image/jpeg;base64,{base64_image}"
-                            }
-                        }
-                    ]
+                            },
+                        },
+                    ],
                 }
             ],
-            "max_tokens": 2000
+            "max_tokens": 2000,
         }
         async with httpx.AsyncClient() as client:
             try:
@@ -67,13 +67,13 @@ class OpenAIVisionProvider(VisionProvider):
                     "https://api.openai.com/v1/chat/completions",
                     headers=headers,
                     json=payload,
-                    timeout=60.0
+                    timeout=60.0,
                 )
                 response.raise_for_status()
                 data = response.json()
                 return {
-                    "text": data['choices'][0]['message']['content'],
-                    "model": "gpt-4o"
+                    "text": data["choices"][0]["message"]["content"],
+                    "model": "gpt-4o",
                 }
             except Exception as e:
                 logger.error("OpenAI Vision call failed: %s", e)
@@ -94,14 +94,12 @@ class GeminiVisionProvider(VisionProvider):
         """
         try:
             import google.generativeai as genai
+
             genai.configure(api_key=self.api_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel("gemini-1.5-flash")
             image_part = {"mime_type": "image/jpeg", "data": image_bytes}
             response = model.generate_content([prompt, image_part])
-            return {
-                "text": response.text,
-                "model": "gemini-1.5-flash"
-            }
+            return {"text": response.text, "model": "gemini-1.5-flash"}
         except ImportError:
             logger.error("google-generativeai package not installed")
             return {"error": "Gemini provider not available: package missing"}

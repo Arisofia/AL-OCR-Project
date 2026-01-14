@@ -7,6 +7,7 @@ from main import app
 def test_reconstruction_enabled(tmp_path, monkeypatch):
     # Clear lru_cache for settings to ensure environment variables are picked up
     from config import get_settings
+
     get_settings.cache_clear()
 
     # Ensure reconstruction is enabled for this test (monkeypatch used)
@@ -30,6 +31,7 @@ def test_reconstruction_enabled(tmp_path, monkeypatch):
         # Create a dummy image for the test if the sample is missing
         import numpy as np
         import cv2
+
         dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
         cv2.putText(
             dummy_img,

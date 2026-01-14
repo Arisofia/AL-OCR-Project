@@ -51,9 +51,7 @@ class DocumentLayoutAnalyzer:
         dilated = cv2.dilate(thresh, kernel, iterations=3)
 
         contours, _ = cv2.findContours(
-            dilated,
-            cv2.RETR_EXTERNAL,
-            cv2.CHAIN_APPROX_SIMPLE
+            dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
 
         regions = []
@@ -66,12 +64,14 @@ class DocumentLayoutAnalyzer:
             if w < 20 or h < 10:
                 continue
 
-            regions.append({
-                "id": i,
-                "bbox": [x, y, w, h],
-                "rel_bbox": [x / img_w, y / img_h, w / img_w, h / img_h],
-                "area_ratio": (w * h) / (img_w * img_h)
-            })
+            regions.append(
+                {
+                    "id": i,
+                    "bbox": [x, y, w, h],
+                    "rel_bbox": [x / img_w, y / img_h, w / img_w, h / img_h],
+                    "area_ratio": (w * h) / (img_w * img_h),
+                }
+            )
 
         # Sort regions by y position (top to bottom)
         regions.sort(key=lambda r: r["bbox"][1])

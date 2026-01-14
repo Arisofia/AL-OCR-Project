@@ -24,7 +24,7 @@ class IterativeOCR:
         self,
         iterations: int = 3,
         save_iterations: bool = False,
-        output_dir: str = "./iterations"
+        output_dir: str = "./iterations",
     ):
         """
         Initializes the pipeline with settings.
@@ -41,7 +41,7 @@ class IterativeOCR:
     def _save_debug_image(self, img: np.ndarray, iteration: int, suffix: str = ""):
         """Saves image for debugging if requested."""
         if self.save_iterations:
-            filename = f"iter_{iteration+1}{suffix}.png"
+            filename = f"iter_{iteration + 1}{suffix}.png"
             path = os.path.join(self.output_dir, filename)
             cv2.imwrite(path, img)
 
@@ -52,7 +52,7 @@ class IterativeOCR:
         iteration: int,
     ) -> Tuple[str, np.ndarray, List[Dict[str, Any]]]:
         """
-    Applies heuristic strategies like depixelation and inpainting
+        Applies heuristic strategies like depixelation and inpainting
         """
         strategies_meta = []
         best_local_text = ""
@@ -63,27 +63,23 @@ class IterativeOCR:
         dep_th = self.enhancer.apply_threshold(depixelated)
         text_dep = image_to_text(dep_th)
 
-        strategies_meta.append({
-            "strategy": "depixelate",
-            "iteration": iteration + 1,
-            "text": text_dep
-        })
+        strategies_meta.append(
+            {"strategy": "depixelate", "iteration": iteration + 1, "text": text_dep}
+        )
 
         if len(text_dep) > len(best_local_text):
             best_local_text = text_dep
             best_local_img = depixelated
 
         # Strategy 2: Inpainting
-        mask = (thresholded == 255).astype('uint8') * 255
+        mask = (thresholded == 255).astype("uint8") * 255
         inpainted = cv2.inpaint(current, mask, 3, cv2.INPAINT_TELEA)
         inp_th = self.enhancer.apply_threshold(inpainted)
         text_inp = image_to_text(inp_th)
 
-        strategies_meta.append({
-            "strategy": "inpaint",
-            "iteration": iteration + 1,
-            "text": text_inp
-        })
+        strategies_meta.append(
+            {"strategy": "inpaint", "iteration": iteration + 1, "text": text_inp}
+        )
 
         if len(text_inp) > len(best_local_text):
             best_local_text = text_inp
@@ -114,12 +110,10 @@ class IterativeOCR:
 
             # 2. Feedback Loop / Heuristics
             if len(text) < 10:
-                fb_text, fb_img, fb_meta = (
-                    self._apply_feedback_strategies(
-                        current,
-                        thresholded,
-                        i,
-                    )
+                fb_text, fb_img, fb_meta = self._apply_feedback_strategies(
+                    current,
+                    thresholded,
+                    i,
                 )
                 meta["iterations"].extend(fb_meta)
 
@@ -170,20 +164,15 @@ class IterativeOCR:
         text, final_img, meta = self.process_image(img)
 
         # Encode processed image back to bytes
-        success, buf = cv2.imencode('.png', final_img)
+        success, buf = cv2.imencode(".png", final_img)
         img_bytes = buf.tobytes() if success else None
 
         return text, img_bytes, meta
 
 
 def process_bytes(
-    image_bytes: bytes,
-    iterations: int = 3,
-    save_iterations: bool = False
+    image_bytes: bytes, iterations: int = 3, save_iterations: bool = False
 ) -> Tuple[str, Optional[bytes], Dict[str, Any]]:
     """Stand-alone function for processing image bytes."""
-    pipeline = IterativeOCR(
-        iterations=iterations,
-        save_iterations=save_iterations
-    )
+    pipeline = IterativeOCR(iterations=iterations, save_iterations=save_iterations)
     return pipeline.process_bytes(image_bytes)

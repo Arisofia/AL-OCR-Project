@@ -29,10 +29,10 @@ class FakeBoto3Module:
 
 
 # Inject fake boto3 BEFORE importing services
-sys.modules['boto3'] = FakeBoto3Module()
-sys.modules['botocore'] = MagicMock()
-sys.modules['botocore.exceptions'] = MagicMock()
-sys.modules['botocore.config'] = MagicMock()
+sys.modules["boto3"] = FakeBoto3Module()
+sys.modules["botocore"] = MagicMock()
+sys.modules["botocore.exceptions"] = MagicMock()
+sys.modules["botocore.config"] = MagicMock()
 
 # pylint: disable=wrong-import-position
 from services.storage import StorageService  # noqa: E402
@@ -44,20 +44,20 @@ def run_tests():
     Executes a basic set of tests for storage and textract services.
     """
     # Now run tests with the fake boto3
-    mock_tex = sys.modules['boto3'].client('textract')
+    mock_tex = sys.modules["boto3"].client("textract")
 
     # Test StorageService
-    storage = StorageService(bucket_name='test-bucket')
-    key = storage.upload_file(b'content', 'file.png', 'image/png')
-    print('upload_file returned key:', key)
-    saved = storage.save_json({'a': 1}, 'out.json')
-    print('save_json returned:', saved)
+    storage = StorageService(bucket_name="test-bucket")
+    key = storage.upload_file(b"content", "file.png", "image/png")
+    print("upload_file returned key:", key)
+    saved = storage.save_json({"a": 1}, "out.json")
+    print("save_json returned:", saved)
 
     # Test Textract
-    mock_tex.analyze_document.return_value = {'Blocks': []}
+    mock_tex.analyze_document.return_value = {"Blocks": []}
     textract = TextractService()
-    res = textract.analyze_document(b'b', 'k')
-    print('analyze_document returned:', res)
+    res = textract.analyze_document(b"b", "k")
+    print("analyze_document returned:", res)
 
 
 if __name__ == "__main__":

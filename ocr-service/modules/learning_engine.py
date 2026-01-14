@@ -31,17 +31,13 @@ class LearningEngine:
         if self.settings.supabase_url and self.settings.supabase_service_role:
             try:
                 self.client = create_client(
-                    self.settings.supabase_url,
-                    self.settings.supabase_service_role
+                    self.settings.supabase_url, self.settings.supabase_service_role
                 )
             except Exception as e:
                 logger.error("Failed to initialize Supabase client: %s", e)
 
     async def learn_from_result(
-        self,
-        doc_type: str,
-        font_meta: Dict[str, Any],
-        accuracy_score: float
+        self, doc_type: str, font_meta: Dict[str, Any], accuracy_score: float
     ) -> None:
         """
         Records document characteristics for future reference and pattern matching.
@@ -53,7 +49,7 @@ class LearningEngine:
             "doc_type": doc_type,
             "font_metadata": font_meta,
             "accuracy_score": accuracy_score,
-            "version": self.settings.version
+            "version": self.settings.version,
         }
 
         try:
@@ -73,6 +69,7 @@ class LearningEngine:
             return None
 
         try:
+
             def _fetch():
                 return (
                     self.client.table("learning_patterns")

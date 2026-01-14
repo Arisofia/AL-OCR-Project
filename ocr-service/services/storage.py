@@ -32,26 +32,24 @@ class StorageService:
         """
         if not settings:
             from config import get_settings
+
             settings = get_settings()
 
         self.bucket_name = bucket_name or getattr(settings, "s3_bucket_name", None)
         # Use explicit fallback if the setting is None or falsy
-        self.max_retries = (getattr(settings, "aws_max_retries", None) or 3)
+        self.max_retries = getattr(settings, "aws_max_retries", None) or 3
         self.region = getattr(settings, "aws_region", "us-east-1")
 
         # Disable botocore automatic retries when we use a local manual retry loop
-        config = Config(
-            retries={
-                'max_attempts': 1,
-                'mode': 'standard'
-            }
-        )
+        config = Config(retries={"max_attempts": 1, "mode": "standard"})
         self.s3_client = (
             boto3.client(
-                's3',
+                "s3",
                 config=config,
                 region_name=self.region,
-            ) if self.bucket_name else None
+            )
+            if self.bucket_name
+            else None
         )
 
     def upload_file(
@@ -59,7 +57,7 @@ class StorageService:
         content: bytes,
         filename: str,
         content_type: str,
-        prefix: str = "processed"
+        prefix: str = "processed",
     ) -> Optional[str]:
         """
         Upload binary content to S3 and return the object key or None on failure.
@@ -76,10 +74,7 @@ class StorageService:
         return None
 
     def upload_json(
-        self,
-        data: Any,
-        filename: str,
-        prefix: str = "recon_meta"
+        self, data: Any, filename: str, prefix: str = "recon_meta"
     ) -> Optional[str]:
         """
         Serializes data to JSON and uploads it to S3.
@@ -115,19 +110,25 @@ class StorageService:
                     "Attempting to put object to S3: bucket=%s, key=%s, attempt=%s",
                     self.bucket_name,
                     key,
-                    attempt + 1
+                    attempt + 1,
                 )
                 self.s3_client.put_object(
                     Bucket=self.bucket_name,
                     Key=key,
                     Body=body,
-                    ContentType=content_type
+                    ContentType=content_type,
                 )
                 logger.info("Successfully put object to S3: key=%s", key)
                 return True
             except ClientError as e:
                 attempt += 1
-                logger.warning("S3 put_object attempt %s failed: %s", attempt, e)
+                request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
+                logger.warning(
+                    "S3 put_object attempt %s failed. RequestId: %s, Error: %s",
+                    attempt,
+                    request_id,
+                    e,
+                )
                 # exponential backoff (small; safe for unit tests)
                 backoff = 0.1 * (2 ** (attempt - 1))
                 time.sleep(backoff)

@@ -54,9 +54,7 @@ class ImageEnhancer:
         """
         height, width = img_gray.shape[:2]
         upscaled = cv2.resize(
-            img_gray,
-            (width * scale, height * scale),
-            interpolation=cv2.INTER_CUBIC
+            img_gray, (width * scale, height * scale), interpolation=cv2.INTER_CUBIC
         )
         return cv2.medianBlur(upscaled, 3)
 

@@ -25,20 +25,16 @@ class TextractService:
     def __init__(self, settings: Optional[Any] = None):
         if not settings:
             from config import get_settings
+
             settings = get_settings()
 
         # Ensure a sane fallback for retries
-        self.max_retries = (getattr(settings, "aws_max_retries", None) or 3)
+        self.max_retries = getattr(settings, "aws_max_retries", None) or 3
 
         # Keep botocore retries minimal when using manual retry loops
-        config = Config(
-            retries={
-                'max_attempts': 1,
-                'mode': 'standard'
-            }
-        )
+        config = Config(retries={"max_attempts": 1, "mode": "standard"})
         self.client = boto3.client(
-            'textract',
+            "textract",
             config=config,
             region_name=getattr(settings, "aws_region", "us-east-1"),
         )
@@ -49,14 +45,18 @@ class TextractService:
         while attempt < self.max_retries:
             try:
                 resp = self.client.start_document_text_detection(
-                    DocumentLocation={
-                        'S3Object': {'Bucket': bucket, 'Name': key}
-                    }
+                    DocumentLocation={"S3Object": {"Bucket": bucket, "Name": key}}
                 )
-                return resp.get('JobId')
+                return resp.get("JobId")
             except ClientError as e:
                 attempt += 1
-                logger.warning("start_detection attempt %s failed: %s", attempt, e)
+                request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
+                logger.warning(
+                    "start_detection attempt %s failed. RequestId: %s, Error: %s",
+                    attempt,
+                    request_id,
+                    e,
+                )
                 time.sleep(0.1 * (2 ** (attempt - 1)))
             except Exception as e:
                 logger.exception("Unexpected error during start_detection: %s", e)
@@ -65,30 +65,31 @@ class TextractService:
         return None
 
     def analyze_document(
-        self,
-        bucket: str,
-        key: str,
-        features: Optional[List[str]] = None
+        self, bucket: str, key: str, features: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
         Performs synchronous document analysis.
         Raises RuntimeError on persistent failures.
         """
         if features is None:
-            features = ['TABLES', 'FORMS']
+            features = ["TABLES", "FORMS"]
 
         attempt = 0
         while attempt < self.max_retries:
             try:
                 return self.client.analyze_document(
-                    Document={
-                        'S3Object': {'Bucket': bucket, 'Name': key}
-                    },
+                    Document={"S3Object": {"Bucket": bucket, "Name": key}},
                     FeatureTypes=features,
                 )
             except ClientError as e:
                 attempt += 1
-                logger.warning("analyze_document attempt %s failed: %s", attempt, e)
+                request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
+                logger.warning(
+                    "analyze_document attempt %s failed. RequestId: %s, Error: %s",
+                    attempt,
+                    request_id,
+                    e,
+                )
                 time.sleep(0.1 * (2 ** (attempt - 1)))
             except Exception as e:
                 logger.exception("Unexpected error during analyze_document: %s", e)
@@ -104,17 +105,25 @@ class TextractService:
         while attempt < self.MAX_POLL_ATTEMPTS:
             try:
                 resp = self.client.get_document_text_detection(JobId=job_id)
-                status = resp.get('JobStatus')
-                if status == 'SUCCEEDED':
+                status = resp.get("JobStatus")
+                if status == "SUCCEEDED":
                     return self._collect_all_pages(job_id, resp)
-                if status == 'FAILED':
-                    raise RuntimeError(f"Textract job {job_id} failed")
+                if status == "FAILED":
+                    request_id = resp.get("ResponseMetadata", {}).get("RequestId")
+                    msg = f"Textract job {job_id} failed. RequestId: {request_id}"
+                    raise RuntimeError(msg)
 
                 logger.info("Job %s status: %s. Waiting...", job_id, status)
                 time.sleep(self.POLL_INTERVAL_SECONDS)
                 attempt += 1
             except ClientError as e:
-                logger.error("Error getting results for job %s: %s", job_id, e)
+                request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
+                logger.error(
+                    "Error getting results for job %s. RequestId: %s, Error: %s",
+                    job_id,
+                    request_id,
+                    e,
+                )
                 raise
         raise RuntimeError(f"Timeout waiting for job {job_id}")
 
@@ -123,17 +132,22 @@ class TextractService:
         job_id: str,
         first_response: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Collects all pages of results using NextToken pagination."""
-        blocks = first_response.get('Blocks', [])
-        next_token = first_response.get('NextToken')
+        """Collects all pages of results using native boto3 Paginator."""
+        blocks = first_response.get("Blocks", [])
+        next_token = first_response.get("NextToken")
 
-        while next_token:
-            resp = self.client.get_document_text_detection(
-                JobId=job_id,
-                NextToken=next_token,
-            )
-            blocks.extend(resp.get('Blocks', []))
-            next_token = resp.get('NextToken')
+        if not next_token:
+            return first_response
 
-        first_response['Blocks'] = blocks
+        paginator = self.client.get_paginator("get_document_text_detection")
+        page_iterator = paginator.paginate(
+            JobId=job_id, PaginationConfig={"StartingToken": next_token}
+        )
+
+        for page in page_iterator:
+            blocks.extend(page.get("Blocks", []))
+
+        first_response["Blocks"] = blocks
+        # Remove NextToken since we've collected everything
+        first_response.pop("NextToken", None)
         return first_response

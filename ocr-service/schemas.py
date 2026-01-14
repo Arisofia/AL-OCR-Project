@@ -11,6 +11,7 @@ class OCRIteration(BaseModel):
     """
     Schema for a single OCR iteration result.
     """
+
     iteration: int
     text_length: int
     confidence: float
@@ -22,6 +23,7 @@ class OCRResponse(BaseModel):
     """
     Schema for the final OCR response.
     """
+
     filename: str
     text: str
     confidence: Optional[float] = None
@@ -37,6 +39,7 @@ class HealthResponse(BaseModel):
     """
     Schema for the health check response.
     """
+
     status: str
     timestamp: float
 
@@ -45,6 +48,7 @@ class ReconStatusResponse(BaseModel):
     """
     Schema for the reconstruction status response.
     """
+
     reconstruction_enabled: bool
     package_installed: bool
     package_version: Optional[str] = None
