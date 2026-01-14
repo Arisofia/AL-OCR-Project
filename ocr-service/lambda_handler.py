@@ -1,6 +1,7 @@
 """
 Event-driven AWS Lambda entry point for automated document intelligence processing.
-Orchestrates S3 lifecycle events to trigger multi-page Textract analysis and persistence.
+Orchestrates S3 lifecycle events to trigger multi-page Textract analysis and 
+persistence.
 """
 
 import logging
@@ -69,7 +70,7 @@ def process_record(record: Dict[str, Any]) -> None:
         else:
             logger.info("Result persisted | Path: s3://%s/%s", bucket, out_key)
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logger.exception("Operational failure: Object %s in bucket %s", key, bucket)
         # Extract AWS request id when available for diagnostics
         request_id = "N/A"
@@ -83,7 +84,7 @@ def process_record(record: Dict[str, Any]) -> None:
         }
         try:
             storage_service.save_json(err_obj, out_key)
-        except Exception as se:
+        except Exception as se:  # pylint: disable=broad-exception-caught
             logger.error("Critical storage failure during error logging: %s", se)
 
         # Propagate exception for Lambda retry visibility
@@ -102,7 +103,7 @@ def handler(event: Dict[str, Any], _context: Any) -> Dict[str, str]:
     for record in records:
         try:
             process_record(record)
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             failures += 1
 
     if failures:

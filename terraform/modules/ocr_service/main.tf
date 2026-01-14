@@ -117,6 +117,9 @@ resource "aws_iam_role" "github_actions_role" {
           StringLike = {
             "token.actions.githubusercontent.com:sub" = "repo:Arisofia/AL-OCR-Project:*"
           }
+          StringEquals = {
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+          }
         }
       }
     ]

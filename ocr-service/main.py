@@ -98,7 +98,7 @@ try:
 
     RECON_PKG_AVAILABLE = True
     RECON_PKG_VERSION = getattr(_ocr_reconstruct_pkg, "__version__", "unknown")
-except (ImportError, Exception):
+except (ImportError, Exception):  # pylint: disable=broad-exception-caught
     RECON_PKG_AVAILABLE = False
     RECON_PKG_VERSION = None
 
@@ -170,7 +170,7 @@ async def generate_presigned_post(
             Conditions=[["starts-with", "$Content-Type", req.content_type]],
             ExpiresIn=req.expires_in,
         )
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.exception("Failed to generate presigned credentials")
         raise HTTPException(
             status_code=500, detail="External service failure: Could not generate presigned post"
