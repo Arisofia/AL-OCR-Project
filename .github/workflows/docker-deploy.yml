@@ -45,14 +45,12 @@ jobs:
           COMMIT_TAG=$(git rev-parse --short HEAD)
           IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${COMMIT_TAG}
           docker buildx create --use || true
-          docker buildx build --platform linux/amd64 -t $IMAGE_URI --load ./ocr-service
-          # On non-push events, we just build to verify the Dockerfile
-      - name: Push image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          COMMIT_TAG=$(git rev-parse --short HEAD)
-          IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${COMMIT_TAG}
-          docker push $IMAGE_URI
+          # On pushes to main we push directly with buildx; on PRs we attempt to load or fallback to docker build for validation
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            docker buildx build --platform linux/amd64 -t $IMAGE_URI --push ./ocr-service
+          else
+            docker buildx build --platform linux/amd64 -t $IMAGE_URI --load ./ocr-service || docker build -t $IMAGE_URI ./ocr-service
+          fi
 
       - name: Update Lambda image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
