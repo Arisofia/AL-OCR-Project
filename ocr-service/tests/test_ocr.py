@@ -12,6 +12,7 @@ def test_ocr_engine_invalid_input():
     Tests the OCR engine with invalid inputs like empty or oversized files.
     """
     from modules.ocr_engine import IterativeOCREngine
+
     engine = IterativeOCREngine()
 
     # Test empty input
@@ -47,9 +48,7 @@ def test_image_enhancer_threshold():
     Tests the thresholding functionality of the ImageEnhancer.
     """
     img = np.zeros((100, 100), dtype=np.uint8)
-    cv2.putText(
-        img, "TEST", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, 255, 2
-    )
+    cv2.putText(img, "TEST", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, 255, 2)
 
     enhancer = ImageEnhancer()
     thresh = enhancer.apply_threshold(img)

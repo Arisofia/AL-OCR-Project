@@ -56,10 +56,9 @@ jobs:
           name: ocr_reconstruct-install-log-${{ matrix.python-version }}
           path: ocr_reconstruct_install.log
 
-      - name: Install OCR service test deps (minimal)
+      - name: Install OCR service test deps
         run: |
-          # Install deps required to run ocr-service unit tests (kept minimal to speed up CI)
-          pip install pytest pytest-mock boto3 pydantic pydantic-settings python-dotenv numpy fastapi python-multipart scikit-learn opencv-python-headless httpx
+          pip install -r ocr-service/requirements.txt
 
       - name: Save ocr-service pip environment (debug)
         if: ${{ always() }}

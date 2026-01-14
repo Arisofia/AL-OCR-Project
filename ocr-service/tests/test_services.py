@@ -6,7 +6,7 @@ from services.textract import TextractService
 
 @pytest.fixture
 def mock_s3_client():
-    with patch('boto3.client') as mock_boto:
+    with patch("boto3.client") as mock_boto:
         mock_s3 = MagicMock()
         mock_boto.return_value = mock_s3
         yield mock_s3
@@ -14,13 +14,14 @@ def mock_s3_client():
 
 @pytest.fixture
 def mock_textract_client():
-    with patch('boto3.client') as mock_boto:
+    with patch("boto3.client") as mock_boto:
         mock_textract = MagicMock()
         mock_boto.return_value = mock_textract
         yield mock_textract
 
 
 def test_storage_service_upload_file(mock_s3_client):
+    """Test S3 file upload."""
     service = StorageService(bucket_name="test-bucket")
     content = b"fake-image-content"
     filename = "test.png"
@@ -34,6 +35,7 @@ def test_storage_service_upload_file(mock_s3_client):
 
 
 def test_storage_service_save_json(mock_s3_client):
+    """Test S3 JSON saving."""
     service = StorageService(bucket_name="test-bucket")
     data = {"key": "value"}
     key = "output.json"
@@ -45,6 +47,7 @@ def test_storage_service_save_json(mock_s3_client):
 
 
 def test_textract_service_analyze_document(mock_textract_client):
+    """Test Textract document analysis."""
     service = TextractService()
     mock_textract_client.analyze_document.return_value = {"Blocks": []}
 

@@ -10,6 +10,7 @@ def test_detect_regions_empty():
 
 
 def test_detect_regions_real_image():
+    """Test layout detection on a synthetic image."""
     # Create a dummy image with two white blocks on black background
     img = np.zeros((100, 100, 3), dtype=np.uint8)
     cv2.rectangle(img, (10, 10), (30, 30), (255, 255, 255), -1)
@@ -28,6 +29,7 @@ def test_detect_regions_real_image():
 
 
 def test_classify_layout():
+    """Test layout classification logic."""
     regions = [{"area_ratio": 0.01}] * 25
     assert DocumentLayoutAnalyzer.classify_layout(regions) == "dense_text"
 

@@ -2,10 +2,12 @@
 Utility toolkit for image processing operations.
 """
 
-import cv2
-import numpy as np
 import logging
 from typing import Optional
+
+# pylint: disable=no-member
+import cv2
+import numpy as np
 
 logger = logging.getLogger("ocr-service.image-toolkit")
 

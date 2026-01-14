@@ -8,10 +8,7 @@ import numpy as np
 
 
 def image_to_text(
-    img: np.ndarray,
-    lang: str = "eng",
-    psm: int = 6,
-    oem: int = 3
+    img: np.ndarray, lang: str = "eng", psm: int = 6, oem: int = 3
 ) -> str:
     """
     Converts an image (numpy array) to text using Tesseract.

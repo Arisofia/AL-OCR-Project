@@ -1,5 +1,5 @@
 """
-Service for interacting with Amazon Textract.
+Amazon Textract integration service for high-throughput financial document intelligence.
 """
 
 import time
@@ -15,10 +15,9 @@ logger = logging.getLogger("ocr-service.textract")
 
 class TextractService:
     """
-    Wrapper around boto3 textract client with simple error handling and retries.
+    Orchestrates AWS Textract interactions with robust error handling and exponential backoff.
     """
 
-    # Polling and retry constants
     MAX_POLL_ATTEMPTS = 30
     POLL_INTERVAL_SECONDS = 2
 
@@ -27,113 +26,111 @@ class TextractService:
             from config import get_settings
             settings = get_settings()
 
-        # Ensure a sane fallback for retries
-        self.max_retries = (getattr(settings, "aws_max_retries", None) or 3)
-
-        # Keep botocore retries minimal when using manual retry loops
-        config = Config(
-            retries={
-                'max_attempts': 1,
-                'mode': 'standard'
-            }
-        )
+        self.max_retries = getattr(settings, "aws_max_retries", 3)
+        
+        # Optimize botocore configuration for deterministic retry management
+        config = Config(retries={"max_attempts": 1, "mode": "standard"})
         self.client = boto3.client(
-            'textract',
+            "textract",
             config=config,
             region_name=getattr(settings, "aws_region", "us-east-1"),
         )
 
     def start_detection(self, bucket: str, key: str) -> Optional[str]:
-        """Starts async document text detection and returns JobId or None."""
+        """Initiates asynchronous document text detection. Returns JobId or None on failure."""
         attempt = 0
         while attempt < self.max_retries:
             try:
                 resp = self.client.start_document_text_detection(
-                    DocumentLocation={
-                        'S3Object': {'Bucket': bucket, 'Name': key}
-                    }
+                    DocumentLocation={"S3Object": {"Bucket": bucket, "Name": key}}
                 )
-                return resp.get('JobId')
+                return resp.get("JobId")
             except ClientError as e:
                 attempt += 1
-                logger.warning("start_detection attempt %s failed: %s", attempt, e)
+                request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
+                logger.warning(
+                    "Start detection failed | Attempt: %s | RequestId: %s | Error: %s",
+                    attempt,
+                    request_id,
+                    e,
+                )
                 time.sleep(0.1 * (2 ** (attempt - 1)))
             except Exception as e:
-                logger.exception("Unexpected error during start_detection: %s", e)
+                logger.exception("Unexpected execution error in start_detection: %s", e)
                 break
-        logger.error("start_detection failed after retries")
         return None
 
     def analyze_document(
-        self,
-        bucket: str,
-        key: str,
-        features: Optional[List[str]] = None
+        self, bucket: str, key: str, features: Optional[List[str]] = None
     ) -> Dict[str, Any]:
-        """
-        Performs synchronous document analysis.
-        Raises RuntimeError on persistent failures.
-        """
+        """Performs synchronous document analysis for real-time processing pipelines."""
         if features is None:
-            features = ['TABLES', 'FORMS']
+            features = ["TABLES", "FORMS"]
 
         attempt = 0
         while attempt < self.max_retries:
             try:
                 return self.client.analyze_document(
-                    Document={
-                        'S3Object': {'Bucket': bucket, 'Name': key}
-                    },
+                    Document={"S3Object": {"Bucket": bucket, "Name": key}},
                     FeatureTypes=features,
                 )
             except ClientError as e:
                 attempt += 1
-                logger.warning("analyze_document attempt %s failed: %s", attempt, e)
+                request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
+                logger.warning(
+                    "Analyze document failed | Attempt: %s | RequestId: %s | Error: %s",
+                    attempt,
+                    request_id,
+                    e,
+                )
                 time.sleep(0.1 * (2 ** (attempt - 1)))
             except Exception as e:
-                logger.exception("Unexpected error during analyze_document: %s", e)
-                raise RuntimeError("Textract analysis failed") from e
-        logger.error("analyze_document failed after retries")
-        raise RuntimeError("Textract analysis failed after retries")
+                logger.exception("Unexpected execution error in analyze_document: %s", e)
+                raise RuntimeError("Critical Textract service failure") from e
+        raise RuntimeError("Service failure: Max retry threshold reached for synchronous analysis")
 
     def get_job_results(self, job_id: str) -> Dict[str, Any]:
-        """
-        Retrieves results of an asynchronous job with polling/waiting.
-        """
+        """Polls for asynchronous job completion and aggregates paginated results."""
         attempt = 0
         while attempt < self.MAX_POLL_ATTEMPTS:
             try:
                 resp = self.client.get_document_text_detection(JobId=job_id)
-                status = resp.get('JobStatus')
-                if status == 'SUCCEEDED':
+                status = resp.get("JobStatus")
+                if status == "SUCCEEDED":
                     return self._collect_all_pages(job_id, resp)
-                if status == 'FAILED':
-                    raise RuntimeError(f"Textract job {job_id} failed")
+                if status == "FAILED":
+                    request_id = resp.get("ResponseMetadata", {}).get("RequestId")
+                    raise RuntimeError(f"Textract job failed | JobId: {job_id} | RequestId: {request_id}")
 
-                logger.info("Job %s status: %s. Waiting...", job_id, status)
+                logger.info("Job status polling | JobId: %s | Status: %s", job_id, status)
                 time.sleep(self.POLL_INTERVAL_SECONDS)
                 attempt += 1
             except ClientError as e:
-                logger.error("Error getting results for job %s: %s", job_id, e)
+                request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
+                logger.error("Result retrieval failed | JobId: %s | RequestId: %s | Error: %s", job_id, request_id, e)
                 raise
-        raise RuntimeError(f"Timeout waiting for job {job_id}")
+        raise RuntimeError(f"Job timeout: Result aggregation exceeded temporal limits for {job_id}")
 
     def _collect_all_pages(
         self,
         job_id: str,
         first_response: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Collects all pages of results using NextToken pagination."""
-        blocks = first_response.get('Blocks', [])
-        next_token = first_response.get('NextToken')
+        """Aggregates all paginated blocks using native AWS SDK paginators for stability."""
+        blocks = first_response.get("Blocks", [])
+        next_token = first_response.get("NextToken")
 
-        while next_token:
-            resp = self.client.get_document_text_detection(
-                JobId=job_id,
-                NextToken=next_token,
-            )
-            blocks.extend(resp.get('Blocks', []))
-            next_token = resp.get('NextToken')
+        if not next_token:
+            return first_response
 
-        first_response['Blocks'] = blocks
+        paginator = self.client.get_paginator("get_document_text_detection")
+        page_iterator = paginator.paginate(
+            JobId=job_id, PaginationConfig={"StartingToken": next_token}
+        )
+
+        for page in page_iterator:
+            blocks.extend(page.get("Blocks", []))
+
+        first_response["Blocks"] = blocks
+        first_response.pop("NextToken", None)
         return first_response

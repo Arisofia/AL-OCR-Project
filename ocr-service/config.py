@@ -29,13 +29,14 @@ class Settings(BaseSettings):
         enable_reconstruction: Flag to enable pixel reconstruction.
         ocr_iterations: Number of OCR iterations to perform.
     """
+
     app_name: str = "AL Financial OCR Project"
-    app_description: str = (
-        "Professional Iterative OCR & Pixel Reconstruction Service"
-    )
+    app_description: str = "Professional Iterative OCR & Pixel Reconstruction Service"
     version: str = "1.2.0"
 
-    ocr_api_key: str = Field("default_secret_key")
+    ocr_api_key: str = Field(
+        "default_secret_key", description="Secret key for OCR authentication"
+    )
     api_key_header_name: str = "X-API-KEY"
 
     s3_bucket_name: Optional[str] = None
@@ -63,9 +64,7 @@ class Settings(BaseSettings):
     azure_application_insights_connection_string: Optional[str] = None
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore"
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
 

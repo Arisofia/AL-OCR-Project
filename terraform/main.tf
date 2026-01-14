@@ -20,3 +20,19 @@ module "ocr_infrastructure" {
   s3_bucket_name     = var.s3_bucket_name
   ecr_repository_name = var.ecr_repository_name
 }
+
+output "github_actions_role_arn" {
+  value = module.ocr_infrastructure.github_actions_role_arn
+}
+
+output "lambda_role_arn" {
+  value = module.ocr_infrastructure.lambda_role_arn
+}
+
+output "s3_bucket_arn" {
+  value = module.ocr_infrastructure.s3_bucket_arn
+}
+
+output "ecr_repository_url" {
+  value = module.ocr_infrastructure.ecr_repository_url
+}

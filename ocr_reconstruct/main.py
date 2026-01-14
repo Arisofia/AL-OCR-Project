@@ -1,4 +1,5 @@
 """CLI entrypoint for the iterative OCR + reconstruction project."""
+
 import argparse
 from modules.pipeline import IterativeOCR
 

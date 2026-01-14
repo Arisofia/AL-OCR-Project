@@ -1,8 +1,6 @@
 """
-Processor module coordinating OCR tasks and storage.
-
-This module provides the OCRProcessor class which acts as an orchestrator
-between the OCR engine and the storage services.
+Orchestration layer for document intelligence workflows and result persistence.
+Coordinates synchronous and advanced OCR pipelines with automated S3 storage integration.
 """
 
 import logging
@@ -19,7 +17,7 @@ logger = logging.getLogger("ocr-service.processor")
 
 class OCRProcessor:
     """
-    Orchestrates the OCR processing pipeline and results persistence.
+    Main orchestrator for the OCR lifecycle, managing data extraction and storage synchronization.
     """
 
     def __init__(
@@ -27,9 +25,6 @@ class OCRProcessor:
         ocr_engine: IterativeOCREngine,
         storage_service: StorageService
     ):
-        """
-        Initializes the processor with an engine and storage service.
-        """
         self.ocr_engine = ocr_engine
         self.storage_service = storage_service
 
@@ -39,46 +34,45 @@ class OCRProcessor:
         reconstruct: bool = False,
         advanced: bool = False,
         doc_type: str = "generic",
-        enable_reconstruction_config: bool = False
+        enable_reconstruction_config: bool = False,
     ) -> Dict[str, Any]:
         """
-        Reads, processes, and saves the results of an uploaded file.
+        Executes the full OCR pipeline: Validation, Extraction, and Cloud Persistence.
         """
         if not file.content_type.startswith("image/"):
-            raise HTTPException(status_code=400, detail="File must be an image")
+            raise HTTPException(status_code=400, detail="Protocol Violation: File must be a valid image format")
 
         start_time = time.time()
         contents = await file.read()
 
         try:
+            # Execute targeted OCR strategy
             if advanced:
                 result = await self.ocr_engine.process_image_advanced(
-                    contents,
-                    doc_type=doc_type
+                    contents, doc_type=doc_type
                 )
             else:
                 use_recon = reconstruct or enable_reconstruction_config
                 result = self.ocr_engine.process_image(
-                    contents,
-                    use_reconstruction=use_recon
+                    contents, use_reconstruction=use_recon
                 )
 
             if "error" in result:
-                raise HTTPException(status_code=400, detail=result["error"])
+                raise HTTPException(status_code=400, detail=f"Extraction failure: {result['error']}")
 
+            # Synchronize raw document and extracted intelligence to S3
             s3_key = self.storage_service.upload_file(
-                content=contents,
-                filename=file.filename,
-                content_type=file.content_type
+                content=contents, filename=file.filename, content_type=file.content_type
             )
 
             if result.get("reconstruction") and result["reconstruction"].get("meta"):
                 self.storage_service.upload_json(
-                    data=result["reconstruction"],
-                    filename=file.filename
+                    data=result["reconstruction"], filename=file.filename
                 )
 
             processing_time = round(time.time() - start_time, 3)
+            
+            # Enrich response with traceability metadata
             result.update({
                 "filename": file.filename,
                 "processing_time": processing_time,
@@ -89,8 +83,8 @@ class OCRProcessor:
         except HTTPException:
             raise
         except Exception as e:
-            logger.error("Failed to process %s: %s", file.filename, e)
+            logger.error("Pipeline failure for %s | Error: %s", file.filename, e)
             raise HTTPException(
                 status_code=500,
-                detail="Internal processing error"
+                detail="Internal processing failure in OCR orchestrator"
             ) from e

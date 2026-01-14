@@ -7,11 +7,14 @@ from main import app
 def test_reconstruction_enabled(tmp_path, monkeypatch):
     # Clear lru_cache for settings to ensure environment variables are picked up
     from config import get_settings
+
     get_settings.cache_clear()
 
     # Ensure reconstruction is enabled for this test (monkeypatch used)
+    test_key = "test_recon_key"
     monkeypatch.setenv("ENABLE_RECONSTRUCTION", "true")
     monkeypatch.setenv("OCR_ITERATIONS", "1")
+    monkeypatch.setenv("OCR_API_KEY", test_key)
 
     client = TestClient(app)
 
@@ -30,6 +33,7 @@ def test_reconstruction_enabled(tmp_path, monkeypatch):
         # Create a dummy image for the test if the sample is missing
         import numpy as np
         import cv2
+
         dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
         cv2.putText(
             dummy_img,
@@ -47,11 +51,7 @@ def test_reconstruction_enabled(tmp_path, monkeypatch):
         files = {
             "file": ("sample_pixelated.png", fh, "image/png"),
         }
-        api_key = os.getenv(
-            "OCR_API_KEY",
-            "default_secret_key",
-        )
-        headers = {"X-API-KEY": api_key}
+        headers = {"X-API-KEY": test_key}
 
         # Mock the engine's run_reconstruction to return something
         with patch(

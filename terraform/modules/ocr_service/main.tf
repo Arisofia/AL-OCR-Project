@@ -73,7 +73,9 @@ resource "aws_iam_role_policy" "lambda_policy" {
       {
         Action = [
           "textract:DetectDocumentText",
-          "textract:AnalyzeDocument"
+          "textract:AnalyzeDocument",
+          "textract:StartDocumentTextDetection",
+          "textract:GetDocumentTextDetection"
         ]
         Effect   = "Allow"
         Resource = "*"
@@ -91,6 +93,84 @@ resource "aws_iam_role_policy" "lambda_policy" {
   })
 }
 
+# --- GitHub Actions OIDC Unification ---
+
+resource "aws_iam_openid_connect_provider" "github" {
+  url             = "https://token.actions.githubusercontent.com"
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1", "1c58a3a8518e8759bf075b76b750d4f2df264fcd"]
+}
+
+resource "aws_iam_role" "github_actions_role" {
+  name = "al-ocr-github-actions-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Effect = "Allow"
+        Principal = {
+          Federated = aws_iam_openid_connect_provider.github.arn
+        }
+        Condition = {
+          StringLike = {
+            "token.actions.githubusercontent.com:sub" = "repo:Arisofia/AL-OCR-Project:*"
+          }
+          StringEquals = {
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "github_deploy_policy" {
+  name = "al-ocr-github-deploy-policy"
+  role = aws_iam_role.github_actions_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "ecr:GetAuthorizationToken"
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:PutImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload"
+        ]
+        Resource = aws_ecr_repository.ocr_repo.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "lambda:UpdateFunctionCode",
+          "lambda:UpdateFunctionConfiguration",
+          "lambda:GetFunction"
+        ]
+        Resource = [
+          "arn:aws:lambda:${var.aws_region}:${var.account_id}:function:al-ocr-service",
+          "arn:aws:lambda:${var.aws_region}:${var.account_id}:function:al-ocr-processor"
+        ]
+      }
+    ]
+  })
+}
+
+output "github_actions_role_arn" {
+  value = aws_iam_role.github_actions_role.arn
+}
+
 output "lambda_role_arn" {
   value = aws_iam_role.lambda_role.arn
 }
@@ -103,39 +183,6 @@ output "ecr_repository_url" {
   value = aws_ecr_repository.ocr_repo.repository_url
 }
 
-# GitHub OIDC provider for GitHub Actions (optional; creates provider if missing)
-resource "aws_iam_openid_connect_provider" "github" {
-  url             = "https://token.actions.githubusercontent.com"
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
-}
-
-# IAM role assumed by GitHub Actions via OIDC
-resource "aws_iam_role" "github_actions" {
-  name = "al-ocr-github-actions-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Federated = aws_iam_openid_connect_provider.github.arn
-        }
-        Action = "sts:AssumeRoleWithWebIdentity"
-        Condition = {
-          StringLike = {
-            # Restrict to this repository; adjust if you want to allow more refs
-            "token.actions.githubusercontent.com:sub" = "repo:Arisofia/AL-OCR-Project:*"
-          }
-          StringEquals = {
-            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          }
-        }
-      }
-    ]
-  })
-}
 
 # Policy for ECR and Lambda update for CI
 resource "aws_iam_role_policy" "github_actions_policy" {
