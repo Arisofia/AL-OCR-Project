@@ -22,7 +22,7 @@ def s3_event():
     }
 
 
-def test_handler_success(s3_event):  # pylint: disable=redefined-outer-name
+def test_handler_success(s3_event):
     """Test successful handler execution."""
     with patch("lambda_handler.get_services") as mock_get_services:
         mock_textract = MagicMock()
@@ -39,7 +39,7 @@ def test_handler_success(s3_event):  # pylint: disable=redefined-outer-name
         mock_storage.save_json.assert_called_once()
 
 
-def test_handler_textract_failure(s3_event):  # pylint: disable=redefined-outer-name
+def test_handler_textract_failure(s3_event):
     """Test handler behavior when Textract fails."""
     with patch("lambda_handler.get_services") as mock_get_services:
         mock_textract = MagicMock()
@@ -70,7 +70,7 @@ def test_handler_missing_info():
         mock_logger.warning.assert_called_with("Payload error: Missing S3 bucket or key reference")
 
 
-def test_handler_with_aws_request_id(s3_event):  # pylint: disable=redefined-outer-name
+def test_handler_with_aws_request_id(s3_event):
     """Test that handler extracts RequestId from AWS ClientErrors."""
     from botocore.exceptions import ClientError
     with patch("lambda_handler.get_services") as mock_get_services:
