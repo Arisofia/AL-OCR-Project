@@ -88,8 +88,11 @@ class IterativeOCREngine:
                 rec_img = ImageToolkit.decode_image(recon_img_bytes)
 
             return {"preview_text": recon_text, "meta": recon_meta}, rec_img
-        except Exception as e:
-            logger.warning("Reconstruction pipeline failed: %s", e)
+        except (ValueError, TypeError, RuntimeError) as e:
+            logger.warning("Reconstruction pipeline operational failure: %s", e)
+            return None, None
+        except Exception:
+            logger.exception("Unexpected system failure in reconstruction pipeline")
             return None, None
 
     def _perform_ocr_iteration(
@@ -115,8 +118,11 @@ class IterativeOCREngine:
         try:
             text = pytesseract.image_to_string(thresh, config=self.ocr_config.flags)
             text = text.strip()
-        except Exception as e:
-            logger.error("Extraction failed at iteration %s: %s", iteration, e)
+        except pytesseract.TesseractError as e:
+            logger.error("Tesseract failure at iteration %s: %s", iteration, e)
+            text = ""
+        except Exception:
+            logger.exception("Unexpected extraction failure at iteration %s", iteration)
             text = ""
 
         return text, thresh
@@ -141,12 +147,14 @@ class IterativeOCREngine:
                 text = text.strip()
                 if text:
                     combined_text.append(text)
-            except Exception as e:
+            except pytesseract.TesseractError as e:
                 logger.warning(
-                    "Targeted extraction failed | RegionId: %s | Error: %s",
+                    "Region extraction failure | RegionId: %s | Error: %s",
                     region.get("id"),
                     e,
                 )
+            except Exception:
+                logger.exception("Unexpected region extraction failure | RegionId: %s", region.get("id"))
 
         return "\n\n".join(combined_text)
 
@@ -228,9 +236,12 @@ class IterativeOCREngine:
 
                 # Apply iterative enhancement for subsequent cycle
                 current_img = ImageToolkit.enhance_iteration(current_img)
-            except Exception as e:
-                logger.error("Failure in iteration %s: %s", i + 1, e)
+            except (ValueError, TypeError, RuntimeError, pytesseract.TesseractError) as e:
+                logger.error("Operational failure in iteration %s: %s", i + 1, e)
                 iteration_history.append({"iteration": i + 1, "error": str(e)})
+            except Exception:
+                logger.exception("Unexpected system failure in iteration %d", i + 1)
+                iteration_history.append({"iteration": i + 1, "error": "unexpected_system_failure"})
 
         resp = {
             "text": best_text,

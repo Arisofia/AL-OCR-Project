@@ -55,8 +55,11 @@ class TextractService:
                     e,
                 )
                 time.sleep(0.1 * (2 ** (attempt - 1)))
-            except Exception as e:
-                logger.exception("Unexpected execution error in start_detection: %s", e)
+            except (ValueError, RuntimeError) as e:
+                logger.error("Data validation or runtime error in start_detection: %s", e)
+                break
+            except Exception:
+                logger.exception("Unexpected system failure during Textract job initiation")
                 break
         return None
 
@@ -84,9 +87,12 @@ class TextractService:
                     e,
                 )
                 time.sleep(0.1 * (2 ** (attempt - 1)))
-            except Exception as e:
-                logger.exception("Unexpected execution error in analyze_document: %s", e)
-                raise RuntimeError("Critical Textract service failure") from e
+            except (ValueError, RuntimeError) as e:
+                logger.error("Internal service error during document analysis: %s", e)
+                raise
+            except Exception:
+                logger.exception("Unexpected system failure during synchronous analysis")
+                raise RuntimeError("Critical Textract service failure")
         raise RuntimeError("Service failure: Max retry threshold reached for synchronous analysis")
 
     def get_job_results(self, job_id: str) -> Dict[str, Any]:

@@ -1,5 +1,5 @@
-# Use the AWS Lambda Python 3.9 base image
-FROM public.ecr.aws/lambda/python:3.9
+# Use the AWS Lambda Python 3.11 base image for fintech-grade performance and security
+FROM public.ecr.aws/lambda/python:3.11
 
 # Install Tesseract OCR and its dependencies
 RUN yum install -y \

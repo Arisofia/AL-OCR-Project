@@ -6,7 +6,7 @@ Provides endpoints for document intelligence, pixel reconstruction, and S3 lifec
 import logging
 import time
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Security
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Security, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
 from mangum import Mangum
@@ -98,7 +98,11 @@ try:
 
     RECON_PKG_AVAILABLE = True
     RECON_PKG_VERSION = getattr(_ocr_reconstruct_pkg, "__version__", "unknown")
-except (ImportError, Exception):
+except (ImportError, AttributeError):
+    RECON_PKG_AVAILABLE = False
+    RECON_PKG_VERSION = None
+except Exception:
+    logger.exception("Unexpected error during ocr_reconstruct package detection")
     RECON_PKG_AVAILABLE = False
     RECON_PKG_VERSION = None
 
@@ -123,6 +127,7 @@ async def recon_status(
 
 @app.post("/ocr", response_model=OCRResponse)
 async def perform_ocr(
+    request: Request,
     file: UploadFile = File(...),
     reconstruct: bool = False,
     advanced: bool = False,
@@ -135,12 +140,18 @@ async def perform_ocr(
     Primary OCR entry point. 
     Processes uploaded documents with optional AI-driven pixel reconstruction.
     """
+    # Extract AWS Request ID from Mangum context if available
+    request_id = "local-dev"
+    if "lambda.context" in request.scope:
+        request_id = request.scope["lambda.context"].aws_request_id
+
     result = await processor.process(
         file=file,
         reconstruct=reconstruct,
         advanced=advanced,
         doc_type=doc_type,
         enable_reconstruction_config=curr_settings.enable_reconstruction,
+        request_id=request_id,
     )
 
     return OCRResponse(**result)
@@ -158,7 +169,10 @@ async def generate_presigned_post(
     """
     bucket = curr_settings.s3_bucket_name
     if not bucket:
-        raise HTTPException(status_code=500, detail="Infrastructure failure: S3 bucket not configured")
+        raise HTTPException(
+            status_code=500,
+            detail="Infrastructure failure: S3 bucket not configured"
+        )
 
     s3 = boto3.client("s3", region_name=curr_settings.aws_region)
 
@@ -173,7 +187,8 @@ async def generate_presigned_post(
     except Exception as exc:
         logger.exception("Failed to generate presigned credentials")
         raise HTTPException(
-            status_code=500, detail="External service failure: Could not generate presigned post"
+            status_code=500,
+            detail="External service failure: Could not generate presigned post"
         ) from exc
 
     return PresignResponse(url=post["url"], fields=post["fields"])

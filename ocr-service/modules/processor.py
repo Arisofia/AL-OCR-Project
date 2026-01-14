@@ -35,6 +35,7 @@ class OCRProcessor:
         advanced: bool = False,
         doc_type: str = "generic",
         enable_reconstruction_config: bool = False,
+        request_id: str = "N/A",
     ) -> Dict[str, Any]:
         """
         Executes the full OCR pipeline: Validation, Extraction, and Cloud Persistence.
@@ -71,20 +72,27 @@ class OCRProcessor:
                 )
 
             processing_time = round(time.time() - start_time, 3)
-            
+
             # Enrich response with traceability metadata
             result.update({
                 "filename": file.filename,
                 "processing_time": processing_time,
-                "s3_key": s3_key
+                "s3_key": s3_key,
+                "request_id": request_id
             })
             return result
 
         except HTTPException:
             raise
-        except Exception as e:
-            logger.error("Pipeline failure for %s | Error: %s", file.filename, e)
+        except (ValueError, TypeError, RuntimeError) as e:
+            logger.error("Pipeline operational failure for %s | Error: %s", file.filename, e)
+            raise HTTPException(
+                status_code=500,
+                detail=f"OCR operational failure: {str(e)}"
+            ) from e
+        except Exception:
+            logger.exception("Unexpected orchestrator failure for %s", file.filename)
             raise HTTPException(
                 status_code=500,
                 detail="Internal processing failure in OCR orchestrator"
-            ) from e
+            )

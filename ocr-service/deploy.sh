@@ -1,39 +1,43 @@
 #!/bin/bash
+# Enterprise Deployment Orchestrator for AL OCR Service
+# Standardizes containerized deployments with automated ECR synchronization and Lambda updates.
 
-# Configuration
-AWS_REGION="us-east-1"
-AWS_ACCOUNT_ID="510701314494"
-ECR_REPOSITORY="al-ocr-service"
-LAMBDA_FUNCTION_NAME="AL-OCR-Processor"
+set -e # Exit immediately on error
 
-# Login to ECR
+# --- Configuration & Identity Management ---
+AWS_REGION=${AWS_REGION:-"us-east-1"}
+AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-"510701314494"}
+ECR_REPOSITORY=${ECR_REPOSITORY:-"al-ocr-service"}
+LAMBDA_FUNCTION_NAME=${LAMBDA_FUNCTION_NAME:-"AL-OCR-Processor"}
+
+echo "Initializing deployment for account: $AWS_ACCOUNT_ID in region: $AWS_REGION"
+
+# --- Authentication & Registry Access ---
 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
 
-# Build and push using buildx with commit SHA tag
-COMMIT_TAG=$(git rev-parse --short HEAD || echo "local")
+# --- Build & Artifact Versioning ---
+COMMIT_TAG=$(git rev-parse --short HEAD || echo "local-$(date +%s)")
 IMAGE_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$COMMIT_TAG
 
-# Ensure repository exists
+# --- Infrastructure Validation ---
 if ! aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region $AWS_REGION >/dev/null 2>&1; then
-  echo "ECR repo $ECR_REPOSITORY does not exist. Run infra_setup.sh first."
+  echo "Error: ECR repository $ECR_REPOSITORY does not exist. Ensure infrastructure is provisioned via Terraform."
   exit 1
 fi
 
-# Build and push image
+# --- Container Image Construction ---
+echo "Building container image: $IMAGE_URI"
 docker buildx build --platform linux/amd64 -t $IMAGE_URI --push .
 
-# Also push latest tag
-docker tag $IMAGE_URI $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
-docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
+# --- Alias Management (Latest) ---
+LATEST_TAG="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest"
+docker tag $IMAGE_URI $LATEST_TAG
+docker push $LATEST_TAG
 
-# Update Lambda function code
+# --- Lambda Lifecycle Update ---
+echo "Updating Lambda function: $LAMBDA_FUNCTION_NAME"
 aws lambda update-function-code \
     --function-name $LAMBDA_FUNCTION_NAME \
     --image-uri $IMAGE_URI
 
-if [ $? -eq 0 ]; then
-  echo "Lambda updated successfully with image $IMAGE_URI"
-else
-  echo "Failed to update Lambda."
-  exit 1
-fi
+echo "Deployment completed successfully. Version: $COMMIT_TAG"

@@ -59,8 +59,16 @@ jobs:
       - name: Install OCR service test deps
         run: |
           pip install --no-cache-dir -r ocr-service/requirements.txt
+          pip install pylint flake8
           # Verify critical dependencies
           python -c "import supabase; import mangum; print('Dependencies verified')"
+
+      - name: Run Linting (Pylint & Flake8)
+        run: |
+          # Run flake8 first (fast check)
+          flake8 ocr-service --max-line-length=88 --ignore=E203,W503
+          # Run pylint using the repo's .pylintrc
+          pylint ocr-service --rcfile=.pylintrc
 
       - name: Save ocr-service pip environment (debug)
         if: ${{ always() }}
