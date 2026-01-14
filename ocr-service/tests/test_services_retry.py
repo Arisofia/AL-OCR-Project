@@ -22,6 +22,7 @@ def mock_textract_client():
 
 
 def test_storage_put_object_retry_success(mock_s3_client):
+    """Test S3 put_object success after retries."""
     service = StorageService(bucket_name="test-bucket")
 
     # Fail once, then succeed
@@ -41,6 +42,7 @@ def test_storage_put_object_retry_success(mock_s3_client):
 
 
 def test_storage_put_object_exhaust_retries(mock_s3_client):
+    """Test S3 put_object failure after exhausting retries."""
     service = StorageService(bucket_name="test-bucket")
     service.max_retries = 2
 
@@ -56,6 +58,7 @@ def test_storage_put_object_exhaust_retries(mock_s3_client):
 
 
 def test_textract_analyze_retry_success(mock_textract_client):
+    """Test Textract analysis success after retries."""
     service = TextractService()
     service.max_retries = 3
 
@@ -80,6 +83,7 @@ def test_textract_analyze_retry_success(mock_textract_client):
 
 
 def test_textract_analyze_persistent_failure(mock_textract_client):
+    """Test Textract analysis persistent failure."""
     service = TextractService()
     service.max_retries = 2
 

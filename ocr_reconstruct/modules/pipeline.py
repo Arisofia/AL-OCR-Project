@@ -52,8 +52,7 @@ class IterativeOCR:
         iteration: int,
     ) -> Tuple[str, np.ndarray, List[Dict[str, Any]]]:
         """
-        Applies heuristic strategies like depixelation and inpainting
-        when initial OCR confidence is low.
+    Applies heuristic strategies like depixelation and inpainting
         """
         strategies_meta = []
         best_local_text = ""
