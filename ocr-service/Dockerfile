@@ -10,7 +10,24 @@ RUN yum install -y \
 
 # Copy requirements.txt and install dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+# Upgrade pip and wheel so we prefer binary wheels when available
+RUN python -m pip install --upgrade pip setuptools wheel
+
+# Install build tools and libraries required to compile packages like NumPy/SciPy if wheels are unavailable
+RUN yum install -y \
+    gcc \
+    gcc-c++ \
+    gcc-gfortran \
+    python3-devel \
+    openblas-devel \
+    lapack-devel \
+    blas-devel \
+    pkgconfig \
+    make
+
+# Install Python dependencies (prefer binary wheels to avoid source builds)
+RUN pip install --prefer-binary --no-cache-dir -r requirements.txt
 
 # Create a non-root user for security
 RUN useradd -m appuser
