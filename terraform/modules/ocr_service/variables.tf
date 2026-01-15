@@ -11,3 +11,9 @@ variable "ecr_force_delete" {
   type    = bool
   default = false
 }
+
+# Make ECR image tag mutability configurable. Default to IMMUTABLE for best practice.
+variable "ecr_image_tag_mutability" {
+  type    = string
+  default = "IMMUTABLE"
+}
