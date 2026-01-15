@@ -10,8 +10,7 @@ sys.modules.setdefault("modules.ocr_engine", MagicMock(IterativeOCREngine=MagicM
 sys.modules.setdefault("modules.ocr_config", MagicMock(EngineConfig=MagicMock()))
 sys.modules.setdefault("modules.processor", MagicMock(OCRProcessor=MagicMock()))
 
-from config import get_settings  # noqa: E402
-# pylint: disable=wrong-import-position
+from config import get_settings  # noqa: E402  # pylint: disable=wrong-import-position
 from fastapi.testclient import TestClient  # noqa: E402
 from main import app  # noqa: E402
 
