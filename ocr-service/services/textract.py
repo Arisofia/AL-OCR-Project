@@ -9,6 +9,12 @@ from typing import Any, Dict, List, Optional
 import boto3  # type: ignore
 from botocore.config import Config  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
+from tenacity import (  # type: ignore
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 
 logger = logging.getLogger("ocr-service.textract")
 
@@ -39,27 +45,28 @@ class TextractService:
 
     def start_detection(self, bucket: str, key: str) -> Optional[str]:
         """Initiates async text detection. Returns JobId or None on failure."""
-        attempt = 0
-        while attempt < self.max_retries:
-            try:
+        try:
+
+            @retry(
+                stop=stop_after_attempt(self.max_retries),
+                wait=wait_exponential(multiplier=0.1, min=0.1, max=2),
+                retry=retry_if_exception_type(ClientError),
+                reraise=True,
+            )
+            def _do_start():
                 resp = self.client.start_document_text_detection(
                     DocumentLocation={"S3Object": {"Bucket": bucket, "Name": key}}
                 )
                 return resp.get("JobId")
-            except ClientError as e:
-                attempt += 1
-                request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
-                logger.warning(
-                    "Start detection failed | Attempt: %s | RequestId: %s | Error: %s",
-                    attempt,
-                    request_id,
-                    e,
-                )
-                time.sleep(0.1 * (2 ** (attempt - 1)))
-            except Exception as e:
-                logger.exception("Unexpected error in start_detection: %s", e)
-                break
-        return None
+
+            return _do_start()
+        except ClientError as e:
+            request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
+            logger.error("Start detection failed after retries | RID: %s", request_id)
+            return None
+        except Exception as e:
+            logger.exception("Unexpected error in start_detection: %s", e)
+            return None
 
     def analyze_document(
         self, bucket: str, key: str, features: Optional[List[str]] = None
@@ -68,27 +75,28 @@ class TextractService:
         if features is None:
             features = ["TABLES", "FORMS"]
 
-        attempt = 0
-        while attempt < self.max_retries:
-            try:
+        try:
+
+            @retry(
+                stop=stop_after_attempt(self.max_retries),
+                wait=wait_exponential(multiplier=0.1, min=0.1, max=2),
+                retry=retry_if_exception_type(ClientError),
+                reraise=True,
+            )
+            def _do_analyze():
                 return self.client.analyze_document(
                     Document={"S3Object": {"Bucket": bucket, "Name": key}},
                     FeatureTypes=features,
                 )
-            except ClientError as e:
-                attempt += 1
-                request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
-                logger.warning(
-                    "Analyze document failed | Attempt: %s | RequestId: %s | Error: %s",
-                    attempt,
-                    request_id,
-                    e,
-                )
-                time.sleep(0.1 * (2 ** (attempt - 1)))
-            except Exception as e:
-                logger.exception("Unexpected error in analyze_document: %s", e)
-                raise RuntimeError("Critical Textract failure") from e
-        raise RuntimeError("Service failure: Max retry threshold reached")
+
+            return _do_analyze()
+        except ClientError as e:
+            request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
+            logger.error("Analyze document failed after retries | RID: %s", request_id)
+            raise RuntimeError("Critical Textract failure") from e
+        except Exception as e:
+            logger.exception("Unexpected error in analyze_document: %s", e)
+            raise RuntimeError("Critical Textract failure") from e
 
     def get_job_results(self, job_id: str) -> Dict[str, Any]:
         """Polls for asynchronous job completion and aggregates paginated results."""

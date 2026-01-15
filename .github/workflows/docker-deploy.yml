@@ -28,6 +28,13 @@ jobs:
     env:
       LAMBDA_FUNCTION_NAME: al-ocr-processor
     steps:
+      - name: Run Checkov Security Scan (Docker context)
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: ./ocr-service
+          framework: dockerfile
+          quiet: true
+          soft_fail: false
       # actions/checkout v4.2.2
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
 

@@ -23,6 +23,23 @@ jobs:
       matrix:
         python-version: ['3.10', '3.11']
     steps:
+      - name: Run Checkov Security Scan (Terraform)
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform
+          framework: terraform
+          quiet: true
+          soft_fail: false
+      - name: Notify Slack on Failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          payload: |
+            {
+              "text": "❌ Python Tests failed in AL-OCR-Project: ${{ github.workflow }} on ${{ github.ref }}. See details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       # actions/checkout v4.2.2
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -136,7 +153,16 @@ jobs:
 
           # Show the debug file for logs and then run tests
           cat debug_imports.txt || true
-          pytest tests -q
+          pytest tests -q --cov=. --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./ocr-service/coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
       # actions/upload-artifact v4.4.3
       - name: Upload ocr-service debug artifact
         if: ${{ always() }}
