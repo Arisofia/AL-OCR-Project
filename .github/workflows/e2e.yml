@@ -46,7 +46,7 @@ jobs:
         working-directory: ./frontend
         run: |
           npm ci
-      
+
       - name: Run Frontend Lint
         working-directory: ./frontend
         run: npm run lint
@@ -79,7 +79,7 @@ jobs:
           npm run build
 
       - name: Deploy to Netlify (optional)
-        if: secrets.NETLIFY_AUTH_TOKEN != ''
+        if: ${{ secrets.NETLIFY_AUTH_TOKEN != '' }}
         working-directory: ./frontend
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}

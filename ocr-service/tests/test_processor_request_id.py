@@ -15,10 +15,10 @@ def test_processor_returns_request_id():
 
     storage = MagicMock()
 
-    def fake_upload_file(content, filename, content_type):
+    def fake_upload_file(_content, filename, _content_type):
         return f"s3://bucket/{filename}"
 
-    def fake_upload_json(data, filename):
+    def fake_upload_json(_data, filename):
         return f"s3://bucket/{filename}.json"
 
     storage.upload_file = fake_upload_file

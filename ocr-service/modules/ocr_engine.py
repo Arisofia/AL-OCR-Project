@@ -67,9 +67,7 @@ class IterativeOCREngine:
         """
         self.config = config or EngineConfig()
         self.enhancer = enhancer or (ImageEnhancer() if ImageEnhancer else None)
-        self.reconstructor = reconstructor or (
-            PixelReconstructor() if PixelReconstructor else None
-        )
+        self.reconstructor = reconstructor or (PixelReconstructor() if PixelReconstructor else None)
         self.advanced_reconstructor = (
             advanced_reconstructor or AdvancedPixelReconstructor()
         )

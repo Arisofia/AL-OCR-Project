@@ -5,6 +5,28 @@ from fastapi.testclient import TestClient
 from main import app
 
 
+def _get_test_image(base_path, tmp_path):
+    if os.path.exists(base_path):
+        return base_path
+
+    import cv2
+    import numpy as np
+
+    dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
+    cv2.putText(
+        dummy_img,
+        "RECON TEST",
+        (10, 50),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.5,
+        (255, 255, 255),
+        1,
+    )
+    sample = os.path.join(tmp_path, "dummy_pixelated.png")
+    cv2.imwrite(str(sample), dummy_img)
+    return sample
+
+
 def test_reconstruction_enabled(tmp_path, monkeypatch):
     # Clear lru_cache for settings to ensure environment variables are picked up
     from config import get_settings
@@ -30,23 +52,7 @@ def test_reconstruction_enabled(tmp_path, monkeypatch):
         "data",
         "sample_pixelated.png",
     )
-    if not os.path.exists(sample):
-        # Create a dummy image for the test if the sample is missing
-        import cv2
-        import numpy as np
-
-        dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
-        cv2.putText(
-            dummy_img,
-            "RECON TEST",
-            (10, 50),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (255, 255, 255),
-            1,
-        )
-        sample = os.path.join(tmp_path, "dummy_pixelated.png")
-        cv2.imwrite(str(sample), dummy_img)
+    sample = _get_test_image(sample, tmp_path)
 
     with open(sample, "rb") as fh:
         files = {
