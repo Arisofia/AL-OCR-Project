@@ -47,7 +47,7 @@ class Settings(BaseSettings):
 
     enable_reconstruction: bool = False
     ocr_iterations: int = 3
-    
+
     # Security and Environment
     environment: str = "development"
     allowed_origins: list[str] = ["*"]

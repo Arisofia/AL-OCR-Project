@@ -47,22 +47,22 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 async def add_process_time_and_logging(request: Request, call_next):
     """Logs request lifecycle and adds performance metadata to responses."""
     start_time = time.time()
-    
+
     # Extract request ID for traceability
     request_id = get_request_id(request)
-    
-    logger.info("Request started | Path: %s | Method: %s | ID: %s", 
+
+    logger.info("Request started | Path: %s | Method: %s | ID: %s",
                 request.url.path, request.method, request_id)
-    
+
     response = await call_next(request)
-    
+
     process_time = time.time() - start_time
     response.headers["X-Process-Time"] = f"{process_time:.4f}s"
     response.headers["X-Request-ID"] = request_id
-    
+
     logger.info("Request finished | Path: %s | Status: %d | Latency: %.4fs | ID: %s",
                 request.url.path, response.status_code, process_time, request_id)
-    
+
     return response
 
 # Global CORS Policy
