@@ -13,7 +13,8 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const reviewers = ['gemini-help', 'coderabbit', 'openia'];
+            // Use updated automation reviewers (codex replaces coderabbit)
+            const reviewers = ['gemini-help', 'codex', 'openia'];
             const pr = context.payload.pull_request;
             if (!pr) {
               console.log('No pull request payload, skipping');
