@@ -20,7 +20,7 @@ WORKDIR /build
 COPY ocr_reconstruct ./ocr_reconstruct
 COPY ocr-service/requirements.txt ./ocr-service/requirements.txt
 
-RUN pip install --prefix=/install --prefer-binary --no-cache-dir -e ./ocr_reconstruct && \
+RUN pip install --prefix=/install --prefer-binary --no-cache-dir ./ocr_reconstruct && \
     pip install --prefix=/install --prefer-binary --no-cache-dir -r ./ocr-service/requirements.txt
 
 # Stage 2: Final lightweight runtime image
