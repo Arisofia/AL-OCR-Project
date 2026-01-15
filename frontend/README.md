@@ -20,7 +20,7 @@ If you are developing a production application, we recommend using TypeScript wi
 This project reads the following Vite environment variables at runtime. For local development create a copy of `.env.development` from the example and update values as needed.
 
 - `VITE_API_BASE` — Base URL for the OCR API (default: `http://localhost:8000`).
-- `VITE_API_KEY` — API key used to authenticate requests to the OCR API (for local dev you can use `default_secret_key`).
+- `VITE_API_KEY` — API key used to authenticate requests to the OCR API. For local dev set `VITE_API_KEY` in `frontend/.env.development` (example value: `REPLACE_WITH_STAGING_API_KEY`). For CI, configure a repo secret named `STAGING_API_KEY` and workflows will pick it up.
 
 Example: copy `frontend/.env.development.example` to `frontend/.env.development` and edit the values.
 

@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     version: str = "1.2.0"
 
     ocr_api_key: str = Field(
-        "default_secret_key", description="Secret key for OCR authentication"
+        "REPLACE_WITH_OCR_API_KEY", description="Secret key for OCR authentication (set via env or Secrets)"
     )
     api_key_header_name: str = "X-API-KEY"
 
