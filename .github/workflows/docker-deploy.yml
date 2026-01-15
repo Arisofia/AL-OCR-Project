@@ -16,6 +16,7 @@ on:
       - 'ocr-service/**'
       - 'ocr_reconstruct/**'
       - '.github/workflows/docker-deploy.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -28,7 +29,7 @@ jobs:
       LAMBDA_FUNCTION_NAME: al-ocr-processor
     steps:
       # actions/checkout v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
       - name: Configure AWS Credentials
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         # aws-actions/configure-aws-credentials v4.0.2
@@ -56,7 +57,9 @@ jobs:
         run: |
           # Use a local tag for building and scanning
           TAG=al-ocr-service:${{ github.sha }}
-          docker buildx build --platform linux/amd64 -t $TAG --load -f ./ocr-service/Dockerfile .
+          docker buildx build --platform linux/amd64 \
+            -t $TAG --load -f ./ocr-service/Dockerfile \
+            --cache-from type=gha --cache-to type=gha,mode=max .
 
       # aquasecurity/trivy-action v0.28.0
       - name: Run Trivy vulnerability scanner
