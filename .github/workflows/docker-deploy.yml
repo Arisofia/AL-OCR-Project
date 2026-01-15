@@ -23,35 +23,56 @@ permissions:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    env:
+      LAMBDA_FUNCTION_NAME: al-ocr-processor
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Configure AWS Credentials
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: us-east-1
+
+      - name: Confirm AWS identity (debug)
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: |
+          echo "Confirming AWS identity (debug)"
+          aws sts get-caller-identity || true
+
       - name: Login to ECR
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         run: |
           aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+
       - name: Build image
         run: |
-          COMMIT_TAG=$(git rev-parse --short HEAD)
-          IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${COMMIT_TAG}
+          IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${{ github.sha }}
           docker buildx create --use || true
-          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
-            echo "On main push: pushing image to ECR"
-            docker buildx build --platform linux/amd64 -t $IMAGE_URI --push ./ocr-service
-          else
-            echo "Non-push or non-main: building and loading image locally"
-            docker buildx build --platform linux/amd64 -t $IMAGE_URI --load ./ocr-service
-          fi
-          # On non-push events, we just build to verify the Dockerfile
+          docker buildx build --platform linux/amd64 -t $IMAGE_URI --load -f ./ocr-service/Dockerfile .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
+        with:
+          image-ref: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${{ github.sha }}
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Push image to ECR
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: |
+          IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${{ github.sha }}
+          docker push $IMAGE_URI
+          # Also tag with 'latest' for convenience
+          LATEST_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:latest
+          docker tag $IMAGE_URI $LATEST_URI
+          docker push $LATEST_URI
 
       - name: Update Lambda image
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         run: |
-          COMMIT_TAG=$(git rev-parse --short HEAD)
-          IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${COMMIT_TAG}
-          aws lambda update-function-code --function-name al-ocr-processor --image-uri $IMAGE_URI
+          IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${{ github.sha }}
+          aws lambda update-function-code --function-name $LAMBDA_FUNCTION_NAME --image-uri $IMAGE_URI
