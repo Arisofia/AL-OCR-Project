@@ -74,7 +74,7 @@ class DocumentLayoutAnalyzer:
             )
 
         # Sort regions by y position (top to bottom)
-        regions.sort(key=lambda r: r["bbox"][1])
+        regions.sort(key=lambda r: r["bbox"][1])  # type: ignore
         logger.debug("Detected %d regions in document.", len(regions))
         return regions
 

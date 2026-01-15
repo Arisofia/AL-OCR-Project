@@ -75,7 +75,7 @@ def test_handler_missing_info():
 
 def test_handler_with_aws_request_id(s3_event):
     """Test that handler extracts RequestId from AWS ClientErrors."""
-    from botocore.exceptions import ClientError
+    from botocore.exceptions import ClientError  # type: ignore
 
     with patch("lambda_handler.get_services") as mock_get_services:
         mock_textract = MagicMock()
