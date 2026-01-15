@@ -1,0 +1,9 @@
+fastapi
+pydantic
+redis
+uvicorn
+numpy
+scikit-learn
+label-studio-sdk
+dvc[s3]
+pytest
