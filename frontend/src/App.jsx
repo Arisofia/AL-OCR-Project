@@ -13,7 +13,17 @@ import { motion, AnimatePresence } from 'framer-motion'
 import './App.css'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
-const API_KEY = import.meta.env.VITE_API_KEY
+const IS_DEV = import.meta.env.MODE === 'development'
+// Prefer an explicit env var for the API key. In development only, fall back to a
+// known dev key to make local runs easier. In non-dev environments, fail fast
+// to avoid silent misconfiguration.
+const API_KEY = import.meta.env.VITE_API_KEY || (IS_DEV ? 'default_secret_key' : undefined)
+
+if (!API_KEY && !IS_DEV) {
+  // eslint-disable-next-line no-console
+  console.error('[Config Error] VITE_API_KEY is not set. Define VITE_API_KEY in your environment.')
+  throw new Error('Missing VITE_API_KEY environment variable')
+}
 
 // Validate API key configuration early to avoid silent failures
 if (!API_KEY) {
@@ -31,16 +41,15 @@ if (!API_KEY) {
 
 // Initialize axios instance for enterprise-grade consistency
 const apiHeaders = {
-  Accept: 'application/json'
+  Accept: 'application/json',
 }
-
 if (API_KEY) {
   apiHeaders['X-API-KEY'] = API_KEY
 }
 
 const api = axios.create({
   baseURL: API_BASE,
-  headers: apiHeaders
+  headers: apiHeaders,
 })
 
 function App() {
