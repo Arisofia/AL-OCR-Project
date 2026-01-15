@@ -4,6 +4,7 @@ Manages iterative cycles, layout analysis, and pixel reconstruction.
 """
 
 import logging
+import asyncio
 from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
@@ -16,13 +17,24 @@ try:
     from ocr_reconstruct.modules.reconstruct import PixelReconstructor
     RECON_AVAILABLE = True
 except ImportError:
-    ImageEnhancer = None
+    class ImageEnhancer:
+        """Minimal ImageEnhancer fallback."""
+        def sharpen(self, img: np.ndarray) -> np.ndarray:
+            kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
+            return cv2.filter2D(img, -1, kernel)
+
+        def apply_threshold(self, img: np.ndarray) -> np.ndarray:
+            if len(img.shape) == 3:
+                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            else:
+                gray = img
+            _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY)
+            return thresh
+
     PixelReconstructor = None
     recon_process_bytes = None
     RECON_AVAILABLE = False
 
-
-from services.textract import TextractService
 
 from .advanced_recon import AdvancedPixelReconstructor
 from .confidence import ConfidenceScorer
@@ -47,7 +59,6 @@ class IterativeOCREngine:
         reconstructor: Optional[Any] = None,
         advanced_reconstructor: Optional[AdvancedPixelReconstructor] = None,
         learning_engine: Optional[LearningEngine] = None,
-        textract_service: Optional[TextractService] = None,
         confidence_scorer: Optional[ConfidenceScorer] = None,
         ocr_config: Optional[TesseractConfig] = None,
     ):
@@ -63,7 +74,6 @@ class IterativeOCREngine:
             advanced_reconstructor or AdvancedPixelReconstructor()
         )
         self.learning_engine = learning_engine or LearningEngine()
-        self.textract_service = textract_service or TextractService()
         self.confidence_scorer = confidence_scorer or ConfidenceScorer()
         self.ocr_config = ocr_config or TesseractConfig()
 
@@ -260,8 +270,12 @@ class IterativeOCREngine:
             return {"error": validation_error}
 
         # Step 1: Structural Layout Analysis
-        layout_regions = DocumentLayoutAnalyzer.detect_regions(image_bytes)
-        layout_type = DocumentLayoutAnalyzer.classify_layout(layout_regions)
+        def _analyze_layout():
+            regions = DocumentLayoutAnalyzer.detect_regions(image_bytes)
+            l_type = DocumentLayoutAnalyzer.classify_layout(regions)
+            return regions, l_type
+
+        layout_regions, layout_type = await asyncio.to_thread(_analyze_layout)
         logger.info("Structural analysis complete | Regions: %s", len(layout_regions))
 
         # Step 2: Contextual Knowledge Retrieval
@@ -281,14 +295,16 @@ class IterativeOCREngine:
 
         if "error" in ai_result:
             logger.warning("AI reconstruction failed | Triggering iterative fallback")
-            return self.process_image(image_bytes, use_reconstruction=True)
+            return await asyncio.to_thread(
+                self.process_image, image_bytes, use_reconstruction=True
+            )
 
         # Step 4: Verification and Intelligence Aggregation
         extracted_text = ai_result.get("text", "")
         confidence = self.confidence_scorer.calculate(extracted_text)
 
         # Step 5: Autonomous Feedback Loop
-        await self.learning_engine.learn_from_result(
+        asyncio.create_task(self.learning_engine.learn_from_result(
             doc_type=doc_type,
             font_meta={
                 "source": "ai_reconstruction",
@@ -296,7 +312,7 @@ class IterativeOCREngine:
                 "layout": layout_type,
             },
             accuracy_score=confidence,
-        )
+        ))
 
         return {
             "text": extracted_text,

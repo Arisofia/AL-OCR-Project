@@ -103,7 +103,7 @@ class GeminiVisionProvider(VisionProvider):
             genai.configure(api_key=self.api_key)
             model = genai.GenerativeModel("gemini-1.5-flash")
             image_part = {"mime_type": "image/jpeg", "data": image_bytes}
-            response = model.generate_content([prompt, image_part])
+            response = await model.generate_content_async([prompt, image_part])
             return {"text": response.text, "model": "gemini-1.5-flash"}
         except ImportError:
             logger.error("google-generativeai package not installed")

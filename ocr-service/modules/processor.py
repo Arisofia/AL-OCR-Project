@@ -3,6 +3,7 @@ Orchestration layer for document intelligence workflows.
 Coordinates OCR pipelines with automated S3 storage integration.
 """
 
+import asyncio
 import logging
 import time
 from typing import Any, Dict
@@ -57,7 +58,7 @@ class OCRProcessor:
                 )
             else:
                 use_recon = reconstruct or enable_reconstruction_config
-                result = self.ocr_engine.process_image(
+                result = await asyncio.to_thread(self.ocr_engine.process_image,
                     contents, use_reconstruction=use_recon
                 )
 
@@ -68,14 +69,21 @@ class OCRProcessor:
                 )
 
             # Synchronize raw document and extracted intelligence to S3
-            s3_key = self.storage_service.upload_file(
-                content=contents, filename=file.filename, content_type=file.content_type
-            )
+            upload_tasks = [
+                asyncio.to_thread(self.storage_service.upload_file,
+                    content=contents, filename=file.filename, content_type=file.content_type
+                )
+            ]
 
             if result.get("reconstruction") and result["reconstruction"].get("meta"):
-                self.storage_service.upload_json(
-                    data=result["reconstruction"], filename=file.filename
+                upload_tasks.append(
+                    asyncio.to_thread(self.storage_service.upload_json,
+                        data=result["reconstruction"], filename=file.filename
+                    )
                 )
+
+            upload_results = await asyncio.gather(*upload_tasks)
+            s3_key = upload_results[0]
 
             processing_time = round(time.time() - start_time, 3)
 
