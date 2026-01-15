@@ -6,7 +6,8 @@ RUN yum install -y \
     tesseract \
     tesseract-langpack-spa \
     tesseract-langpack-eng \
-    mesa-libGL
+    mesa-libGL \
+    shadow-utils && yum clean all
 
 # Upgrade pip and wheel so we prefer binary wheels when available
 RUN python -m pip install --upgrade pip setuptools wheel
