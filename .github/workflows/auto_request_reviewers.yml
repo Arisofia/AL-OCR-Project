@@ -3,6 +3,12 @@ name: Auto-request Reviewers
 on:
   pull_request:
     types: [opened, ready_for_review, reopened, edited]
+  pull_request_target:
+    types: [opened, ready_for_review, reopened, edited]
+
+permissions:
+  pull-requests: write
+  contents: read
 
 jobs:
   request-reviewers:
@@ -13,7 +19,8 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const reviewers = ['gemini-help', 'coderabbit', 'openia'];
+            // Use updated automation reviewers (codex replaces coderabbit)
+            const reviewers = ['gemini-help', 'codex', 'openia'];
             const pr = context.payload.pull_request;
             if (!pr) {
               console.log('No pull request payload, skipping');
