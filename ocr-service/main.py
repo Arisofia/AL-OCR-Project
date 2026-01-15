@@ -72,7 +72,6 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-
 def get_request_id(request: Request) -> str:
     """Extracts AWS Request ID from Mangum scope or defaults to local trace."""
     scope = request.scope
