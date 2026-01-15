@@ -30,6 +30,11 @@ jobs:
     steps:
       # actions/checkout v4.2.2
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+
+      - name: Lint Dockerfile (hadolint)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ocr-service/Dockerfile
       - name: Configure AWS Credentials
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         # aws-actions/configure-aws-credentials v4.0.2
