@@ -185,7 +185,7 @@ async def recon_status(
 @app.post("/ocr", response_model=OCRResponse)
 @limiter.limit("10/minute")
 async def perform_ocr(
-    _request: Request,
+    request: Request,
     file: UploadFile = File(...),
     reconstruct: bool = False,
     advanced: bool = False,
@@ -199,6 +199,8 @@ async def perform_ocr(
     Primary OCR entry point.
     Processes uploaded documents with optional AI-driven pixel reconstruction.
     """
+    # Used by SlowAPI decorator for rate limiting; intentionally not accessed
+    del request
     result = await processor.process(
         file=file,
         reconstruct=reconstruct,
@@ -214,7 +216,7 @@ async def perform_ocr(
 @app.post("/presign", response_model=PresignResponse)
 @limiter.limit("5/minute")
 async def generate_presigned_post(
-    _request: Request,
+    request: Request,
     req: PresignRequest,
     _api_key: str = Depends(get_api_key),
     curr_settings: Settings = Depends(get_settings),
@@ -223,6 +225,8 @@ async def generate_presigned_post(
     Generates a secure, time-limited S3 POST URL for client-side direct uploads.
     Optimizes server bandwidth by offloading document transfer to AWS S3.
     """
+    # Used by SlowAPI decorator for rate limiting; intentionally not accessed
+    del request
     bucket = curr_settings.s3_bucket_name
     if not bucket:
         raise HTTPException(
