@@ -15,8 +15,9 @@ jobs:
   request-reviewers:
     runs-on: ubuntu-latest
     steps:
+      # actions/github-script v7.0.1
       - name: Request reviewers automatically
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.0.1
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |

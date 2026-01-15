@@ -12,10 +12,12 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # actions/checkout v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
+      # actions/setup-python v5.0.0
       - name: Setup Python
-        uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5.0.0
+        uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c
         with:
           python-version: '3.10'
 
@@ -84,10 +86,8 @@ jobs:
 
       - name: Check Netlify secret availability
         id: check_netlify_secrets
-        env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: |
-          if [ -n "$NETLIFY_AUTH_TOKEN" ]; then
+          if [ -n "${{ secrets.NETLIFY_AUTH_TOKEN }}" ]; then
             echo "has_netlify=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_netlify=false" >> "$GITHUB_OUTPUT"
@@ -100,7 +100,9 @@ jobs:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         id: netlify_deploy
         run: |
-          npx -y netlify-cli deploy --dir=dist --json --auth="$NETLIFY_AUTH_TOKEN" > netlify-deploy.json
+          (npx -y netlify-cli deploy \
+            --dir=dist \
+            --json --auth="$NETLIFY_AUTH_TOKEN") > netlify-deploy.json
           DEPLOY_URL=$(jq -r '.deploy_url' netlify-deploy.json)
           echo "DEPLOY_URL=$DEPLOY_URL" >> $GITHUB_ENV
           echo "Deployed preview to $DEPLOY_URL"
@@ -111,35 +113,16 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/ocr-service
           OCR_API_KEY: ${{ secrets.OCR_API_KEY || '' }}
         run: |
-          nohup uvicorn main:app --host 0.0.0.0 --port 8000 &
-          # Wait for health endpoint (fail on HTTP 5xx/4xx as well)
-          for i in {1..30}; do
-            if curl -sSf http://localhost:8000/health >/dev/null; then
-              echo "Backend healthy"
-              exit 0
-            fi
-            echo "Waiting for backend..."
-            sleep 2
-          done
-          echo "Backend failed to start"
-          if [ -f nohup.out ]; then cat nohup.out; fi
-          exit 1
+          nohup uvicorn main:app --host 0.0.0.0 --port 8000 > ../backend.log 2>&1 &
+          npx wait-on -t 30000 http://localhost:8000/health
 
       - name: Start frontend (serve built site when not deploying externally)
         working-directory: ./frontend
         run: |
           if [ -z "$DEPLOY_URL" ]; then
-            nohup npx -y http-server dist -p 5173 --silent &
-            for i in {1..20}; do
-              if curl -sSf http://localhost:5173 >/dev/null; then
-                echo "Frontend (built) healthy"
-                exit 0
-              fi
-              sleep 1
-            done
-            echo "Frontend failed to start"
-            if [ -f nohup.out ]; then cat nohup.out; fi
-            exit 1
+            SERVER_CMD="npx -y http-server dist -p 5173 --silent"
+            nohup $SERVER_CMD > ../frontend.log 2>&1 &
+            npx wait-on -t 20000 http://localhost:5173
           else
             echo "External preview available: $DEPLOY_URL"
           fi
@@ -152,6 +135,14 @@ jobs:
           export BASE_URL="${DEPLOY_URL:-http://localhost:5173}"
           echo "Using BASE_URL=$BASE_URL"
           npx playwright test --config=playwright.config.ts
+
+      - name: Debug Logs on Failure
+        if: failure()
+        run: |
+          echo "--- Backend Logs ---"
+          [ -f backend.log ] && cat backend.log || echo "No backend.log found"
+          echo "--- Frontend Logs ---"
+          [ -f frontend.log ] && cat frontend.log || echo "No frontend.log found"
 
       - name: Upload Playwright artifacts
         if: always()
