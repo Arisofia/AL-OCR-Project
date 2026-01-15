@@ -58,8 +58,10 @@ class OCRProcessor:
                 )
             else:
                 use_recon = reconstruct or enable_reconstruction_config
-                result = await asyncio.to_thread(self.ocr_engine.process_image,
-                    contents, use_reconstruction=use_recon
+                result = await asyncio.to_thread(
+                    self.ocr_engine.process_image,
+                    contents,
+                    use_reconstruction=use_recon,
                 )
 
             if "error" in result:
@@ -70,15 +72,20 @@ class OCRProcessor:
 
             # Synchronize raw document and extracted intelligence to S3
             upload_tasks = [
-                asyncio.to_thread(self.storage_service.upload_file,
-                    content=contents, filename=file.filename, content_type=file.content_type
+                asyncio.to_thread(
+                    self.storage_service.upload_file,
+                    contents,
+                    file.filename,
+                    file.content_type,
                 )
             ]
 
             if result.get("reconstruction") and result["reconstruction"].get("meta"):
                 upload_tasks.append(
-                    asyncio.to_thread(self.storage_service.upload_json,
-                        data=result["reconstruction"], filename=file.filename
+                    asyncio.to_thread(
+                        self.storage_service.upload_json,
+                        result["reconstruction"],
+                        file.filename,
                     )
                 )
 
