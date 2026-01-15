@@ -14,3 +14,13 @@ The React Compiler is not enabled on this template because of its impact on dev 
 ## Expanding the ESLint configuration
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+
+## Environment (development)
+
+This project reads the following Vite environment variables at runtime. For local development create a copy of `.env.development` from the example and update values as needed.
+
+- `VITE_API_BASE` — Base URL for the OCR API (default: `http://localhost:8000`).
+- `VITE_API_KEY` — API key used to authenticate requests to the OCR API (for local dev you can use `default_secret_key`).
+
+Example: copy `frontend/.env.development.example` to `frontend/.env.development` and edit the values.
+
