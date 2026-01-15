@@ -80,6 +80,14 @@ def get_request_id(request: Request) -> str:
     return "local-development"
 
 
+def get_request_id(request: Request) -> str:
+    """Extracts AWS Request ID from Mangum scope or defaults to local trace."""
+    scope = request.scope
+    if "aws.context" in scope:
+        return scope["aws.context"].aws_request_id
+    return "local-development"
+
+
 @app.middleware("http")
 async def add_process_time_and_logging(request: Request, call_next):
     """Logs request lifecycle and adds performance metadata to responses."""
