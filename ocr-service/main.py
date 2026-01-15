@@ -20,23 +20,30 @@ from modules.processor import OCRProcessor
 from schemas import (HealthResponse, OCRResponse, PresignRequest,
                      PresignResponse, ReconStatusResponse)
 from services.storage import StorageService
+# slowapi is optional in test environments; silence static import errors for linters
+# pylint: disable=import-error
 try:
     from slowapi import Limiter, _rate_limit_exceeded_handler
     from slowapi.errors import RateLimitExceeded
     from slowapi.util import get_remote_address
 except Exception:  # pragma: no cover - slowapi optional in tests
     class _NoopLimiter:
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *_args, **_kwargs):
             pass
 
-        def limit(self, *args, **kwargs):
+        def limit(self, *_args, **_kwargs):
             def _decorator(f):
                 return f
 
             return _decorator
 
     Limiter = _NoopLimiter
-    _rate_limit_exceeded_handler = lambda request, exc: None
+
+    def _no_rate_limit_handler(request, exc):
+        """No-op rate limit handler for environments without slowapi."""
+        return None
+
+    _rate_limit_exceeded_handler = _no_rate_limit_handler
     RateLimitExceeded = Exception
 
     def get_remote_address(request):
