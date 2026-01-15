@@ -51,3 +51,4 @@ frontend/.env.development
 # Terraform plans
 terraform/tfplan
 *.tfplan
+/data
