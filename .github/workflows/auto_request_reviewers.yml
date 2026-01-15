@@ -1,20 +1,27 @@
+---
 name: Auto-request Reviewers
 
 on:
   pull_request:
     types: [opened, ready_for_review, reopened, edited]
+  pull_request_target:
+    types: [opened, ready_for_review, reopened, edited]
+
+permissions:
+  pull-requests: write
+  contents: read
 
 jobs:
   request-reviewers:
     runs-on: ubuntu-latest
     steps:
       - name: Request reviewers automatically
-        uses: actions/github-script@v7 # v7.0.1
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.0.1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             // Use updated automation reviewers (codex replaces coderabbit)
-            const reviewers = ['gemini-help', 'codex', 'openia'];
+            const reviewers = ['gemini-help', 'codex', 'openai'];
             const pr = context.payload.pull_request;
             if (!pr) {
               console.log('No pull request payload, skipping');
