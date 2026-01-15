@@ -8,7 +8,7 @@ pydantic==2.9.2
 pydantic-settings==2.5.2
 python-dotenv==1.0.1
 mangum==0.19.0
-boto3==1.35.36
+boto3==1.42.28
 slowapi==0.1.9
 scikit-learn==1.5.2
 supabase==2.8.1
