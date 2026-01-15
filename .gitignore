@@ -42,3 +42,8 @@ docker-compose.override.yml
 # AWS CLI
 *.pem
 
+
+# Local env files
+frontend/.env.development
+*.local
+.env*
