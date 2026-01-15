@@ -1,0 +1,10 @@
+.venv
+__pycache__
+.git
+.github
+node_modules
+.mypy_cache
+.pytest_cache
+.ruff_cache
+frontend
+terraform

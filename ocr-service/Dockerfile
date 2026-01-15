@@ -45,6 +45,8 @@ RUN useradd -m appuser && chown -R appuser:appuser /var/task
 COPY --chown=appuser:appuser ocr-service/ /var/task
 COPY --chown=appuser:appuser ocr_reconstruct/ /var/task/ocr_reconstruct
 
+ENV PYTHONPATH=/var/task
+
 USER appuser
 
 # Set the CMD to the Lambda S3/Textract handler

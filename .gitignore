@@ -51,4 +51,7 @@ frontend/.env.development
 # Terraform plans
 terraform/tfplan
 *.tfplan
-/data
+# Data
+/data/raw
+/data/validated
+/data/label-studio
