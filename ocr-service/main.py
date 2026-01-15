@@ -41,7 +41,11 @@ except Exception:  # pragma: no cover - slowapi optional in tests
 
     def _no_rate_limit_handler(_request, _exc):
         """No-op rate limit handler for environments without slowapi."""
-        return None
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Rate limit exceeded (fallback handler)"}
+        )
 
     _rate_limit_exceeded_handler = _no_rate_limit_handler
     RateLimitExceeded = Exception
@@ -67,6 +71,14 @@ app = FastAPI(
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+def get_request_id(request: Request) -> str:
+    """Extracts AWS Request ID from Mangum scope or defaults to local trace."""
+    scope = request.scope
+    if "aws.context" in scope:
+        return scope["aws.context"].aws_request_id
+    return "local-development"
+
 
 @app.middleware("http")
 async def add_process_time_and_logging(request: Request, call_next):
@@ -145,21 +157,13 @@ async def get_api_key(
     )
 
 
-def get_request_id(request: Request) -> str:
-    """Extracts AWS Request ID from Mangum scope or defaults to local trace."""
-    scope = request.scope
-    if "aws.context" in scope:
-        return scope["aws.context"].aws_request_id
-    return "local-development"
-
-
 # Runtime Package Detection
 try:
     import ocr_reconstruct as _ocr_reconstruct_pkg  # type: ignore
 
     RECON_PKG_AVAILABLE = True
     RECON_PKG_VERSION = getattr(_ocr_reconstruct_pkg, "__version__", "unknown")
-except (ImportError, Exception):
+except Exception:
     RECON_PKG_AVAILABLE = False
     RECON_PKG_VERSION = None
 
