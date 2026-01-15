@@ -6,8 +6,6 @@ Provides endpoints for document intelligence and S3 lifecycle management.
 import logging
 import time
 
-import boto3
-from botocore.exceptions import ClientError
 from config import Settings, get_settings
 from fastapi import (Depends, FastAPI, File, HTTPException, Request, Security,
                      UploadFile)
@@ -20,38 +18,9 @@ from modules.processor import OCRProcessor
 from schemas import (HealthResponse, OCRResponse, PresignRequest,
                      PresignResponse, ReconStatusResponse)
 from services.storage import StorageService
-# slowapi is optional in test environments; silence static import errors for linters
-# pylint: disable=import-error
-try:
-    from slowapi import Limiter, _rate_limit_exceeded_handler
-    from slowapi.errors import RateLimitExceeded
-    from slowapi.util import get_remote_address
-except Exception:  # pragma: no cover - slowapi optional in tests
-    class _NoopLimiter:
-        def __init__(self, *_args, **_kwargs):
-            pass
-
-        def limit(self, *_args, **_kwargs):
-            def _decorator(f):
-                return f
-
-            return _decorator
-
-    Limiter = _NoopLimiter
-
-    def _no_rate_limit_handler(_request, _exc):
-        """No-op rate limit handler for environments without slowapi."""
-        from fastapi.responses import JSONResponse
-        return JSONResponse(
-            status_code=429,
-            content={"detail": "Rate limit exceeded (fallback handler)"}
-        )
-
-    _rate_limit_exceeded_handler = _no_rate_limit_handler
-    RateLimitExceeded = Exception
-
-    def get_remote_address(request):
-        return getattr(getattr(request, "client", None), "host", "127.0.0.1")
+from utils.limiter import (Limiter, RateLimitExceeded,
+                           _rate_limit_exceeded_handler, init_limiter)
+from botocore.exceptions import ClientError
 
 # Initialize enterprise-grade logging
 logging.basicConfig(
@@ -61,7 +30,7 @@ logger = logging.getLogger("ocr-service")
 
 settings = get_settings()
 
-limiter = Limiter(key_func=get_remote_address)
+limiter = init_limiter()
 app = FastAPI(
     title=settings.app_name,
     description=settings.app_description,
@@ -71,6 +40,7 @@ app = FastAPI(
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 def get_request_id(request: Request) -> str:
     """Extracts AWS Request ID from Mangum scope or defaults to local trace."""
@@ -225,7 +195,7 @@ async def generate_presigned_post(
     request: Request,
     req: PresignRequest,
     _api_key: str = Depends(get_api_key),
-    curr_settings: Settings = Depends(get_settings),
+    storage: StorageService = Depends(get_storage_service),
 ) -> PresignResponse:
     """
     Generates a secure, time-limited S3 POST URL for client-side direct uploads.
@@ -233,21 +203,12 @@ async def generate_presigned_post(
     """
     # Used by SlowAPI decorator for rate limiting; intentionally not accessed
     del request
-    bucket = curr_settings.s3_bucket_name
-    if not bucket:
-        raise HTTPException(
-            status_code=500, detail="S3 bucket not configured"
-        )
-
-    s3 = boto3.client("s3", region_name=curr_settings.aws_region)
 
     try:
-        post = s3.generate_presigned_post(
-            Bucket=bucket,
-            Key=req.key,
-            Fields={"Content-Type": req.content_type},
-            Conditions=[["starts-with", "$Content-Type", req.content_type]],
-            ExpiresIn=req.expires_in,
+        post = storage.generate_presigned_post(
+            key=req.key,
+            content_type=req.content_type,
+            expires_in=req.expires_in,
         )
     except ClientError as exc:
         request_id = exc.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
@@ -255,6 +216,12 @@ async def generate_presigned_post(
         raise HTTPException(
             status_code=500,
             detail=f"S3 rejected request [{request_id}]"
+        ) from exc
+    except RuntimeError as exc:
+        logger.error("Configuration error during presign: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="S3 bucket not configured"
         ) from exc
     except Exception as exc:
         logger.exception("Unexpected failure during presign generation")

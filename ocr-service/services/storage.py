@@ -6,7 +6,7 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 import boto3
 from botocore.config import Config
@@ -51,6 +51,30 @@ class StorageService:
             if self.bucket_name
             else None
         )
+
+    def generate_presigned_post(
+        self,
+        key: str,
+        content_type: str,
+        expires_in: int = 3600,
+    ) -> Dict[str, Any]:
+        """
+        Generates a presigned POST URL for S3 upload.
+        """
+        if not self.s3_client or not self.bucket_name:
+            raise RuntimeError("S3 Storage not properly configured for presigning")
+
+        try:
+            return self.s3_client.generate_presigned_post(
+                Bucket=self.bucket_name,
+                Key=key,
+                Fields={"Content-Type": content_type},
+                Conditions=[["starts-with", "$Content-Type", content_type]],
+                ExpiresIn=expires_in,
+            )
+        except ClientError as e:
+            logger.error("Failed to generate presigned POST: %s", e)
+            raise
 
     def upload_file(
         self,

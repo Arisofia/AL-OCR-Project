@@ -3,6 +3,7 @@ import numpy as np
 import cv2
 from ocr_reconstruct.modules.pipeline import IterativeOCR
 
+
 def test_process_bytes_invalid_input():
     """Test process_bytes with empty or invalid byte stream."""
     worker = IterativeOCR(iterations=1)
@@ -12,6 +13,7 @@ def test_process_bytes_invalid_input():
     assert final_img is None
     assert "error" in meta
     assert meta["error"] == "Invalid byte stream payload"
+
 
 @mock.patch("ocr_reconstruct.modules.ocr.pytesseract.image_to_string")
 def test_process_bytes_mocked(mock_tesseract):
