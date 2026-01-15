@@ -3,20 +3,26 @@ Core API Gateway for the AL Financial OCR Service.
 Provides endpoints for document intelligence and S3 lifecycle management.
 """
 
+import json
 import logging
 import time
+import uuid
 from typing import Any, cast, Type
 
-from sentry_sdk.integrations.fastapi import FastApiIntegration
-
-from config import Settings, get_settings
 from fastapi import Depends, FastAPI, File, HTTPException, Request, Security, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
 from mangum import Mangum
+from pydantic import BaseModel
+from redis import Redis
+
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+
+from config import Settings, get_settings
 from modules.ocr_config import EngineConfig
 from modules.ocr_engine import IterativeOCREngine
 from modules.processor import OCRProcessor
+from modules.active_learning_orchestrator import ALOrchestrator
 from schemas import (
     HealthResponse,
     OCRResponse,
@@ -151,6 +157,13 @@ def get_ocr_processor(
 ) -> OCRProcessor:
     """Orchestrates the high-level OCR processing pipeline."""
     return OCRProcessor(engine, storage)
+
+
+def get_al_orchestrator(
+    engine: IterativeOCREngine = Depends(get_ocr_engine),
+) -> ALOrchestrator:
+    """Provides an Active Learning orchestrator."""
+    return ALOrchestrator(engine.learning_engine)
 
 
 # Security and Identity Management
@@ -289,6 +302,53 @@ async def generate_presigned_post(
         ) from exc
 
     return PresignResponse(url=post["url"], fields=post["fields"])
+
+
+# Job submission and status endpoints
+r = Redis(host="localhost", port=6379, db=0)
+
+
+class OCRRequest(BaseModel):
+    image_url: str
+    document_type: str = "invoice"
+
+
+@app.post("/api/v1/extract")
+async def submit_job(request: OCRRequest):
+    job_id = str(uuid.uuid4())
+    job_payload = {
+        "id": job_id,
+        "url": request.image_url,
+        "status": "QUEUED",
+    }
+    r.set(f"job:{job_id}", json.dumps(job_payload))
+    r.rpush("ocr_queue", job_id)
+    return {
+        "job_id": job_id,
+        "status": "QUEUED",
+        "check_url": f"/api/v1/jobs/{job_id}",
+    }
+
+
+@app.get("/api/v1/jobs/{job_id}")
+async def get_status(job_id: str):
+    data = r.get(f"job:{job_id}")
+    if not data:
+        return {"error": "Job not found"}
+    return json.loads(data)
+
+
+@app.post("/al/trigger")
+async def trigger_al_cycle(
+    n_samples: int = 20,
+    _api_key: str = Depends(get_api_key),
+    orchestrator: ALOrchestrator = Depends(get_al_orchestrator),
+):
+    """Manually triggers an Active Learning cycle."""
+    result = await orchestrator.run_cycle(n_samples=n_samples)
+    if result.get("status") == "validation_failed":
+        raise HTTPException(status_code=422, detail="Data validation failed during AL cycle")
+    return result
 
 
 # AWS Lambda Integration

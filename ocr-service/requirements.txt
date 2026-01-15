@@ -21,3 +21,7 @@ tenacity==9.0.0
 pytest-cov==6.0.0
 python-json-logger==2.0.7
 sentry-sdk[fastapi]==2.16.0
+redis==5.0.1
+pandas==2.2.3
+great_expectations==0.18.21
+evidently==0.4.38
