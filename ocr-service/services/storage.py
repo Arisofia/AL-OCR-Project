@@ -4,13 +4,14 @@ Service for interacting with Amazon S3.
 
 import json
 import logging
-import time
 import uuid
 from typing import Any, Dict, Optional
 
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
+from tenacity import (retry, stop_after_attempt, wait_exponential,
+                      retry_if_exception_type)
 
 logger = logging.getLogger("ocr-service.storage")
 
@@ -121,20 +122,24 @@ class StorageService:
 
     def put_object(self, key: str, body: bytes, content_type: str) -> bool:
         """
-        Put an object into S3 with simple retry/backoff for transient errors.
+        Put an object into S3 with tenacity retry logic for transient errors.
         """
         if not self.s3_client or not self.bucket_name:
             logger.debug("No s3 client or bucket configured; put_object skipped")
             return False
 
-        attempt = 0
-        while attempt < self.max_retries:
-            try:
+        try:
+            @retry(
+                stop=stop_after_attempt(self.max_retries),
+                wait=wait_exponential(multiplier=0.1, min=0.1, max=2),
+                retry=retry_if_exception_type(ClientError),
+                reraise=True
+            )
+            def _do_put():
                 logger.debug(
-                    "Attempting to put object to S3: bucket=%s, key=%s, attempt=%s",
+                    "Attempting to put object to S3: bucket=%s, key=%s",
                     self.bucket_name,
                     key,
-                    attempt + 1,
                 )
                 self.s3_client.put_object(
                     Bucket=self.bucket_name,
@@ -144,17 +149,8 @@ class StorageService:
                 )
                 logger.info("Successfully put object to S3: key=%s", key)
                 return True
-            except ClientError as e:
-                attempt += 1
-                request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
-                logger.warning(
-                    "S3 put_object attempt %s failed. RequestId: %s, Error: %s",
-                    attempt,
-                    request_id,
-                    e,
-                )
-                # exponential backoff (small; safe for unit tests)
-                backoff = 0.1 * (2 ** (attempt - 1))
-                time.sleep(backoff)
-        logger.error("Exceeded S3 put_object retry attempts")
-        return False
+
+            return _do_put()
+        except Exception as e:
+            logger.error("Exceeded S3 put_object retry attempts or encountered error: %s", e)
+            return False
