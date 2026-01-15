@@ -18,6 +18,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "documents_lifecycle" {
     id     = "archive-old-docs"
     status = "Enabled"
 
+    filter {}
+
     transition {
       days          = 30
       storage_class = "STANDARD_IA"
@@ -66,30 +68,6 @@ resource "aws_kms_key" "ocr_key" {
         Resource = "*"
       },
       {
-        Sid    = "Allow access for Key Administrators"
-        Effect = "Allow"
-        Principal = {
-          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
-        }
-        Action = [
-          "kms:Create*",
-          "kms:Describe*",
-          "kms:Enable*",
-          "kms:List*",
-          "kms:Put*",
-          "kms:Update*",
-          "kms:Revoke*",
-          "kms:Disable*",
-          "kms:Get*",
-          "kms:Delete*",
-          "kms:TagResource",
-          "kms:UntagResource",
-          "kms:ScheduleKeyDeletion",
-          "kms:CancelKeyDeletion"
-        ]
-        Resource = "*"
-      },
-      {
         Sid    = "Allow use of the key"
         Effect = "Allow"
         Principal = {
@@ -118,7 +96,7 @@ resource "aws_kms_alias" "ocr_key_alias" {
 
 resource "aws_ecr_repository" "ocr_repo" {
   name                 = var.ecr_repository_name
-  image_tag_mutability = "IMMUTABLE"
+  image_tag_mutability = "MUTABLE"
 
   image_scanning_configuration {
     scan_on_push = true

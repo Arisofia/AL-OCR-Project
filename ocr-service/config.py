@@ -77,4 +77,4 @@ def get_settings() -> Settings:
     """
     Returns a cached instance of the application settings.
     """
-    return Settings()
+    return Settings()  # type: ignore[call-arg]

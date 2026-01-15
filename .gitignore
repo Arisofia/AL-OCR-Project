@@ -2,9 +2,9 @@
 __pycache__/
 *.pyc
 venv/
-.venv/
-.venv311/
-.venv_test/
+.venv*
+frontend/.venv*
+terraform/tfplan
 .env
 .env.local
 .env.*.local

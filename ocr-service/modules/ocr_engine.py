@@ -24,10 +24,7 @@ except ImportError:
             return cv2.filter2D(img, -1, kernel)
 
         def apply_threshold(self, img: np.ndarray) -> np.ndarray:
-            if len(img.shape) == 3:
-                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            else:
-                gray = img
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
             _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY)
             return thresh
 
@@ -66,8 +63,10 @@ class IterativeOCREngine:
         Dependency-injected initializer for the core orchestration engine.
         """
         self.config = config or EngineConfig()
-        self.enhancer = enhancer or (ImageEnhancer() if ImageEnhancer else None)
-        self.reconstructor = reconstructor or (PixelReconstructor() if PixelReconstructor else None)
+        self.enhancer = enhancer or ImageEnhancer()
+        self.reconstructor = reconstructor or (
+            PixelReconstructor() if PixelReconstructor else None
+        )
         self.advanced_reconstructor = (
             advanced_reconstructor or AdvancedPixelReconstructor()
         )
@@ -147,8 +146,9 @@ class IterativeOCREngine:
             roi = ImageToolkit.prepare_roi(roi)
 
             try:
-                text = pytesseract.image_to_string(roi, config=self.ocr_config.flags)
-                text = text.strip()
+                text = pytesseract.image_to_string(
+                    roi, config=self.ocr_config.flags
+                ).strip()
                 if text:
                     combined_text.append(text)
             except (pytesseract.TesseractError, RuntimeError):
@@ -183,6 +183,23 @@ class IterativeOCREngine:
 
         return current_img, reconstruction_info
 
+    def _validate_image_input(self, image_bytes: bytes) -> Optional[Dict[str, str]]:
+        """Common validation for OCR input."""
+        validation_error = ImageToolkit.validate_image(
+            image_bytes, max_size_mb=self.config.max_image_size_mb
+        )
+        return {"error": validation_error} if validation_error else None
+
+    def _should_use_region_ocr(
+        self, iteration: int, confidence: float, region_count: int
+    ) -> bool:
+        """Determines if adaptive region-based extraction should be triggered."""
+        return (
+            iteration == 1
+            and confidence < self.config.confidence_threshold
+            and region_count > 1
+        )
+
     def process_image(
         self,
         image_bytes: bytes,
@@ -191,11 +208,8 @@ class IterativeOCREngine:
         """
         Executes iterative OCR pipeline with confidence-based feedback.
         """
-        validation_error = ImageToolkit.validate_image(
-            image_bytes, max_size_mb=self.config.max_image_size_mb
-        )
-        if validation_error:
-            return {"error": validation_error}
+        if error_resp := self._validate_image_input(image_bytes):
+            return error_resp
 
         current_img, recon_info = self._get_ocr_input_image(
             image_bytes, use_reconstruction
@@ -209,30 +223,30 @@ class IterativeOCREngine:
 
         for i in range(self.config.max_iterations):
             logger.info(
-                "Iteration loop | Progress: %s/%s",
-                i + 1, self.config.max_iterations
+                "Iteration loop | Progress: %s/%s", i + 1, self.config.max_iterations
             )
             try:
                 text, thresh = self._perform_ocr_iteration(
                     current_img, i, use_reconstruction
                 )
 
-                if (i == 1 and best_confidence < self.config.confidence_threshold
-                        and len(layout_regions) > 1):
+                # Adaptive Strategy: Fallback to region-based if confidence is low
+                is_region_pass = self._should_use_region_ocr(
+                    i, best_confidence, len(layout_regions)
+                )
+                if is_region_pass:
                     logger.info("Engaging targeted region extraction")
                     text = self._ocr_regions(thresh, layout_regions)
 
                 confidence = self.confidence_scorer.calculate(text)
-                preview = text[:50] + "..." if len(text) > 50 else text
 
-                is_region = i == 1 and len(layout_regions) > 1
-                method = "region-based" if is_region else "full-page"
+                method = "region-based" if is_region_pass else "full-page"
                 iteration_history.append({
                     "iteration": i + 1,
                     "text_length": len(text),
                     "confidence": confidence,
                     "method": method,
-                    "preview_text": preview
+                    "preview_text": f"{text[:50]}..." if len(text) > 50 else text
                 })
 
                 if confidence > best_confidence:
@@ -259,13 +273,10 @@ class IterativeOCREngine:
         """
         AI pipeline with reconstruction and continuous learning.
         """
-        doc_type = doc_type or self.config.default_doc_type
+        if error_resp := self._validate_image_input(image_bytes):
+            return error_resp
 
-        validation_error = ImageToolkit.validate_image(
-            image_bytes, max_size_mb=self.config.max_image_size_mb
-        )
-        if validation_error:
-            return {"error": validation_error}
+        doc_type = doc_type or self.config.default_doc_type
 
         # Step 1: Structural Layout Analysis
         def _analyze_layout():

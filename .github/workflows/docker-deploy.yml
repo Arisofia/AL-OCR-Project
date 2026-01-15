@@ -49,13 +49,13 @@ jobs:
 
       - name: Build image
         run: |
-          IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${{ github.sha }}
-          docker buildx build --platform linux/amd64 -t $IMAGE_URI --load -f ./ocr-service/Dockerfile .
+          # Use a local tag for building and scanning
+          docker buildx build --platform linux/amd64 -t al-ocr-service:${{ github.sha }} --load -f ./ocr-service/Dockerfile .
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
         with:
-          image-ref: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${{ github.sha }}
+          image-ref: al-ocr-service:${{ github.sha }}
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
@@ -66,7 +66,11 @@ jobs:
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         run: |
           IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${{ github.sha }}
+          LATEST_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:latest
+          docker tag al-ocr-service:${{ github.sha }} $IMAGE_URI
+          docker tag al-ocr-service:${{ github.sha }} $LATEST_URI
           docker push $IMAGE_URI
+          docker push $LATEST_URI
 
       - name: Update Lambda image
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

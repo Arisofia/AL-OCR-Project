@@ -19,6 +19,9 @@ jobs:
     name: Terraform Plan (PR)
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    defaults:
+      run:
+        working-directory: terraform
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Configure AWS Credentials (OIDC)
@@ -30,13 +33,9 @@ jobs:
         with:
           terraform_version: '1.5.7'
       - name: Terraform Init
-        run: |
-          cd terraform
-          terraform init -backend=false
+        run: terraform init -backend=false
       - name: Terraform Format Check
-        run: |
-          cd terraform
-          terraform fmt -check
+        run: terraform fmt -check
       - name: Checkov Security Scan
         uses: bridgecrewio/checkov-action@99bb2caf247dfd9f03cf984373bc6043d4e32ebf # v12.1347.0
         with:
@@ -45,14 +44,15 @@ jobs:
           quiet: true
           soft_fail: true # Set to false to block PRs on security findings
       - name: Terraform Plan
-        run: |
-          cd terraform
-          terraform plan
+        run: terraform plan
 
   terraform-apply:
     name: Terraform Apply (main)
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    defaults:
+      run:
+        working-directory: terraform
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Configure AWS Credentials (OIDC)
@@ -64,10 +64,6 @@ jobs:
         with:
           terraform_version: '1.5.7'
       - name: Terraform Init
-        run: |
-          cd terraform
-          terraform init -backend=false
+        run: terraform init -backend=false
       - name: Terraform Apply
-        run: |
-          cd terraform
-          terraform apply -auto-approve
+        run: terraform apply -auto-approve

@@ -10,11 +10,6 @@ on:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    services:
-      web:
-        image: node:20
-        ports:
-          - 5173:5173
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -27,6 +22,11 @@ jobs:
         uses: actions/setup-node@b39b52d1213e96004bfcb1c61a8a6fa8ab84f3e8 # v4.0.1
         with:
           node-version: '20'
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr libtesseract-dev libgl1-mesa-glx libglib2.0-0
 
       - name: Install Python deps
         run: |
@@ -75,6 +75,9 @@ jobs:
 
       - name: Build frontend (for preview)
         working-directory: ./frontend
+        env:
+          VITE_API_BASE: http://localhost:8000
+          VITE_API_KEY: default_secret_key
         run: |
           npm run build
 

@@ -27,16 +27,17 @@ RUN yum install -y \
 COPY ocr_reconstruct ./ocr_reconstruct
 RUN pip install --prefer-binary --no-cache-dir -e ./ocr_reconstruct
 
-# Copy requirements.txt and install dependencies
+# Create requirements.txt and install dependencies
 COPY ocr-service/requirements.txt .
 RUN pip install --prefer-binary --no-cache-dir -r requirements.txt
 
 # Create a non-root user for security
 RUN useradd -m appuser && chown -R appuser:appuser /var/task
-USER appuser
 
-# Copy the application code
-COPY ocr-service/ .
+# Copy the application code with correct ownership
+COPY --chown=appuser:appuser ocr-service/ .
+
+USER appuser
 
 # Set the CMD to the Lambda S3/Textract handler
 CMD [ "lambda_handler.handler" ]
