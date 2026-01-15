@@ -27,10 +27,12 @@ jobs:
     env:
       LAMBDA_FUNCTION_NAME: al-ocr-processor
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # actions/checkout v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Configure AWS Credentials
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        # aws-actions/configure-aws-credentials v4.0.2
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: us-east-1
@@ -43,18 +45,22 @@ jobs:
 
       - name: Login to Amazon ECR
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # v2.0.1
+        # aws-actions/amazon-ecr-login v2.0.1
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
+        # docker/setup-buildx-action v3.0.0
+        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226
 
       - name: Build image
         run: |
           # Use a local tag for building and scanning
-          docker buildx build --platform linux/amd64 -t al-ocr-service:${{ github.sha }} --load -f ./ocr-service/Dockerfile .
+          TAG=al-ocr-service:${{ github.sha }}
+          docker buildx build --platform linux/amd64 -t $TAG --load -f ./ocr-service/Dockerfile .
 
+      # aquasecurity/trivy-action v0.28.0
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
+        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2
         with:
           image-ref: al-ocr-service:${{ github.sha }}
           format: 'table'
@@ -68,8 +74,9 @@ jobs:
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
         run: |
-          IMAGE_URI=${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${{ github.sha }}
-          LATEST_URI=${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:latest
+          ECR_REGISTRY=${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
+          IMAGE_URI=${ECR_REGISTRY}/al-ocr-service:${{ github.sha }}
+          LATEST_URI=${ECR_REGISTRY}/al-ocr-service:latest
           docker tag al-ocr-service:${{ github.sha }} $IMAGE_URI
           docker tag al-ocr-service:${{ github.sha }} $LATEST_URI
           docker push $IMAGE_URI
@@ -81,4 +88,6 @@ jobs:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
         run: |
           IMAGE_URI=${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${{ github.sha }}
-          aws lambda update-function-code --function-name $LAMBDA_FUNCTION_NAME --image-uri $IMAGE_URI
+          aws lambda update-function-code \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --image-uri "$IMAGE_URI"

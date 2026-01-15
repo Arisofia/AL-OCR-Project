@@ -38,12 +38,12 @@ jobs:
       - name: Terraform Format Check
         run: terraform fmt -check
       - name: Checkov Security Scan
-        uses: bridgecrewio/checkov-action@99bb2caf247dfd9f03cf984373bc6043d4e32ebf # v12.1347.0
+        uses: bridgecrewio/checkov-action@99bb2caf247dfd9f03cf984373bc6043d4e32ebf
         with:
           directory: terraform
           framework: terraform
           quiet: true
-          soft_fail: true # Set to false to block PRs on security findings
+          soft_fail: true  # Set to false to block PRs on security findings
       - name: Terraform Plan
         run: terraform plan
 
