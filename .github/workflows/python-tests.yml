@@ -23,6 +23,9 @@ jobs:
       matrix:
         python-version: ['3.10', '3.11']
     steps:
+      # actions/checkout v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
       - name: Run Checkov Security Scan (Terraform)
         uses: bridgecrewio/checkov-action@master
         with:
@@ -30,18 +33,7 @@ jobs:
           framework: terraform
           quiet: true
           soft_fail: false
-      - name: Notify Slack on Failure
-        if: failure()
-        uses: slackapi/slack-github-action@v1.25.0
-        with:
-          payload: |
-            {
-              "text": "❌ Python Tests failed in AL-OCR-Project: ${{ github.workflow }} on ${{ github.ref }}. See details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-      # actions/checkout v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
 
       # actions/setup-python v5.0.0
       - name: Setup Python
@@ -66,9 +58,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install Linting Tools
+      - name: Install Linting & Security Tools
         run: |
-          pip install flake8 pylint mypy types-requests types-python-dateutil
+          pip install flake8 pylint mypy bandit pip-audit types-requests types-python-dateutil
 
       - name: Install ocr_reconstruct (editable) and deps
         run: |
@@ -80,8 +72,16 @@ jobs:
         run: |
           pip install -r ocr-service/requirements.txt
 
+      - name: Run Security Scan (bandit)
+        run: |
+          bandit -r ocr-service ocr_reconstruct -ll
+
+      - name: Run Dependency Audit (pip-audit)
+        run: |
+          pip-audit -r ocr-service/requirements.txt
+          pip-audit -r ocr_reconstruct/requirements.txt
+
       - name: Run Type Checking (mypy)
-        continue-on-error: true
         run: |
           mypy ocr-service ocr_reconstruct --ignore-missing-imports --no-strict-optional
 

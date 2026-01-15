@@ -4,7 +4,7 @@ Used to identify regions of interest and classify document structure.
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 import cv2
 import numpy as np
@@ -74,7 +74,7 @@ class DocumentLayoutAnalyzer:
             )
 
         # Sort regions by y position (top to bottom)
-        regions.sort(key=lambda r: r["bbox"][1])  # type: ignore
+        regions.sort(key=lambda r: cast(List[int], r["bbox"])[1])
         logger.debug("Detected %d regions in document.", len(regions))
         return regions
 

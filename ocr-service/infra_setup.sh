@@ -6,7 +6,26 @@ set -e
 
 # --- Configuration & Defaults ---
 AWS_REGION=${AWS_REGION:-"us-east-1"}
+
+# Dynamically resolve AWS Account ID if not provided
+if [ -z "$AWS_ACCOUNT_ID" ]; then
+    # Support both AWS_ACCOUNT_ID and ACCOUNT_ID for flexibility
+    AWS_ACCOUNT_ID=${ACCOUNT_ID}
+fi
+
+if [ -z "$AWS_ACCOUNT_ID" ]; then
+    echo "Resolving AWS Account ID..."
+    AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text 2>/dev/null || echo "")
+fi
+
+# Fallback to default if resolution fails (Enterprise baseline)
 AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-"510701314494"}
+
+if [ -z "$AWS_ACCOUNT_ID" ]; then
+    echo "Error: AWS_ACCOUNT_ID is not set and could not be resolved."
+    exit 1
+fi
+
 ECR_REPOSITORY=${ECR_REPOSITORY:-"al-ocr-service"}
 S3_BUCKET_NAME=${S3_BUCKET_NAME:-"al-financial-documents-$AWS_ACCOUNT_ID"}
 

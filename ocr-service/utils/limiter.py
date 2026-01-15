@@ -28,21 +28,43 @@ except ImportError:  # pragma: no cover
 
             return _decorator
 
-    Limiter = _NoopLimiter  # type: ignore
+    Limiter = _NoopLimiter
 
     def _no_rate_limit_handler(request: Request, exc: Exception) -> JSONResponse:
         """No-op rate limit handler for environments without slowapi."""
+        logger.warning(
+            "Rate limit exceeded (fallback)",
+            extra={
+                "path": request.url.path,
+                "remote_addr": get_remote_address(request),
+            },
+        )
         return JSONResponse(
             status_code=429,
             content={"detail": "Rate limit exceeded (fallback handler)"},
         )
 
-    _rate_limit_exceeded_handler = _no_rate_limit_handler  # type: ignore
-    RateLimitExceeded = Exception  # type: ignore
+    _rate_limit_exceeded_handler = _no_rate_limit_handler
+    RateLimitExceeded = Exception
 
     def get_remote_address(request: Request) -> str:
         """Extracts remote address from request or defaults to local host."""
         return getattr(getattr(request, "client", None), "host", "127.0.0.1")
+
+
+def _rate_limit_exceeded_handler_with_logging(
+    request: Request, exc: Exception
+) -> JSONResponse:
+    """Enhanced rate limit handler with structured logging."""
+    logger.warning(
+        "Rate limit exceeded",
+        extra={
+            "path": request.url.path,
+            "remote_addr": get_remote_address(request),
+            "detail": str(exc),
+        },
+    )
+    return _rate_limit_exceeded_handler(request, exc)
 
 
 def init_limiter() -> Limiter:

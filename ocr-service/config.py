@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     ocr_api_key: str = Field(
         "REPLACE_WITH_OCR_API_KEY",
         description="Secret key for OCR authentication (set via env or Secrets)",
+        repr=False,
     )
     api_key_header_name: str = "X-API-KEY"
 
@@ -54,19 +55,19 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = ["*"]
 
     # External AI Services
-    openai_api_key: Optional[str] = None
-    gemini_api_key: Optional[str] = None
-    hugging_face_hub_token: Optional[str] = None
-    perplexity_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = Field(None, repr=False)
+    gemini_api_key: Optional[str] = Field(None, repr=False)
+    hugging_face_hub_token: Optional[str] = Field(None, repr=False)
+    perplexity_api_key: Optional[str] = Field(None, repr=False)
 
     # Database & Storage (Supabase)
     supabase_url: Optional[str] = None
-    supabase_anon_key: Optional[str] = None
-    supabase_service_role: Optional[str] = None
+    supabase_anon_key: Optional[str] = Field(None, repr=False)
+    supabase_service_role: Optional[str] = Field(None, repr=False)
 
     # Monitoring & Logging
-    sentry_dsn: Optional[str] = None
-    azure_application_insights_connection_string: Optional[str] = None
+    sentry_dsn: Optional[str] = Field(None, repr=False)
+    azure_application_insights_connection_string: Optional[str] = Field(None, repr=False)
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"

@@ -7,6 +7,7 @@ using Supabase, enabling the service to learn from historical data.
 
 import asyncio
 import logging
+import time
 from typing import Any, Dict, Optional
 
 from config import get_settings
@@ -21,12 +22,15 @@ class LearningEngine:
     font characteristics, and correction history in Supabase.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Initializes the LearningEngine and Supabase client.
         """
         self.settings = get_settings()
         self.client: Optional[Client] = None
+        self._knowledge_cache: Dict[str, Any] = {}
+        self._last_check_time = 0.0
+        self._last_check_result = False
 
         if self.settings.supabase_url and self.settings.supabase_service_role:
             try:
@@ -35,6 +39,31 @@ class LearningEngine:
                 )
             except Exception as e:  # pylint: disable=broad-exception-caught
                 logger.error("Failed to initialize Supabase client: %s", e)
+
+    def check_connection(self) -> bool:
+        """
+        Validates Supabase connectivity by performing a simple query.
+        Results are cached for 60 seconds to avoid redundant API calls.
+        """
+        if not self.client:
+            return False
+
+        # Return cached result if fresh
+        if time.time() - self._last_check_time < 60:
+            return self._last_check_result
+
+        try:
+            # Simple heartbeat query
+            self.client.table("learning_patterns").select("count").limit(
+                1
+            ).execute()
+            self._last_check_result = True
+        except Exception as e:
+            logger.warning("Supabase health check failed: %s", e)
+            self._last_check_result = False
+
+        self._last_check_time = time.time()
+        return self._last_check_result
 
     async def learn_from_result(
         self, doc_type: str, font_meta: Dict[str, Any], accuracy_score: float
@@ -53,9 +82,13 @@ class LearningEngine:
         }
 
         try:
+            # Clear cache for this doc_type to ensure freshness next time
+            self._knowledge_cache.pop(doc_type, None)
+
             # Upsert into 'learning_patterns' in a background thread
-            def _upsert():
-                self.client.table("learning_patterns").upsert(data).execute()
+            def _upsert() -> None:
+                if self.client:
+                    self.client.table("learning_patterns").upsert(data).execute()  # type: ignore
 
             await asyncio.to_thread(_upsert)
         except Exception as e:
@@ -68,20 +101,30 @@ class LearningEngine:
         if not self.client:
             return None
 
+        # Check cache first
+        if doc_type in self._knowledge_cache:
+            logger.debug("Knowledge cache hit for %s", doc_type)
+            return self._knowledge_cache[doc_type]
+
         try:
 
-            def _fetch():
-                return (
-                    self.client.table("learning_patterns")
-                    .select("*")
-                    .eq("doc_type", doc_type)
-                    .order("accuracy_score", desc=True)
-                    .limit(1)
-                    .execute()
-                )
+            def _fetch() -> Any:
+                if self.client:
+                    return (
+                        self.client.table("learning_patterns")
+                        .select("*")
+                        .eq("doc_type", doc_type)
+                        .order("accuracy_score", desc=True)
+                        .limit(1)
+                        .execute()
+                    )
+                return None
 
             result = await asyncio.to_thread(_fetch)
-            return result.data[0] if result.data else None
+            knowledge = result.data[0] if result.data else None
+            if knowledge:
+                self._knowledge_cache[doc_type] = knowledge
+            return knowledge
         except Exception as e:
             logger.error("Failed to fetch pattern knowledge: %s", e)
             return None

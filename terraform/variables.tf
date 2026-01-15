@@ -5,15 +5,15 @@ variable "aws_region" {
 }
 
 variable "account_id" {
-  description = "AWS Account ID"
+  description = "AWS Account ID (defaults to current caller if empty)"
   type        = string
-  default     = "510701314494"
+  default     = ""
 }
 
 variable "s3_bucket_name" {
-  description = "Name of the S3 bucket for documents"
+  description = "Name of the S3 bucket for documents (defaults to al-financial-documents-<ACCOUNT_ID> if left as placeholder)"
   type        = string
-  default     = "al-financial-documents-510701314494"
+  default     = "al-financial-documents-PLACEHOLDER"
 }
 
 variable "ecr_repository_name" {

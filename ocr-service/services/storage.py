@@ -4,6 +4,7 @@ Service for interacting with Amazon S3.
 
 import json
 import logging
+import time
 import uuid
 from typing import Any, Dict, Optional
 
@@ -44,6 +45,8 @@ class StorageService:
         # Use explicit fallback if the setting is None or falsy
         self.max_retries = getattr(settings, "aws_max_retries", None) or 3
         self.region = getattr(settings, "aws_region", "us-east-1")
+        self._last_check_time = 0.0
+        self._last_check_result = False
 
         # Disable botocore automatic retries when we use a local manual retry loop
         config = Config(retries={"max_attempts": 1, "mode": "standard"})
@@ -56,6 +59,27 @@ class StorageService:
             if self.bucket_name
             else None
         )
+
+    def check_connection(self) -> bool:
+        """
+        Validates S3 connectivity by checking if the bucket exists.
+        Results are cached for 60 seconds to avoid redundant API calls.
+        """
+        if not self.s3_client or not self.bucket_name:
+            return False
+
+        # Return cached result if fresh
+        if time.time() - self._last_check_time < 60:
+            return self._last_check_result
+
+        try:
+            self.s3_client.head_bucket(Bucket=self.bucket_name)
+            self._last_check_result = True
+        except (ClientError, Exception):
+            self._last_check_result = False
+
+        self._last_check_time = time.time()
+        return self._last_check_result
 
     def generate_presigned_post(
         self,

@@ -69,7 +69,8 @@ def test_handler_missing_info():
         response = handler(bad_event, None)
         assert response == {"status": "ok"}
         mock_logger.warning.assert_called_with(
-            "Payload error: Missing S3 bucket or key reference"
+            "Payload error: Missing S3 bucket or key reference",
+            extra={"request_id": "local-test"},
         )
 
 

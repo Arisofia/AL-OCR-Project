@@ -19,7 +19,7 @@ try:
     RECON_AVAILABLE = True
 except ImportError:
 
-    class ImageEnhancer:  # type: ignore[no-redef]
+    class _FallbackImageEnhancer:
         """Minimal ImageEnhancer fallback."""
 
         def sharpen(self, img: np.ndarray) -> np.ndarray:
@@ -31,6 +31,7 @@ except ImportError:
             _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY)
             return thresh
 
+    ImageEnhancer = _FallbackImageEnhancer  # type: ignore[assignment, misc]
     PixelReconstructor = None  # type: ignore[assignment, misc]
     recon_process_bytes = None  # type: ignore[assignment]
     RECON_AVAILABLE = False
@@ -110,9 +111,9 @@ class IterativeOCREngine:
         if use_reconstruction and iteration == 0 and self.reconstructor:
             # Apply advanced overlay elimination for initial high-signal pass
             rectified = self.reconstructor.remove_redactions(enhanced)
-            return self.reconstructor.remove_color_overlay(rectified)
+            enhanced = self.reconstructor.remove_color_overlay(rectified)
 
-        gray = cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY) if len(enhanced.shape) == 3 else enhanced
         return self.enhancer.apply_threshold(gray) if self.enhancer else gray
 
     def _perform_ocr_iteration(
@@ -228,43 +229,68 @@ class IterativeOCREngine:
         layout_regions = DocumentLayoutAnalyzer.detect_regions(image_bytes)
 
         for i in range(self.config.max_iterations):
-            logger.info(
-                "Iteration loop | Progress: %s/%s", i + 1, self.config.max_iterations
+            text, confidence, method, current_img = self._run_single_iteration(
+                current_img, i, use_reconstruction, best_confidence, layout_regions
             )
-            try:
-                text, thresh = self._perform_ocr_iteration(
-                    current_img, i, use_reconstruction
-                )
+            
+            iteration_history.append(
+                {
+                    "iteration": i + 1,
+                    "text_length": len(text),
+                    "confidence": confidence,
+                    "method": method,
+                    "preview_text": f"{text[:50]}..." if len(text) > 50 else text,
+                }
+                if text is not None else {"iteration": i + 1, "error": "failed"}
+            )
 
-                # Adaptive Strategy: Fallback to region-based if confidence is low
-                is_region_pass = self._should_use_region_ocr(
-                    i, best_confidence, len(layout_regions)
-                )
-                if is_region_pass:
-                    logger.info("Engaging targeted region extraction")
-                    text = self._ocr_regions(thresh, layout_regions)
+            if text and confidence > best_confidence:
+                best_text, best_confidence = text, confidence
 
-                confidence = self.confidence_scorer.calculate(text)
+        return self._build_process_response(best_text, best_confidence, iteration_history, recon_info)
 
-                method = "region-based" if is_region_pass else "full-page"
-                iteration_history.append(
-                    {
-                        "iteration": i + 1,
-                        "text_length": len(text),
-                        "confidence": confidence,
-                        "method": method,
-                        "preview_text": f"{text[:50]}..." if len(text) > 50 else text,
-                    }
-                )
+    def _run_single_iteration(
+        self, 
+        current_img: np.ndarray, 
+        iteration: int, 
+        use_reconstruction: bool, 
+        best_confidence: float, 
+        layout_regions: List[Dict[str, Any]]
+    ) -> Tuple[Optional[str], float, str, np.ndarray]:
+        """Runs a single OCR iteration with adaptive strategies."""
+        logger.info(
+            "Iteration loop | Progress: %s/%s", iteration + 1, self.config.max_iterations
+        )
+        try:
+            text, thresh = self._perform_ocr_iteration(
+                current_img, iteration, use_reconstruction
+            )
 
-                if confidence > best_confidence:
-                    best_text, best_confidence = text, confidence
+            # Adaptive Strategy: Fallback to region-based if confidence is low
+            is_region_pass = self._should_use_region_ocr(
+                iteration, best_confidence, len(layout_regions)
+            )
+            if is_region_pass:
+                logger.info("Engaging targeted region extraction")
+                text = self._ocr_regions(thresh, layout_regions)
 
-                current_img = ImageToolkit.enhance_iteration(current_img)
-            except Exception:
-                logger.error("Failure in iteration %s", i + 1)
-                iteration_history.append({"iteration": i + 1, "error": "failed"})
+            confidence = self.confidence_scorer.calculate(text)
+            method = "region-based" if is_region_pass else "full-page"
+            next_img = ImageToolkit.enhance_iteration(current_img)
+            
+            return text, confidence, method, next_img
+        except Exception:
+            logger.error("Failure in iteration %s", iteration + 1)
+            return None, 0.0, "failed", current_img
 
+    def _build_process_response(
+        self, 
+        best_text: str, 
+        best_confidence: float, 
+        iteration_history: List[Dict[str, Any]], 
+        recon_info: Optional[Dict[str, Any]]
+    ) -> dict:
+        """Constructs the final response dictionary."""
         resp = {
             "text": best_text,
             "confidence": best_confidence,

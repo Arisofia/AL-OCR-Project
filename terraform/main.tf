@@ -2,6 +2,12 @@ provider "aws" {
   region = var.aws_region
 }
 
+data "aws_caller_identity" "current" {}
+
+locals {
+  account_id = var.account_id != "" ? var.account_id : data.aws_caller_identity.current.account_id
+}
+
 terraform {
   required_version = ">= 1.0.0"
   required_providers {
@@ -16,8 +22,8 @@ module "ocr_infrastructure" {
   source = "./modules/ocr_service"
 
   aws_region         = var.aws_region
-  account_id         = var.account_id
-  s3_bucket_name     = var.s3_bucket_name
+  account_id         = local.account_id
+  s3_bucket_name     = var.s3_bucket_name == "al-financial-documents-PLACEHOLDER" ? "al-financial-documents-${local.account_id}" : var.s3_bucket_name
   ecr_repository_name = var.ecr_repository_name
 
   # Pass through ECR module configuration

@@ -9,15 +9,20 @@ import os
 import urllib.parse
 from typing import Any, Dict, Tuple
 
+import sentry_sdk
+from sentry_sdk.integrations.aws_lambda import AwsLambdaIntegration
 from botocore.exceptions import ClientError  # type: ignore
+
 from config import get_settings
 from services.storage import StorageService
 from services.textract import TextractService
-
-logger = logging.getLogger("ocr-service.lambda")
-logger.setLevel(logging.INFO)
+from utils.monitoring import init_monitoring
 
 settings = get_settings()
+
+# Initialize enterprise-grade monitoring (Logging + Sentry)
+init_monitoring(settings, integrations=[AwsLambdaIntegration()])
+logger = logging.getLogger("ocr-service.lambda")
 
 
 def get_services(bucket_name: str) -> Tuple[TextractService, StorageService]:
@@ -36,12 +41,15 @@ def process_record(record: Dict[str, Any], request_id: str = "N/A") -> None:
     key = urllib.parse.unquote_plus(s3_info.get("object", {}).get("key", ""))
 
     if not bucket or not key:
-        logger.warning("Payload error: Missing S3 bucket or key reference")
+        logger.warning(
+            "Payload error: Missing S3 bucket or key reference",
+            extra={"request_id": request_id},
+        )
         return
 
     textract_service, storage_service = get_services(bucket)
 
-    # Standardize output naming convention for deterministic downstream consumption
+    # Standardize output naming convention for downstream consumption
     out_key = f"{settings.output_prefix.rstrip('/')}/" f"{os.path.basename(key)}.json"
 
     try:
@@ -57,37 +65,58 @@ def process_record(record: Dict[str, Any], request_id: str = "N/A") -> None:
                 "requestId": request_id,
                 "input": {"bucket": bucket, "key": key},
             }
-            logger.info("Async processing initiated | JobId: %s | Key: %s", job_id, key)
+            logger.info(
+                "Async processing initiated",
+                extra={"job_id": job_id, "key": key, "request_id": request_id},
+            )
         else:
             output = textract_service.analyze_document(bucket, key)
             output["requestId"] = request_id
-            logger.info("Sync analysis completed | Key: %s", key)
+            logger.info(
+                "Sync analysis completed", extra={"key": key, "request_id": request_id}
+            )
 
         # Persist extracted intelligence to enterprise storage
         saved = storage_service.save_json(output, out_key)
         if not saved:
-            logger.error("Storage failure: Could not persist extraction for %s", key)
+            logger.error(
+                "Storage failure: Could not persist extraction",
+                extra={"key": key, "request_id": request_id},
+            )
         else:
-            logger.info("Result persisted | Path: s3://%s/%s", bucket, out_key)
+            logger.info(
+                "Result persisted",
+                extra={
+                    "path": f"s3://{bucket}/{out_key}",
+                    "key": key,
+                    "request_id": request_id,
+                },
+            )
 
     except ClientError as e:
-        request_id = e.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
+        aws_request_id = e.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
         logger.error(
-            "AWS Service Failure | Key: %s | RequestId: %s | Error: %s",
-            key,
-            request_id,
-            e,
+            "AWS Service Failure",
+            extra={
+                "key": key,
+                "aws_request_id": aws_request_id,
+                "request_id": request_id,
+                "error": str(e),
+            },
         )
-        err_obj = {
+        err_obj: Dict[str, Any] = {
             "error": "aws_service_failure",
             "message": str(e),
-            "requestId": request_id,
+            "requestId": aws_request_id,
             "input": {"bucket": bucket, "key": key},
         }
         storage_service.save_json(err_obj, out_key)
         raise
     except Exception as e:
-        logger.exception("Operational failure: Object %s in bucket %s", key, bucket)
+        logger.exception(
+            "Operational failure",
+            extra={"key": key, "bucket": bucket, "request_id": request_id},
+        )
         err_obj = {
             "error": "internal_pipeline_failure",
             "message": str(e),
@@ -97,7 +126,10 @@ def process_record(record: Dict[str, Any], request_id: str = "N/A") -> None:
         try:
             storage_service.save_json(err_obj, out_key)
         except Exception as se:
-            logger.error("Critical storage failure during error logging: %s", se)
+            logger.error(
+                "Critical storage failure during error logging",
+                extra={"error": str(se), "request_id": request_id},
+            )
 
         # Propagate exception for Lambda retry visibility
         raise
@@ -110,7 +142,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     request_id = getattr(context, "aws_request_id", "local-test")
     records = event.get("Records", [])
-    logger.info("Lambda trigger | RID: %s | Records: %d", request_id, len(records))
+    logger.info(
+        "Lambda trigger",
+        extra={"request_id": request_id, "record_count": len(records)},
+    )
 
     failures = 0
     for record in records:
@@ -120,7 +155,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             failures += 1
 
     if failures:
-        logger.warning("Batch completion with partial failures | Failed: %d", failures)
+        logger.warning(
+            "Batch completion with partial failures",
+            extra={"request_id": request_id, "failed_count": failures},
+        )
         return {"status": "partial_failure", "failed": failures}
 
     return {"status": "ok"}

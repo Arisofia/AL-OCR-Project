@@ -93,10 +93,10 @@ class TextractService:
         except ClientError as e:
             request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
             logger.error("Analyze document failed after retries | RID: %s", request_id)
-            raise RuntimeError("Critical Textract failure") from e
+            raise RuntimeError("Max retry threshold reached") from e
         except Exception as e:
             logger.exception("Unexpected error in analyze_document: %s", e)
-            raise RuntimeError("Critical Textract failure") from e
+            raise RuntimeError("Max retry threshold reached") from e
 
     def get_job_results(self, job_id: str) -> Dict[str, Any]:
         """Polls for asynchronous job completion and aggregates paginated results."""

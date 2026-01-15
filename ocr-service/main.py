@@ -5,6 +5,9 @@ Provides endpoints for document intelligence and S3 lifecycle management.
 
 import logging
 import time
+from typing import Any, cast, Type
+
+from sentry_sdk.integrations.fastapi import FastApiIntegration
 
 from config import Settings, get_settings
 from fastapi import Depends, FastAPI, File, HTTPException, Request, Security, UploadFile
@@ -24,18 +27,18 @@ from schemas import (
 from services.storage import StorageService
 from utils.limiter import (
     RateLimitExceeded,
-    _rate_limit_exceeded_handler,
+    _rate_limit_exceeded_handler_with_logging as _rate_limit_exceeded_handler,
     init_limiter,
 )
+from utils.monitoring import init_monitoring
 from botocore.exceptions import ClientError  # type: ignore
 
-# Initialize enterprise-grade logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger("ocr-service")
-
+# Load settings
 settings = get_settings()
+
+# Initialize enterprise-grade monitoring (Logging + Sentry)
+init_monitoring(settings, integrations=[FastApiIntegration()])
+logger = logging.getLogger("ocr-service")
 
 limiter = init_limiter()
 app = FastAPI(
@@ -46,7 +49,7 @@ app = FastAPI(
     redoc_url="/redoc" if settings.environment != "production" else None,
 )
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(cast(Type[Exception], RateLimitExceeded), _rate_limit_exceeded_handler)
 
 
 def get_request_id(request: Request) -> str:
@@ -62,28 +65,48 @@ async def add_process_time_and_logging(request: Request, call_next):
     """Logs request lifecycle and adds performance metadata to responses."""
     start_time = time.time()
 
-    # Extract request ID for traceability
+    # Extract request ID for traceability and attach to state
     request_id = get_request_id(request)
+    request.state.request_id = request_id
 
     logger.info(
-        "Request started | Path: %s | Method: %s | ID: %s",
-        request.url.path,
-        request.method,
-        request_id,
+        "Request started",
+        extra={
+            "path": request.url.path,
+            "method": request.method,
+            "request_id": request_id,
+        },
     )
 
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        process_time = time.time() - start_time
+        logger.error(
+            "Request failed",
+            extra={
+                "path": request.url.path,
+                "method": request.method,
+                "latency": f"{process_time:.4f}s",
+                "request_id": request_id,
+                "error": str(exc),
+            },
+            exc_info=True,
+        )
+        raise
 
     process_time = time.time() - start_time
     response.headers["X-Process-Time"] = f"{process_time:.4f}s"
     response.headers["X-Request-ID"] = request_id
 
     logger.info(
-        "Request finished | Path: %s | Status: %d | Latency: %.4fs | ID: %s",
-        request.url.path,
-        response.status_code,
-        process_time,
-        request_id,
+        "Request finished",
+        extra={
+            "path": request.url.path,
+            "status": response.status_code,
+            "latency": f"{process_time:.4f}s",
+            "request_id": request_id,
+        },
     )
 
     return response
@@ -158,9 +181,32 @@ except Exception:
 
 
 @app.get("/health", response_model=HealthResponse)
-async def health_check() -> HealthResponse:
-    """Service availability heartbeat."""
-    return HealthResponse(status="healthy", timestamp=time.time())
+async def health_check(
+    settings: Settings = Depends(get_settings),
+    storage: StorageService = Depends(get_storage_service),
+    engine: IterativeOCREngine = Depends(get_ocr_engine),
+) -> HealthResponse:
+    """Service availability heartbeat with dependency checks."""
+    services = {
+        "s3": "healthy" if storage.check_connection() else "unconfigured/degraded",
+        "supabase": "healthy"
+        if engine.learning_engine.check_connection()
+        else "unconfigured/degraded",
+        "openai": "configured" if settings.openai_api_key else "missing",
+        "gemini": "configured" if settings.gemini_api_key else "missing",
+    }
+
+    status = "healthy"
+    # If a critical service is degraded, we might want to flag the whole service
+    if services["s3"] == "unconfigured/degraded":
+        status = "degraded"
+
+    return HealthResponse(
+        status=status,
+        timestamp=time.time(),
+        environment=settings.environment,
+        services=services,
+    )
 
 
 @app.get("/recon/status", response_model=ReconStatusResponse)
@@ -251,4 +297,4 @@ handler = Mangum(app)
 if __name__ == "__main__":
     import uvicorn  # type: ignore
 
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)  # nosec B104

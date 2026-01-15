@@ -5,9 +5,8 @@ from ocr_reconstruct.modules.pipeline import process_bytes
 
 def test_import_and_process_sample():
     # Generate samples if not present
-    gen = os.path.join(os.path.dirname(__file__), "generate_samples.py")
-    if os.path.exists(gen):
-        os.system(f"python {gen}")
+    from ocr_reconstruct.tests.generate_samples import generate_all
+    generate_all()
 
     sample = os.path.join(
         os.path.dirname(__file__),

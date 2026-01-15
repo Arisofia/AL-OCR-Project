@@ -1,14 +1,15 @@
 """Generate synthetic images (clean, blurred, pixelated) for tests."""
 
 import os
+from typing import Any
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 try:
-    RESAMPLING = Image.Resampling
+    RESAMPLING: Any = Image.Resampling
 except AttributeError:
     # Older Pillow versions
-    RESAMPLING = Image  # type: ignore
+    RESAMPLING = Image
 
 OUT_DIR = os.path.join(os.path.dirname(__file__), "data")
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -50,8 +51,14 @@ def blur(input_path, radius=3):
     return out_path
 
 
-if __name__ == "__main__":
+def generate_all():
+    """Generates all test samples."""
     base = make_base()
     pixelate(base)
     # blur(base)  # optional
-    print("Generated samples in:", OUT_DIR)
+    return OUT_DIR
+
+
+if __name__ == "__main__":
+    out = generate_all()
+    print("Generated samples in:", out)
