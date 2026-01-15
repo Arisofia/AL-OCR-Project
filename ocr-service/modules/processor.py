@@ -99,7 +99,10 @@ class OCRProcessor:
         except HTTPException:
             raise
         except Exception as e:
+            # Log concise failure for quick scanning
             logger.error("Pipeline failure for %s | Error: %s", file.filename, e)
+            # Detailed log with request id for traceability
+            logger.error("Pipeline failure | File: %s | RID: %s | Error: %s", file.filename, request_id, e)
             raise HTTPException(
                 status_code=500,
                 detail="Internal processing failure in OCR orchestrator"
