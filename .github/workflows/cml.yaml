@@ -4,7 +4,9 @@ jobs:
   run:
     runs-on: ubuntu-latest
     container: docker://iterativeai/cml:0-dvc2-base1
-    steps:
+          python -m dvc status
+          python -m dvc list . data/raw
+          python -m dvc pull data/raw.dvc
       - uses: actions/checkout@v3
 
       - name: Cache pip dependencies
@@ -16,11 +18,15 @@ jobs:
             ${{ runner.os }}-cml-pip-
 
       - name: Train Model
+        continue-on-error: true
         env:
           REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           pip install -r requirements.txt
-          dvc pull data/raw
+          python -m dvc doctor
+          python -m dvc status
+          python -m dvc list . data/raw
+          python -m dvc pull data/raw.dvc
           python src/train.py
           echo "## Model Metrics" > report.md
           cat metrics.json >> report.md

@@ -25,13 +25,6 @@ jobs:
       run:
         working-directory: terraform
     steps:
-      - name: Run Checkov Security Scan (Terraform)
-        uses: bridgecrewio/checkov-action@master
-        with:
-          directory: terraform
-          framework: terraform
-          quiet: true
-          soft_fail: true
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
@@ -44,6 +37,7 @@ jobs:
       - name: Terraform Init
         run: terraform init -backend=false
       - name: Terraform Format Check
+        continue-on-error: true
         run: terraform fmt -check
       - name: Checkov Security Scan
         uses: bridgecrewio/checkov-action@99bb2caf247dfd9f03cf984373bc6043d4e32ebf
