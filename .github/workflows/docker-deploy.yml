@@ -40,7 +40,6 @@ jobs:
           soft_fail: true
 
       - name: Lint Dockerfile (hadolint)
-        continue-on-error: true
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: ocr-service/Dockerfile

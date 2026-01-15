@@ -46,8 +46,12 @@ jobs:
           done
           if [ ${#missing_secrets[@]} -ne 0 ]; then
             echo "::error ::One or more required secrets are missing: ${missing_secrets[*]}"
-            # exit 1
-            echo "::warning ::Proceeding despite missing secrets (Workflow set to non-blocking)"
+            # If running from a forked PR, secrets are unavailable and this is expected
+            if [ "${{ github.event_name }}" == "pull_request" ] && [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+              echo "::warning ::Running from fork - secrets unavailable. Some steps will be skipped."
+            else
+              exit 1
+            fi
           fi
 
 
@@ -97,12 +101,10 @@ jobs:
           pip install -r ocr-service/requirements.txt
 
       - name: Run Security Scan (bandit)
-        continue-on-error: true
         run: |
           bandit -r ocr-service ocr_reconstruct -ll
 
       - name: Run Dependency Audit (pip-audit)
-        continue-on-error: true
         run: |
           pip-audit -r ocr-service/requirements.txt
           pip-audit -r ocr_reconstruct/requirements.txt
@@ -150,9 +152,14 @@ jobs:
           path: artifacts
 
       - name: Generate sample images
-        continue-on-error: true
         run: |
           python ocr_reconstruct/tests/generate_samples.py
+      - name: Verify sample images
+        run: |
+          if [ ! -f ocr_reconstruct/tests/data/sample1.png ]; then
+            echo "::error ::Sample image sample1.png not found. Test setup failed."
+            exit 1
+          fi
 
       - name: Run ocr_reconstruct tests
         continue-on-error: true
