@@ -14,11 +14,9 @@ if [ -z "$AWS_ACCOUNT_ID" ]; then
     AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text 2>/dev/null || echo "")
 fi
 
-# Fallback for local development or specific environments
-AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-"510701314494"}
-
 if [ -z "$AWS_ACCOUNT_ID" ]; then
     echo "Error: AWS_ACCOUNT_ID is not set and could not be resolved."
+    echo "Please set AWS_ACCOUNT_ID, ACCOUNT_ID, or configure AWS credentials."
     exit 1
 fi
 
