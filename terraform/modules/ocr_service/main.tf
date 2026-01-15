@@ -28,6 +28,11 @@ resource "aws_s3_bucket_lifecycle_configuration" "documents_lifecycle" {
     expiration {
       days = 90
     }
+
+    # Abort incomplete multipart uploads to avoid storage of partial uploads
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
   }
 }
 
@@ -45,7 +50,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "documents_encrypt
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm = "aws:kms"
+      kms_master_key_id = aws_kms_alias.ocr_key_alias.arn
     }
   }
 }
@@ -96,7 +102,7 @@ resource "aws_kms_alias" "ocr_key_alias" {
 
 resource "aws_ecr_repository" "ocr_repo" {
   name                 = var.ecr_repository_name
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = var.ecr_image_tag_mutability
 
   # CAUTION: force_delete will delete images in the repository when Terraform destroys
   # or replaces it. The default value is false. Set the module input

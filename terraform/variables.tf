@@ -21,3 +21,15 @@ variable "ecr_repository_name" {
   type        = string
   default     = "al-ocr-service"
 }
+
+variable "ecr_force_delete" {
+  description = "When true, allow Terraform to delete images by setting force_delete true on ECR repo (destructive)"
+  type        = bool
+  default     = false
+}
+
+variable "ecr_image_tag_mutability" {
+  description = "ECR image tag mutability: IMMUTABLE or MUTABLE"
+  type        = string
+  default     = "IMMUTABLE"
+}

@@ -19,6 +19,10 @@ module "ocr_infrastructure" {
   account_id         = var.account_id
   s3_bucket_name     = var.s3_bucket_name
   ecr_repository_name = var.ecr_repository_name
+
+  # Pass through ECR module configuration
+  ecr_force_delete           = var.ecr_force_delete
+  ecr_image_tag_mutability  = var.ecr_image_tag_mutability
 }
 
 output "github_actions_role_arn" {
