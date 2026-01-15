@@ -33,6 +33,17 @@ jobs:
         run: |
           cd terraform
           terraform init -backend=false
+      - name: Terraform Format Check
+        run: |
+          cd terraform
+          terraform fmt -check
+      - name: Checkov Security Scan
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform
+          framework: terraform
+          quiet: true
+          soft_fail: true # Set to false to block PRs on security findings
       - name: Terraform Plan
         run: |
           cd terraform
@@ -49,7 +60,7 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: us-east-1
-      - uses: hashicorp/setup-terraform@633666f66e0061ca1b727202b2f0da81558285da # v2.0.3
+      - uses: hashicorp/setup-terraform@633666f66e0061ca3b725c73b2ec20cd13a8fdd1 # v2.0.3
         with:
           terraform_version: '1.5.7'
       - name: Terraform Init
