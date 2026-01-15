@@ -39,7 +39,7 @@ except Exception:  # pragma: no cover - slowapi optional in tests
 
     Limiter = _NoopLimiter
 
-    def _no_rate_limit_handler(request, exc):
+    def _no_rate_limit_handler(_request, _exc):
         """No-op rate limit handler for environments without slowapi."""
         return None
 
@@ -185,7 +185,7 @@ async def recon_status(
 @app.post("/ocr", response_model=OCRResponse)
 @limiter.limit("10/minute")
 async def perform_ocr(
-    request: Request,
+    _request: Request,
     file: UploadFile = File(...),
     reconstruct: bool = False,
     advanced: bool = False,
@@ -214,7 +214,7 @@ async def perform_ocr(
 @app.post("/presign", response_model=PresignResponse)
 @limiter.limit("5/minute")
 async def generate_presigned_post(
-    request: Request,
+    _request: Request,
     req: PresignRequest,
     _api_key: str = Depends(get_api_key),
     curr_settings: Settings = Depends(get_settings),
