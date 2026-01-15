@@ -2,7 +2,7 @@
 FROM public.ecr.aws/lambda/python:3.11 as builder
 
 # Install build-time dependencies
-RUN yum install -y \
+RUN yum install -y --no-install-recommends \
     gcc \
     gcc-c++ \
     gcc-gfortran \
@@ -27,7 +27,7 @@ RUN pip install --prefix=/install --prefer-binary --no-cache-dir ./ocr_reconstru
 FROM public.ecr.aws/lambda/python:3.11
 
 # Runtime dependencies only
-RUN yum install -y \
+RUN yum install -y --no-install-recommends \
     tesseract \
     tesseract-langpack-spa \
     tesseract-langpack-eng \
@@ -35,8 +35,12 @@ RUN yum install -y \
     shadow-utils && \
     yum clean all
 
+
 # Copy installed packages from builder
 COPY --from=builder /install /var/lang
+
+# Set default command (can be overridden)
+CMD ["python3"]
 
 # Create a non-root user for security (best practice)
 RUN useradd -m appuser && chown -R appuser:appuser /var/task

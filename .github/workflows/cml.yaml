@@ -6,6 +6,15 @@ jobs:
     container: docker://iterativeai/cml:0-dvc2-base1
     steps:
       - uses: actions/checkout@v3
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-cml-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-cml-pip-
+
       - name: Train Model
         env:
           REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
