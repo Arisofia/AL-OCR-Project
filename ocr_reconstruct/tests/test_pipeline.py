@@ -1,8 +1,11 @@
 import os
 
+import pytest
+
 from ocr_reconstruct.modules.pipeline import IterativeOCR
 
 
+@pytest.mark.integration
 def test_pipeline_on_pixelated_sample(tmp_path):
     # Ensure sample exists
     data_dir = os.path.join(os.path.dirname(__file__), "data")

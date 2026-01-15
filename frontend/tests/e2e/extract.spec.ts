@@ -1,12 +1,16 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 test('upload and extract text flow', async ({ page, baseURL }) => {
   await page.goto('/');
 
   // Ensure the file input is present
   const fileInput = await page.locator('input[type=file]');
-  const samplePath = path.resolve(process.cwd(), '../../ocr_reconstruct/tests/data/sample_pixelated.png');
+  const samplePath = path.resolve(__dirname, '../../../ocr_reconstruct/tests/data/sample_pixelated.png');
 
   // Set file and preview
   await fileInput.setInputFiles(samplePath);

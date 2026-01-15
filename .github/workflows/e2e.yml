@@ -73,6 +73,24 @@ jobs:
         working-directory: ./frontend
         run: npx playwright install --with-deps
 
+      - name: Build frontend (for preview)
+        working-directory: ./frontend
+        run: |
+          npm run build
+
+      - name: Deploy to Netlify (optional)
+        if: secrets.NETLIFY_AUTH_TOKEN != ''
+        working-directory: ./frontend
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        id: netlify_deploy
+        run: |
+          npm i -g netlify-cli
+          npx netlify deploy --dir=dist --json --auth="$NETLIFY_AUTH_TOKEN" > netlify-deploy.json
+          DEPLOY_URL=$(jq -r '.deploy_url' netlify-deploy.json)
+          echo "DEPLOY_URL=$DEPLOY_URL" >> $GITHUB_ENV
+          echo "Deployed preview to $DEPLOY_URL"
+
       - name: Start backend
         working-directory: ./ocr-service
         env:
@@ -89,19 +107,39 @@ jobs:
             sleep 2
           done
 
-      - name: Start frontend
+      - name: Start frontend (serve built site when not deploying externally)
         working-directory: ./frontend
         run: |
-          nohup npm run dev -- --host &
-          # Wait for Vite dev server
-          for i in {1..20}; do
-            if curl -sS http://localhost:5173 >/dev/null; then
-              echo "Frontend healthy" && break
-            fi
-            sleep 1
-          done
+          if [ -z "${{ env.DEPLOY_URL }}" ]; then
+            npm i -g http-server
+            nohup http-server dist -p 5173 --silent &
+            for i in {1..20}; do
+              if curl -sS http://localhost:5173 >/dev/null; then
+                echo "Frontend (built) healthy" && break
+              fi
+              sleep 1
+            done
+          else
+            echo "External preview available: $DEPLOY_URL"
+          fi
 
       - name: Run Playwright tests
         working-directory: ./frontend
+        env:
+          BASE_URL: ${{ env.DEPLOY_URL || 'http://localhost:5173' }}
+          VITE_API_KEY: ${{ secrets.STAGING_API_KEY || '' }}
         run: |
+          echo "Using BASE_URL=$BASE_URL"
           npx playwright test --config=playwright.config.ts
+
+      - name: Upload Playwright artifacts
+        if: failure() || always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            frontend/test-results
+            frontend/playwright-report
+            frontend/tests/e2e/**/screenshots
+            frontend/tests/e2e/**/videos
+            frontend/tests/e2e/**/trace

@@ -118,9 +118,7 @@ resource "aws_kms_alias" "ocr_key_alias" {
 
 resource "aws_ecr_repository" "ocr_repo" {
   name                 = var.ecr_repository_name
-  # Using MUTABLE allows CI to push a convenience tag like :latest if desired.
-  # Previously set to IMMUTABLE which prevents reusing tags and can break CI pushes.
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = "IMMUTABLE"
 
   image_scanning_configuration {
     scan_on_push = true

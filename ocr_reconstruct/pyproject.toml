@@ -17,3 +17,9 @@ dependencies = [
     "scikit-image",
     "scipy"
 ]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests as integration tests (slow, requires Tesseract)"
+]
+
