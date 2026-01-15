@@ -98,6 +98,11 @@ resource "aws_ecr_repository" "ocr_repo" {
   name                 = var.ecr_repository_name
   image_tag_mutability = "MUTABLE"
 
+  # CAUTION: force_delete will delete images in the repository when Terraform destroys
+  # or replaces it. The default value is false. Set the module input
+  # `ecr_force_delete = true` to enable this behavior after review.
+  force_delete = var.ecr_force_delete
+
   image_scanning_configuration {
     scan_on_push = true
   }

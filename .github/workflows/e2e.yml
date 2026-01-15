@@ -81,8 +81,19 @@ jobs:
         run: |
           npm run build
 
+      - name: Check Netlify secret availability
+        id: check_netlify_secrets
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        run: |
+          if [ -n "$NETLIFY_AUTH_TOKEN" ]; then
+            echo "has_netlify=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_netlify=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Deploy to Netlify (optional)
-        if: ${{ secrets.NETLIFY_AUTH_TOKEN != '' }}
+        if: ${{ steps.check_netlify_secrets.outputs.has_netlify == 'true' }}
         working-directory: ./frontend
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
@@ -101,27 +112,34 @@ jobs:
           OCR_API_KEY: ${{ secrets.OCR_API_KEY || '' }}
         run: |
           nohup uvicorn main:app --host 0.0.0.0 --port 8000 &
-          # Wait for health endpoint
+          # Wait for health endpoint (fail on HTTP 5xx/4xx as well)
           for i in {1..30}; do
-            if curl -sS http://localhost:8000/health >/dev/null; then
-              echo "Backend healthy" && break
+            if curl -sSf http://localhost:8000/health >/dev/null; then
+              echo "Backend healthy"
+              exit 0
             fi
             echo "Waiting for backend..."
             sleep 2
           done
+          echo "Backend failed to start"
+          if [ -f nohup.out ]; then cat nohup.out; fi
+          exit 1
 
       - name: Start frontend (serve built site when not deploying externally)
         working-directory: ./frontend
         run: |
-          if [ -z "${{ env.DEPLOY_URL }}" ]; then
-            npm i -g http-server
-            nohup http-server dist -p 5173 --silent &
+          if [ -z "$DEPLOY_URL" ]; then
+            nohup npx -y http-server dist -p 5173 --silent &
             for i in {1..20}; do
-              if curl -sS http://localhost:5173 >/dev/null; then
-                echo "Frontend (built) healthy" && break
+              if curl -sSf http://localhost:5173 >/dev/null; then
+                echo "Frontend (built) healthy"
+                exit 0
               fi
               sleep 1
             done
+            echo "Frontend failed to start"
+            if [ -f nohup.out ]; then cat nohup.out; fi
+            exit 1
           else
             echo "External preview available: $DEPLOY_URL"
           fi
@@ -129,9 +147,9 @@ jobs:
       - name: Run Playwright tests
         working-directory: ./frontend
         env:
-          BASE_URL: ${{ env.DEPLOY_URL || 'http://localhost:5173' }}
           VITE_API_KEY: ${{ secrets.STAGING_API_KEY || '' }}
         run: |
+          export BASE_URL="${DEPLOY_URL:-http://localhost:5173}"
           echo "Using BASE_URL=$BASE_URL"
           npx playwright test --config=playwright.config.ts
 

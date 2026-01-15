@@ -64,9 +64,11 @@ jobs:
 
       - name: Push image to ECR
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
         run: |
-          IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${{ github.sha }}
-          LATEST_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:latest
+          IMAGE_URI=${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${{ github.sha }}
+          LATEST_URI=${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:latest
           docker tag al-ocr-service:${{ github.sha }} $IMAGE_URI
           docker tag al-ocr-service:${{ github.sha }} $LATEST_URI
           docker push $IMAGE_URI
@@ -74,6 +76,8 @@ jobs:
 
       - name: Update Lambda image
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
         run: |
-          IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${{ github.sha }}
+          IMAGE_URI=${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${{ github.sha }}
           aws lambda update-function-code --function-name $LAMBDA_FUNCTION_NAME --image-uri $IMAGE_URI
