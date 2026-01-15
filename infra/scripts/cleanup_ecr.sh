@@ -46,7 +46,7 @@ if [[ "$MODE" == "older-than" ]]; then
   echo "Days:       $DAYS"
 fi
 
-echo "\nPreviewing images...\n"
+printf '\nPreviewing images...\n\n'
 if [[ "$MODE" == "untagged" ]]; then
   aws ecr describe-images --repository-name "$REPO" --region "$REGION" --output json \
     | jq -r '.imageDetails[] | select(.imageTags==null) | [.imageDigest, (.imagePushedAt // "" )] | @tsv' || true
