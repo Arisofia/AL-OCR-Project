@@ -98,12 +98,12 @@ class PixelReconstructor:
         return cv2.inpaint(image, final_mask, 3, cv2.INPAINT_TELEA)
 
     @staticmethod
-    def handle_pixelation(image: np.ndarray, block_size: int = 8) -> np.ndarray:
+    def handle_pixelation(image: np.ndarray, _block_size: int = 8) -> np.ndarray:
         """
         Attempts to reverse pixelation by applying a bilateral filter
         to smooth block boundaries while preserving possible text edges.
         """
-        # block_size is currently unused but kept for interface consistency
+        # _block_size is currently unused but kept for interface consistency
         return cv2.bilateralFilter(image, 9, 75, 75)
 
     @staticmethod
@@ -138,7 +138,7 @@ def deblur_wiener(img: np.ndarray, kernel: np.ndarray = None) -> np.ndarray:
 
     img_f = img.astype("float32") / 255.0
     try:
-        import scipy.signal as signal
+        from scipy import signal
 
         wiener_filtered = signal.wiener(img_f)
         return np.clip(wiener_filtered * 255.0, 0, 255).astype("uint8")

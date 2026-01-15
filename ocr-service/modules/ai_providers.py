@@ -6,7 +6,7 @@ Used for advanced document reconstruction and verification.
 import base64
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Any, Dict
 
 import httpx
 
@@ -23,7 +23,6 @@ class VisionProvider(ABC):
         """
         Processes an image with a prompt to reconstruct or analyze content.
         """
-        pass
 
 
 class OpenAIVisionProvider(VisionProvider):
@@ -75,8 +74,14 @@ class OpenAIVisionProvider(VisionProvider):
                     "text": data["choices"][0]["message"]["content"],
                     "model": "gpt-4o",
                 }
+            except httpx.HTTPError as e:
+                logger.error("OpenAI Vision HTTP error: %s", e)
+                return {"error": f"OpenAI HTTP error: {e}"}
+            except (KeyError, IndexError) as e:
+                logger.error("OpenAI Vision response parsing failed: %s", e)
+                return {"error": "Unexpected response format from OpenAI"}
             except Exception as e:
-                logger.error("OpenAI Vision call failed: %s", e)
+                logger.error("OpenAI Vision unexpected error: %s", e)
                 return {"error": str(e)}
 
 
@@ -103,6 +108,9 @@ class GeminiVisionProvider(VisionProvider):
         except ImportError:
             logger.error("google-generativeai package not installed")
             return {"error": "Gemini provider not available: package missing"}
+        except AttributeError as e:
+            logger.error("Gemini Vision response parsing failed: %s", e)
+            return {"error": "Invalid response structure from Gemini"}
         except Exception as e:
-            logger.error("Gemini Vision call failed: %s", e)
+            logger.error("Gemini Vision unexpected error: %s", e)
             return {"error": str(e)}

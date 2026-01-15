@@ -3,6 +3,7 @@ Test suite for the OCR Lambda handler.
 """
 
 from unittest.mock import MagicMock, patch
+
 import pytest
 from lambda_handler import handler
 
@@ -55,10 +56,10 @@ def test_handler_textract_failure(s3_event):
         assert response == {"status": "partial_failure", "failed": 1}
         mock_storage.save_json.assert_called_once()
         args, _ = mock_storage.save_json.call_args
-        assert "error" in args[0]
-        assert "Textract boom" in args[0]["error"]
+        assert args[0]["error"] == "internal_pipeline_failure"
+        assert "Textract boom" in args[0]["message"]
         assert "requestId" in args[0]
-        assert args[0]["requestId"] == "N/A"
+        assert args[0]["requestId"] == "local-test"
 
 
 def test_handler_missing_info():
@@ -67,7 +68,9 @@ def test_handler_missing_info():
     with patch("lambda_handler.logger") as mock_logger:
         response = handler(bad_event, None)
         assert response == {"status": "ok"}
-        mock_logger.warning.assert_called_with("Payload error: Missing S3 bucket or key reference")
+        mock_logger.warning.assert_called_with(
+            "Payload error: Missing S3 bucket or key reference"
+        )
 
 
 def test_handler_with_aws_request_id(s3_event):
@@ -82,8 +85,10 @@ def test_handler_with_aws_request_id(s3_event):
             "Error": {"Code": "AccessDenied", "Message": "No access"},
             "ResponseMetadata": {"RequestId": "123-456-789"}
         }
-        mock_textract.analyze_document.side_effect = ClientError(error_response, "AnalyzeDocument")
-        
+        mock_textract.analyze_document.side_effect = ClientError(
+            error_response, "AnalyzeDocument"
+        )
+
         response = handler(s3_event, None)
         assert response == {"status": "partial_failure", "failed": 1}
 

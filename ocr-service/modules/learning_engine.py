@@ -5,12 +5,12 @@ This module provides functionality to store and retrieve document patterns
 using Supabase, enabling the service to learn from historical data.
 """
 
-import logging
 import asyncio
-from typing import Dict, Any, Optional
+import logging
+from typing import Any, Dict, Optional
 
-from supabase import create_client, Client
 from config import get_settings
+from supabase import Client, create_client
 
 logger = logging.getLogger("ocr-service.learning")
 
@@ -33,7 +33,7 @@ class LearningEngine:
                 self.client = create_client(
                     self.settings.supabase_url, self.settings.supabase_service_role
                 )
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 logger.error("Failed to initialize Supabase client: %s", e)
 
     async def learn_from_result(

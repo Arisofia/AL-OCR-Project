@@ -8,8 +8,8 @@ supporting environment variable overrides and LRU caching for performance.
 from functools import lru_cache
 from typing import Optional
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -47,6 +47,10 @@ class Settings(BaseSettings):
 
     enable_reconstruction: bool = False
     ocr_iterations: int = 3
+    
+    # Security and Environment
+    environment: str = "development"
+    allowed_origins: list[str] = ["*"]
 
     # External AI Services
     openai_api_key: Optional[str] = None

@@ -1,6 +1,5 @@
-from unittest.mock import patch, MagicMock
-
 import sys
+from unittest.mock import MagicMock, patch
 
 # Mangum isn't available in test env; provide a dummy before importing main
 sys.modules.setdefault("mangum", MagicMock(Mangum=MagicMock()))
@@ -11,10 +10,10 @@ sys.modules.setdefault("modules.ocr_engine", MagicMock(IterativeOCREngine=MagicM
 sys.modules.setdefault("modules.ocr_config", MagicMock(EngineConfig=MagicMock()))
 sys.modules.setdefault("modules.processor", MagicMock(OCRProcessor=MagicMock()))
 
-from fastapi.testclient import TestClient  # noqa: E402
-
-from main import app  # noqa: E402
 from config import get_settings  # noqa: E402
+# pylint: disable=wrong-import-position
+from fastapi.testclient import TestClient  # noqa: E402
+from main import app  # noqa: E402
 
 client = TestClient(app)
 
@@ -42,7 +41,7 @@ def test_generate_presigned_post_success(mock_boto):
 
 
 @patch("boto3.client")
-def test_generate_presigned_post_missing_bucket(mock_boto):
+def test_generate_presigned_post_missing_bucket(_mock_boto):
     settings = get_settings()
     settings.s3_bucket_name = None
 
@@ -51,4 +50,4 @@ def test_generate_presigned_post_missing_bucket(mock_boto):
 
     response = client.post("/presign", json=body, headers=headers)
     assert response.status_code == 500
-    assert response.json()["detail"] == "Infrastructure failure: S3 bucket not configured"
+    assert response.json()["detail"] == "S3 bucket not configured"

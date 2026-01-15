@@ -1,5 +1,6 @@
 import os
 from unittest.mock import patch
+
 from fastapi.testclient import TestClient
 from main import app
 
@@ -31,8 +32,8 @@ def test_reconstruction_enabled(tmp_path, monkeypatch):
     )
     if not os.path.exists(sample):
         # Create a dummy image for the test if the sample is missing
-        import numpy as np
         import cv2
+        import numpy as np
 
         dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
         cv2.putText(

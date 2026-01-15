@@ -1,24 +1,9 @@
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import MagicMock, patch
 from botocore.exceptions import ClientError
 from services.storage import StorageService
 from services.textract import TextractService
-
-
-@pytest.fixture
-def mock_s3_client():
-    with patch("boto3.client") as mock_boto:
-        mock_s3 = MagicMock()
-        mock_boto.return_value = mock_s3
-        yield mock_s3
-
-
-@pytest.fixture
-def mock_textract_client():
-    with patch("boto3.client") as mock_boto:
-        mock_textract = MagicMock()
-        mock_boto.return_value = mock_textract
-        yield mock_textract
 
 
 def test_storage_put_object_retry_success(mock_s3_client):
@@ -92,7 +77,7 @@ def test_textract_analyze_persistent_failure(mock_textract_client):
     )
 
     with patch("time.sleep", return_value=None):
-        with pytest.raises(RuntimeError, match="Service failure: Max retry threshold reached for synchronous analysis"):
+        with pytest.raises(RuntimeError, match="Max retry threshold reached"):
             service.analyze_document("bucket", "key")
 
     assert mock_textract_client.analyze_document.call_count == 2

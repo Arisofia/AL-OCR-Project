@@ -2,8 +2,8 @@
 Unit tests for the OCR engine and image processing modules.
 """
 
-import numpy as np
 import cv2
+import numpy as np
 from modules import ImageEnhancer
 
 

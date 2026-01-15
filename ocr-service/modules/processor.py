@@ -5,11 +5,11 @@ Coordinates OCR pipelines with automated S3 storage integration.
 
 import logging
 import time
-from typing import Dict, Any
+from typing import Any, Dict
 
-from fastapi import UploadFile, HTTPException
-
+from fastapi import HTTPException, UploadFile
 from services.storage import StorageService
+
 from .ocr_engine import IterativeOCREngine
 
 logger = logging.getLogger("ocr-service.processor")

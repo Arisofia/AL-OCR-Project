@@ -2,8 +2,8 @@
 Entry point for ocr-service modules.
 """
 
-from .ocr_engine import IterativeOCREngine
 from .advanced_recon import AdvancedPixelReconstructor
+from .ocr_engine import IterativeOCREngine
 
 try:
     from ocr_reconstruct.modules.enhance import ImageEnhancer

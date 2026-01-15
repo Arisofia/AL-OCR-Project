@@ -1,5 +1,6 @@
 [MASTER]
-ignore=CVS
+init-hook='import sys, os; root = os.path.abspath("."); sys.path.extend([root, os.path.join(root, "ocr-service"), os.path.join(root, "ocr_reconstruct")])'
+ignore=CVS,.venv,.venv_test,.venv311,.venv*
 ignore-patterns=
 persistent=yes
 load-plugins=
@@ -23,15 +24,16 @@ disable=
 
 [REPORTS]
 output-format=text
-files-output=no
 reports=no
 evaluation=10 * ((10 - 5 * float(fatal + error + warning + refactor + convention) / statement) or 1)
 
 [FORMAT]
 max-line-length=88
-layout=
 expected-line-ending-format=
 ignore-long-lines=^\s*(# )?<?https?://\S+>?$
+
+[TYPECHECK]
+generated-members=cv2.*,numpy.*,PIL.Image.*,ImageFilter.*,Resampling.*
 
 [BASIC]
 good-names=i,j,k,ex,Run,_,e,m,s3,id,se

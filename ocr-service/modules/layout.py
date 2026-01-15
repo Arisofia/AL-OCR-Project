@@ -4,7 +4,7 @@ Used to identify regions of interest and classify document structure.
 """
 
 import logging
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 import cv2
 import numpy as np

@@ -1,5 +1,6 @@
 import os
-from modules.pipeline import IterativeOCR
+
+from ocr_reconstruct.modules.pipeline import IterativeOCR
 
 
 def test_pipeline_on_pixelated_sample(tmp_path):
@@ -11,7 +12,7 @@ def test_pipeline_on_pixelated_sample(tmp_path):
     )
 
     worker = IterativeOCR(iterations=2, save_iterations=True, output_dir=str(tmp_path))
-    text, meta = worker.process_file(img_path)
+    text, _meta = worker.process_file(img_path)
     assert isinstance(text, str)
     # We expect at least some characters recovered for synthetic sample
     assert len(text) >= 1

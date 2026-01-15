@@ -3,14 +3,14 @@ Service for interacting with Amazon S3.
 """
 
 import json
-import uuid
 import logging
 import time
-from typing import Optional, Any
+import uuid
+from typing import Any, Optional
 
 import boto3
-from botocore.exceptions import ClientError
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger("ocr-service.storage")
 

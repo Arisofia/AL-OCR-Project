@@ -6,10 +6,12 @@ for obscured documents using multiple AI providers.
 """
 
 import logging
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 from config import get_settings
-from .ai_providers import VisionProvider, OpenAIVisionProvider, GeminiVisionProvider
+
+from .ai_providers import (GeminiVisionProvider, OpenAIVisionProvider,
+                           VisionProvider)
 
 logger = logging.getLogger("ocr-service.advanced-recon")
 
@@ -79,7 +81,7 @@ class AdvancedPixelReconstructor:
             if "error" in result and fallback:
                 return await self._try_fallback(image_bytes, prompt, exclude=primary)
             return result
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error("Primary provider %s failed: %s", primary, e)
             if fallback:
                 return await self._try_fallback(image_bytes, prompt, exclude=primary)
@@ -98,7 +100,7 @@ class AdvancedPixelReconstructor:
                     result = await provider.reconstruct(image_bytes, prompt)
                     if "error" not in result:
                         return result
-                except Exception as e:
+                except Exception as e:  # pylint: disable=broad-exception-caught
                     logger.warning("Fallback to %s failed: %s", name, e)
 
         return {"error": "All AI providers failed"}

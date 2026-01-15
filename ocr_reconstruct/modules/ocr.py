@@ -2,9 +2,9 @@
 Thin wrapper around pytesseract to centralize config and calls.
 """
 
-import pytesseract
 import cv2
 import numpy as np
+import pytesseract
 
 
 def image_to_text(

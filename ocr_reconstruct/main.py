@@ -1,7 +1,8 @@
 """CLI entrypoint for the iterative OCR + reconstruction project."""
 
 import argparse
-from modules.pipeline import IterativeOCR
+
+from ocr_reconstruct.modules.pipeline import IterativeOCR
 
 
 def parse_args():

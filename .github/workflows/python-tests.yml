@@ -45,8 +45,10 @@ jobs:
 
       - name: Install Linting Tools
         run: |
-          pip install flake8 pylint
-
+          pip install flake8 pylint mypy types-requests types-python-dateutil
+      - name: Run Type Checking (mypy)
+        run: |
+          mypy ocr-service ocr_reconstruct --ignore-missing-imports --no-strict-optional
       - name: Run Linting (flake8)
         run: |
           # Use the root .flake8 config if it exists

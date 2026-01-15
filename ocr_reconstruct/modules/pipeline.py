@@ -3,15 +3,16 @@ High-fidelity iterative orchestration pipeline.
 Coordinates image enhancement, pixel reconstruction, and Tesseract-based OCR loops.
 """
 
+import logging
 import os
+from typing import Any, Dict, List, Optional, Tuple
+
 import cv2
 import numpy as np
-import logging
-from typing import Tuple, Dict, Any, Optional, List
 
 from .enhance import ImageEnhancer
-from .reconstruct import PixelReconstructor
 from .ocr import image_to_text
+from .reconstruct import PixelReconstructor
 
 logger = logging.getLogger("ocr-reconstruct.pipeline")
 
@@ -53,7 +54,7 @@ class IterativeOCR:
         iteration: int,
     ) -> Tuple[str, np.ndarray, List[Dict[str, Any]]]:
         """
-        Applies advanced heuristic strategies (Depixelation, Inpainting) for low-confidence scenarios.
+        Applies heuristic strategies (Depixelation, Inpainting) for low confidence.
         """
         strategies_meta = []
         best_local_text = ""
@@ -138,7 +139,7 @@ class IterativeOCR:
 
         img = cv2.imread(image_path)
         if img is None:
-            raise ValueError(f"Payload error: Could not decode source image from {image_path}")
+            raise ValueError(f"Could not decode image from {image_path}")
 
         text, _, meta = self.process_image(img)
         return text, meta

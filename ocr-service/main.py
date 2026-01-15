@@ -6,25 +6,23 @@ Provides endpoints for document intelligence and S3 lifecycle management.
 import logging
 import time
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Security, Request
+import boto3
+from botocore.exceptions import ClientError
+from config import Settings, get_settings
+from fastapi import (Depends, FastAPI, File, HTTPException, Request, Security,
+                     UploadFile)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
 from mangum import Mangum
-import boto3
-from botocore.exceptions import ClientError
-
-from config import get_settings, Settings
-from schemas import (
-    OCRResponse,
-    HealthResponse,
-    ReconStatusResponse,
-    PresignRequest,
-    PresignResponse,
-)
-from services.storage import StorageService
-from modules.ocr_engine import IterativeOCREngine
 from modules.ocr_config import EngineConfig
+from modules.ocr_engine import IterativeOCREngine
 from modules.processor import OCRProcessor
+from schemas import (HealthResponse, OCRResponse, PresignRequest,
+                     PresignResponse, ReconStatusResponse)
+from services.storage import StorageService
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 # Initialize enterprise-grade logging
 logging.basicConfig(
@@ -34,16 +32,43 @@ logger = logging.getLogger("ocr-service")
 
 settings = get_settings()
 
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
     title=settings.app_name,
     description=settings.app_description,
     version=settings.version,
+    docs_url="/docs" if settings.environment != "production" else None,
+    redoc_url="/redoc" if settings.environment != "production" else None,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+@app.middleware("http")
+async def add_process_time_and_logging(request: Request, call_next):
+    """Logs request lifecycle and adds performance metadata to responses."""
+    start_time = time.time()
+    
+    # Extract request ID for traceability
+    request_id = get_request_id(request)
+    
+    logger.info("Request started | Path: %s | Method: %s | ID: %s", 
+                request.url.path, request.method, request_id)
+    
+    response = await call_next(request)
+    
+    process_time = time.time() - start_time
+    response.headers["X-Process-Time"] = f"{process_time:.4f}s"
+    response.headers["X-Request-ID"] = request_id
+    
+    logger.info("Request finished | Path: %s | Status: %d | Latency: %.4fs | ID: %s",
+                request.url.path, response.status_code, process_time, request_id)
+    
+    return response
 
 # Global CORS Policy
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -133,7 +158,9 @@ async def recon_status(
 
 
 @app.post("/ocr", response_model=OCRResponse)
+@limiter.limit("10/minute")
 async def perform_ocr(
+    request: Request,
     file: UploadFile = File(...),
     reconstruct: bool = False,
     advanced: bool = False,
@@ -160,7 +187,9 @@ async def perform_ocr(
 
 
 @app.post("/presign", response_model=PresignResponse)
+@limiter.limit("5/minute")
 async def generate_presigned_post(
+    request: Request,
     req: PresignRequest,
     _api_key: str = Depends(get_api_key),
     curr_settings: Settings = Depends(get_settings),

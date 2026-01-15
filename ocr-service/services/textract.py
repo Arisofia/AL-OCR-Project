@@ -2,9 +2,9 @@
 Amazon Textract integration service for high-throughput financial document intelligence.
 """
 
-import time
 import logging
-from typing import Dict, Any, Optional, List
+import time
+from typing import Any, Dict, List, Optional
 
 import boto3
 from botocore.config import Config

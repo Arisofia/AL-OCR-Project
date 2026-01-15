@@ -1,12 +1,12 @@
-import numpy as np
 import cv2
+import numpy as np
 from modules.layout import DocumentLayoutAnalyzer
 
 
 def test_detect_regions_empty():
     # Test with empty bytes
     regions = DocumentLayoutAnalyzer.detect_regions(b"")
-    assert regions == []
+    assert not regions
 
 
 def test_detect_regions_real_image():

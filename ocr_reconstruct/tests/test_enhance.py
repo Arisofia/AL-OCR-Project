@@ -1,6 +1,9 @@
 import os
+
 import cv2
-from modules.enhance import to_gray, sharpen, adaptive_threshold
+
+from ocr_reconstruct.modules.enhance import (adaptive_threshold, sharpen,
+                                             to_gray)
 
 
 def test_sharpen_and_threshold():

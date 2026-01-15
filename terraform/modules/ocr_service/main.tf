@@ -2,6 +2,33 @@ resource "aws_s3_bucket" "documents" {
   bucket = var.s3_bucket_name
 }
 
+data "aws_caller_identity" "current" {}
+
+resource "aws_s3_bucket_versioning" "documents_versioning" {
+  bucket = aws_s3_bucket.documents.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "documents_lifecycle" {
+  bucket = aws_s3_bucket.documents.id
+
+  rule {
+    id     = "archive-old-docs"
+    status = "Enabled"
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+
+    expiration {
+      days = 90
+    }
+  }
+}
+
 resource "aws_s3_bucket_public_access_block" "documents_block" {
   bucket = aws_s3_bucket.documents.id
 
@@ -21,16 +48,85 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "documents_encrypt
   }
 }
 
+resource "aws_kms_key" "ocr_key" {
+  description             = "KMS key for AL OCR ECR encryption"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow access for Key Administrators"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action = [
+          "kms:Create*",
+          "kms:Describe*",
+          "kms:Enable*",
+          "kms:List*",
+          "kms:Put*",
+          "kms:Update*",
+          "kms:Revoke*",
+          "kms:Disable*",
+          "kms:Get*",
+          "kms:Delete*",
+          "kms:TagResource",
+          "kms:UntagResource",
+          "kms:ScheduleKeyDeletion",
+          "kms:CancelKeyDeletion"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow use of the key"
+        Effect = "Allow"
+        Principal = {
+          AWS = [
+            aws_iam_role.github_actions_role.arn,
+            aws_iam_role.lambda_role.arn
+          ]
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_kms_alias" "ocr_key_alias" {
+  name          = "alias/al-ocr-key"
+  target_key_id = aws_kms_key.ocr_key.key_id
+}
+
 resource "aws_ecr_repository" "ocr_repo" {
   name                 = var.ecr_repository_name
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = "IMMUTABLE"
 
   image_scanning_configuration {
     scan_on_push = true
   }
 
   encryption_configuration {
-    encryption_type = "AES256"
+    encryption_type = "KMS"
+    kms_key        = aws_kms_key.ocr_key.arn
   }
 }
 
@@ -162,8 +258,11 @@ resource "aws_iam_role_policy" "github_actions_policy" {
           "lambda:GetFunction",
           "lambda:GetFunctionConfiguration"
         ]
-        # Restrict to functions with the al-ocr- prefix in this account (safer than '*')
-        Resource = ["arn:aws:lambda:${var.aws_region}:${var.account_id}:function:al-ocr-*"]
+        # Restrict to functions with the al-ocr- prefix (case-insensitive support)
+        Resource = [
+          "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:al-ocr-*",
+          "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:AL-OCR-*"
+        ]
       },
       {
         Effect = "Allow"

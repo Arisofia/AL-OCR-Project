@@ -12,8 +12,17 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import './App.css'
 
-const API_BASE = 'http://localhost:8000'
-const API_KEY = 'default_secret_key'
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
+const API_KEY = import.meta.env.VITE_API_KEY
+
+// Initialize axios instance for enterprise-grade consistency
+const api = axios.create({
+  baseURL: API_BASE,
+  headers: {
+    'X-API-KEY': API_KEY,
+    'Accept': 'application/json'
+  }
+})
 
 function App() {
   const [file, setFile] = useState(null)
@@ -25,7 +34,7 @@ function App() {
   useEffect(() => {
     const checkHealth = async () => {
       try {
-        const response = await axios.get(`${API_BASE}/health`)
+        const response = await api.get('/health')
         if (response.data.status === 'healthy') {
           setHealth('healthy')
         } else {
@@ -42,9 +51,10 @@ function App() {
     const selectedFile = e.target.files[0]
     if (selectedFile && selectedFile.type.startsWith('image/')) {
       setFile(selectedFile)
+      if (preview) URL.revokeObjectURL(preview)
       setPreview(URL.createObjectURL(selectedFile))
       setResult(null)
-    } else {
+    } else if (selectedFile) {
       alert('Please select a valid image file.')
     }
   }
@@ -56,16 +66,16 @@ function App() {
     formData.append('file', file)
 
     try {
-      const response = await axios.post(`${API_BASE}/ocr`, formData, {
+      const response = await api.post('/ocr', formData, {
         headers: {
-          'Content-Type': 'multipart/form-data',
-          'X-API-KEY': API_KEY
+          'Content-Type': 'multipart/form-data'
         }
       })
       setResult(response.data)
     } catch (error) {
       console.error('OCR Error:', error)
-      alert(error.response?.data?.detail || 'Error processing document')
+      const errorMsg = error.response?.data?.detail || 'Error processing document'
+      alert(`Status ${error.response?.status || 'Unknown'}: ${errorMsg}`)
     } finally {
       setLoading(false)
     }

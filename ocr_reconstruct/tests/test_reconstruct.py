@@ -1,6 +1,8 @@
 import os
+
 import cv2
-from modules.reconstruct import depixelate_naive
+
+from ocr_reconstruct.modules.reconstruct import depixelate_naive
 
 
 def test_depixelate_naive():

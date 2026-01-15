@@ -8,13 +8,10 @@ RUN yum install -y \
     tesseract-langpack-eng \
     mesa-libGL
 
-# Copy requirements.txt and install dependencies
-COPY requirements.txt .
-
 # Upgrade pip and wheel so we prefer binary wheels when available
 RUN python -m pip install --upgrade pip setuptools wheel
 
-# Install build tools and libraries required to compile packages like NumPy/SciPy if wheels are unavailable
+# Install build tools and libraries required to compile packages
 RUN yum install -y \
     gcc \
     gcc-c++ \
@@ -26,15 +23,20 @@ RUN yum install -y \
     pkgconfig \
     make
 
-# Install Python dependencies (prefer binary wheels to avoid source builds)
+# Copy ocr_reconstruct first as it's a dependency
+COPY ocr_reconstruct ./ocr_reconstruct
+RUN pip install --prefer-binary --no-cache-dir -e ./ocr_reconstruct
+
+# Copy requirements.txt and install dependencies
+COPY ocr-service/requirements.txt .
 RUN pip install --prefer-binary --no-cache-dir -r requirements.txt
 
 # Create a non-root user for security
-RUN useradd -m appuser
+RUN useradd -m appuser && chown -R appuser:appuser /var/task
 USER appuser
 
 # Copy the application code
-COPY . .
+COPY ocr-service/ .
 
 # Set the CMD to the Lambda S3/Textract handler
 CMD [ "lambda_handler.handler" ]

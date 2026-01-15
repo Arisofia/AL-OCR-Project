@@ -7,13 +7,12 @@ persistence.
 import logging
 import os
 import urllib.parse
-from typing import Dict, Any, Tuple
+from typing import Any, Dict, Tuple
 
 from botocore.exceptions import ClientError
-
-from services.textract import TextractService
-from services.storage import StorageService
 from config import get_settings
+from services.storage import StorageService
+from services.textract import TextractService
 
 logger = logging.getLogger("ocr-service.lambda")
 logger.setLevel(logging.INFO)

@@ -20,7 +20,7 @@ def test_import_and_process_sample():
 
     with open(sample, "rb") as fh:
         img_bytes = fh.read()
-        text, out_bytes, meta = process_bytes(img_bytes, iterations=1)
+        text, _out_bytes, meta = process_bytes(img_bytes, iterations=1)
 
     assert isinstance(text, str)
     # out_bytes may be None if encoding failed, but meta should be present

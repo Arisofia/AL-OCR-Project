@@ -1,23 +1,5 @@
-import pytest
-from unittest.mock import MagicMock, patch
 from services.storage import StorageService
 from services.textract import TextractService
-
-
-@pytest.fixture
-def mock_s3_client():
-    with patch("boto3.client") as mock_boto:
-        mock_s3 = MagicMock()
-        mock_boto.return_value = mock_s3
-        yield mock_s3
-
-
-@pytest.fixture
-def mock_textract_client():
-    with patch("boto3.client") as mock_boto:
-        mock_textract = MagicMock()
-        mock_boto.return_value = mock_textract
-        yield mock_textract
 
 
 def test_storage_service_upload_file(mock_s3_client):

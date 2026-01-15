@@ -4,16 +4,16 @@ Manages iterative cycles, layout analysis, and pixel reconstruction.
 """
 
 import logging
-from typing import Optional, Any, Tuple, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
 import pytesseract
 
 try:
+    from ocr_reconstruct import process_bytes as recon_process_bytes
     from ocr_reconstruct.modules.enhance import ImageEnhancer
     from ocr_reconstruct.modules.reconstruct import PixelReconstructor
-    from ocr_reconstruct import process_bytes as recon_process_bytes
     RECON_AVAILABLE = True
 except ImportError:
     ImageEnhancer = None
@@ -23,12 +23,13 @@ except ImportError:
 
 
 from services.textract import TextractService
+
 from .advanced_recon import AdvancedPixelReconstructor
-from .learning_engine import LearningEngine
-from .layout import DocumentLayoutAnalyzer
 from .confidence import ConfidenceScorer
-from .ocr_config import TesseractConfig, EngineConfig
 from .image_toolkit import ImageToolkit
+from .layout import DocumentLayoutAnalyzer
+from .learning_engine import LearningEngine
+from .ocr_config import EngineConfig, TesseractConfig
 
 logger = logging.getLogger("ocr-service.engine")
 
