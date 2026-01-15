@@ -15,13 +15,32 @@ import './App.css'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 const API_KEY = import.meta.env.VITE_API_KEY
 
+// Validate API key configuration early to avoid silent failures
+if (!API_KEY) {
+  // Fail fast with a clear configuration error
+  // This surfaces prominently in the browser console and prevents the app
+  // from running in a misconfigured state.
+  // If you prefer a soft failure, downgrade this to console.error only.
+  // eslint-disable-next-line no-console
+  console.error(
+    '[Config Error] VITE_API_KEY is not set. ' +
+      'Define VITE_API_KEY in your environment (e.g. .env.local) before running the frontend.'
+  )
+  throw new Error('Missing VITE_API_KEY environment variable')
+}
+
 // Initialize axios instance for enterprise-grade consistency
+const apiHeaders = {
+  Accept: 'application/json'
+}
+
+if (API_KEY) {
+  apiHeaders['X-API-KEY'] = API_KEY
+}
+
 const api = axios.create({
   baseURL: API_BASE,
-  headers: {
-    'X-API-KEY': API_KEY,
-    'Accept': 'application/json'
-  }
+  headers: apiHeaders
 })
 
 function App() {
