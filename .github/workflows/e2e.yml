@@ -1,3 +1,4 @@
+---
 name: Playwright E2E
 
 on:
@@ -99,8 +100,7 @@ jobs:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         id: netlify_deploy
         run: |
-          npm i -g netlify-cli
-          npx netlify deploy --dir=dist --json --auth="$NETLIFY_AUTH_TOKEN" > netlify-deploy.json
+          npx -y netlify-cli deploy --dir=dist --json --auth="$NETLIFY_AUTH_TOKEN" > netlify-deploy.json
           DEPLOY_URL=$(jq -r '.deploy_url' netlify-deploy.json)
           echo "DEPLOY_URL=$DEPLOY_URL" >> $GITHUB_ENV
           echo "Deployed preview to $DEPLOY_URL"
@@ -154,8 +154,8 @@ jobs:
           npx playwright test --config=playwright.config.ts
 
       - name: Upload Playwright artifacts
-        if: failure() || always()
-        uses: actions/upload-artifact@v4
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-artifacts
           path: |
