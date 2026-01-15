@@ -113,7 +113,11 @@ class IterativeOCREngine:
             rectified = self.reconstructor.remove_redactions(enhanced)
             enhanced = self.reconstructor.remove_color_overlay(rectified)
 
-        gray = cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY) if len(enhanced.shape) == 3 else enhanced
+        gray = (
+            cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY)
+            if len(enhanced.shape) == 3
+            else enhanced
+        )
         return self.enhancer.apply_threshold(gray) if self.enhancer else gray
 
     def _perform_ocr_iteration(
@@ -232,7 +236,7 @@ class IterativeOCREngine:
             text, confidence, method, current_img = self._run_single_iteration(
                 current_img, i, use_reconstruction, best_confidence, layout_regions
             )
-            
+
             iteration_history.append(
                 {
                     "iteration": i + 1,
@@ -241,25 +245,30 @@ class IterativeOCREngine:
                     "method": method,
                     "preview_text": f"{text[:50]}..." if len(text) > 50 else text,
                 }
-                if text is not None else {"iteration": i + 1, "error": "failed"}
+                if text is not None
+                else {"iteration": i + 1, "error": "failed"}
             )
 
             if text and confidence > best_confidence:
                 best_text, best_confidence = text, confidence
 
-        return self._build_process_response(best_text, best_confidence, iteration_history, recon_info)
+        return self._build_process_response(
+            best_text, best_confidence, iteration_history, recon_info
+        )
 
     def _run_single_iteration(
-        self, 
-        current_img: np.ndarray, 
-        iteration: int, 
-        use_reconstruction: bool, 
-        best_confidence: float, 
-        layout_regions: List[Dict[str, Any]]
+        self,
+        current_img: np.ndarray,
+        iteration: int,
+        use_reconstruction: bool,
+        best_confidence: float,
+        layout_regions: List[Dict[str, Any]],
     ) -> Tuple[Optional[str], float, str, np.ndarray]:
         """Runs a single OCR iteration with adaptive strategies."""
         logger.info(
-            "Iteration loop | Progress: %s/%s", iteration + 1, self.config.max_iterations
+            "Iteration loop | Progress: %s/%s",
+            iteration + 1,
+            self.config.max_iterations,
         )
         try:
             text, thresh = self._perform_ocr_iteration(
@@ -277,18 +286,18 @@ class IterativeOCREngine:
             confidence = self.confidence_scorer.calculate(text)
             method = "region-based" if is_region_pass else "full-page"
             next_img = ImageToolkit.enhance_iteration(current_img)
-            
+
             return text, confidence, method, next_img
         except Exception:
             logger.error("Failure in iteration %s", iteration + 1)
             return None, 0.0, "failed", current_img
 
     def _build_process_response(
-        self, 
-        best_text: str, 
-        best_confidence: float, 
-        iteration_history: List[Dict[str, Any]], 
-        recon_info: Optional[Dict[str, Any]]
+        self,
+        best_text: str,
+        best_confidence: float,
+        iteration_history: List[Dict[str, Any]],
+        recon_info: Optional[Dict[str, Any]],
     ) -> dict:
         """Constructs the final response dictionary."""
         resp = {

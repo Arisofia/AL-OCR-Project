@@ -54,9 +54,7 @@ class LearningEngine:
 
         try:
             # Simple heartbeat query
-            self.client.table("learning_patterns").select("count").limit(
-                1
-            ).execute()
+            self.client.table("learning_patterns").select("count").limit(1).execute()
             self._last_check_result = True
         except Exception as e:
             logger.warning("Supabase health check failed: %s", e)
@@ -88,7 +86,8 @@ class LearningEngine:
             # Upsert into 'learning_patterns' in a background thread
             def _upsert() -> None:
                 if self.client:
-                    self.client.table("learning_patterns").upsert(data).execute()  # type: ignore
+                    table = self.client.table("learning_patterns")
+                    table.upsert(data).execute()  # type: ignore
 
             await asyncio.to_thread(_upsert)
         except Exception as e:

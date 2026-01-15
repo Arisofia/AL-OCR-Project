@@ -67,7 +67,9 @@ class Settings(BaseSettings):
 
     # Monitoring & Logging
     sentry_dsn: Optional[str] = Field(None, repr=False)
-    azure_application_insights_connection_string: Optional[str] = Field(None, repr=False)
+    azure_application_insights_connection_string: Optional[str] = Field(
+        None, repr=False
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"

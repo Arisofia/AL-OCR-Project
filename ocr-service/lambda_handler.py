@@ -9,7 +9,6 @@ import os
 import urllib.parse
 from typing import Any, Dict, Tuple
 
-import sentry_sdk
 from sentry_sdk.integrations.aws_lambda import AwsLambdaIntegration
 from botocore.exceptions import ClientError  # type: ignore
 
@@ -50,7 +49,7 @@ def process_record(record: Dict[str, Any], request_id: str = "N/A") -> None:
     textract_service, storage_service = get_services(bucket)
 
     # Standardize output naming convention for downstream consumption
-    out_key = f"{settings.output_prefix.rstrip('/')}/" f"{os.path.basename(key)}.json"
+    out_key = f"{settings.output_prefix.rstrip('/')}/{os.path.basename(key)}.json"
 
     try:
         # Route documents based on format requirements (Async for PDFs, Sync for images)

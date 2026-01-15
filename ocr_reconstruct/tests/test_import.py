@@ -6,6 +6,7 @@ from ocr_reconstruct.modules.pipeline import process_bytes
 def test_import_and_process_sample():
     # Generate samples if not present
     from ocr_reconstruct.tests.generate_samples import generate_all
+
     generate_all()
 
     sample = os.path.join(
@@ -13,9 +14,9 @@ def test_import_and_process_sample():
         "data",
         "sample_pixelated.png",
     )
-    assert os.path.exists(
-        sample
-    ), "Sample image missing; ensure generate_samples.py was run"
+    assert os.path.exists(sample), (
+        "Sample image missing; ensure generate_samples.py was run"
+    )
 
     with open(sample, "rb") as fh:
         img_bytes = fh.read()

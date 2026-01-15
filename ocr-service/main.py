@@ -55,7 +55,9 @@ app = FastAPI(
     redoc_url="/redoc" if settings.environment != "production" else None,
 )
 app.state.limiter = limiter
-app.add_exception_handler(cast(Type[Exception], RateLimitExceeded), _rate_limit_exceeded_handler)
+app.add_exception_handler(
+    cast(Type[Exception], RateLimitExceeded), _rate_limit_exceeded_handler
+)
 
 
 def get_request_id(request: Request) -> str:
@@ -335,7 +337,7 @@ async def get_status(job_id: str):
     data = r.get(f"job:{job_id}")
     if not data:
         return {"error": "Job not found"}
-    return json.loads(data)
+    return json.loads(cast(Any, data))
 
 
 @app.post("/al/trigger")
@@ -347,7 +349,9 @@ async def trigger_al_cycle(
     """Manually triggers an Active Learning cycle."""
     result = await orchestrator.run_cycle(n_samples=n_samples)
     if result.get("status") == "validation_failed":
-        raise HTTPException(status_code=422, detail="Data validation failed during AL cycle")
+        raise HTTPException(
+            status_code=422, detail="Data validation failed during AL cycle"
+        )
     return result
 
 
