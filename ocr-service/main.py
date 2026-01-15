@@ -7,20 +7,27 @@ import logging
 import time
 
 from config import Settings, get_settings
-from fastapi import (Depends, FastAPI, File, HTTPException, Request, Security,
-                     UploadFile)
+from fastapi import Depends, FastAPI, File, HTTPException, Request, Security, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
 from mangum import Mangum
 from modules.ocr_config import EngineConfig
 from modules.ocr_engine import IterativeOCREngine
 from modules.processor import OCRProcessor
-from schemas import (HealthResponse, OCRResponse, PresignRequest,
-                     PresignResponse, ReconStatusResponse)
+from schemas import (
+    HealthResponse,
+    OCRResponse,
+    PresignRequest,
+    PresignResponse,
+    ReconStatusResponse,
+)
 from services.storage import StorageService
-from utils.limiter import (Limiter, RateLimitExceeded,
-                           _rate_limit_exceeded_handler, init_limiter)
-from botocore.exceptions import ClientError
+from utils.limiter import (
+    RateLimitExceeded,
+    _rate_limit_exceeded_handler,
+    init_limiter,
+)
+from botocore.exceptions import ClientError  # type: ignore
 
 # Initialize enterprise-grade logging
 logging.basicConfig(
@@ -50,14 +57,6 @@ def get_request_id(request: Request) -> str:
     return "local-development"
 
 
-def get_request_id(request: Request) -> str:
-    """Extracts AWS Request ID from Mangum scope or defaults to local trace."""
-    scope = request.scope
-    if "aws.context" in scope:
-        return scope["aws.context"].aws_request_id
-    return "local-development"
-
-
 @app.middleware("http")
 async def add_process_time_and_logging(request: Request, call_next):
     """Logs request lifecycle and adds performance metadata to responses."""
@@ -66,8 +65,12 @@ async def add_process_time_and_logging(request: Request, call_next):
     # Extract request ID for traceability
     request_id = get_request_id(request)
 
-    logger.info("Request started | Path: %s | Method: %s | ID: %s",
-                request.url.path, request.method, request_id)
+    logger.info(
+        "Request started | Path: %s | Method: %s | ID: %s",
+        request.url.path,
+        request.method,
+        request_id,
+    )
 
     response = await call_next(request)
 
@@ -75,10 +78,16 @@ async def add_process_time_and_logging(request: Request, call_next):
     response.headers["X-Process-Time"] = f"{process_time:.4f}s"
     response.headers["X-Request-ID"] = request_id
 
-    logger.info("Request finished | Path: %s | Status: %d | Latency: %.4fs | ID: %s",
-                request.url.path, response.status_code, process_time, request_id)
+    logger.info(
+        "Request finished | Path: %s | Status: %d | Latency: %.4fs | ID: %s",
+        request.url.path,
+        response.status_code,
+        process_time,
+        request_id,
+    )
 
     return response
+
 
 # Global CORS Policy
 app.add_middleware(
@@ -215,27 +224,22 @@ async def generate_presigned_post(
     try:
         post = storage.generate_presigned_post(
             key=req.key,
-            content_type=req.content_type,
-            expires_in=req.expires_in,
+            content_type=req.content_type or "application/octet-stream",
+            expires_in=req.expires_in or 3600,
         )
     except ClientError as exc:
         request_id = exc.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
         logger.error("S3 Presign failed | RequestId: %s | Error: %s", request_id, exc)
         raise HTTPException(
-            status_code=500,
-            detail=f"S3 rejected request [{request_id}]"
+            status_code=500, detail=f"S3 rejected request [{request_id}]"
         ) from exc
     except RuntimeError as exc:
         logger.error("Configuration error during presign: %s", exc)
-        raise HTTPException(
-            status_code=500,
-            detail="S3 bucket not configured"
-        ) from exc
+        raise HTTPException(status_code=500, detail="S3 bucket not configured") from exc
     except Exception as exc:
         logger.exception("Unexpected failure during presign generation")
         raise HTTPException(
-            status_code=500,
-            detail="Could not generate presigned post"
+            status_code=500, detail="Could not generate presigned post"
         ) from exc
 
     return PresignResponse(url=post["url"], fields=post["fields"])

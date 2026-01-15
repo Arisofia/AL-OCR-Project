@@ -9,6 +9,9 @@ import cv2
 import numpy as np
 
 
+from typing import Optional
+
+
 class PixelReconstructor:
     """
     Implements logic to recover obscured pixels and remove overlays.
@@ -43,7 +46,7 @@ class PixelReconstructor:
         # Apply the logic to the full image
         full_pixels = image.reshape(-1, 3).astype(np.float32)
         # We can create a mask for the overlay color
-        overlay_color = centers[overlay_idx]
+        overlay_color = centers[overlay_idx]  # type: ignore
 
         # Calculate distance of each pixel to the overlay color
         dist = np.linalg.norm(full_pixels - overlay_color, axis=1)
@@ -53,7 +56,7 @@ class PixelReconstructor:
         mask = cv2.dilate(mask, np.ones((3, 3), np.uint8), iterations=1)
 
         # Inpaint the overlay areas with background color
-        bg_color = centers[bg_idx].astype(np.uint8).tolist()
+        bg_color = centers[bg_idx].astype(np.uint8).tolist()  # type: ignore
         result = image.copy()
         result[mask > 0] = bg_color
 
@@ -74,7 +77,7 @@ class PixelReconstructor:
         if len(image.shape) == 3:
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         else:
-            gray = image
+            gray = image  # type: ignore
 
         # Black boxes have very low intensity
         _, mask = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY_INV)
@@ -131,14 +134,14 @@ def inpaint_bbox(img: np.ndarray, mask: np.ndarray) -> np.ndarray:
     return cv2.inpaint(img, mask, 3, cv2.INPAINT_TELEA)
 
 
-def deblur_wiener(img: np.ndarray, kernel: np.ndarray = None) -> np.ndarray:
+def deblur_wiener(img: np.ndarray, kernel: Optional[np.ndarray] = None) -> np.ndarray:
     """A very simple Wiener-like deconvolution using a small kernel heuristic."""
     if kernel is None:
         kernel = np.array([[1, 1, 1], [1, 4, 1], [1, 1, 1]], dtype="float32") / 12.0
 
     img_f = img.astype("float32") / 255.0
     try:
-        from scipy import signal
+        from scipy import signal  # type: ignore
 
         wiener_filtered = signal.wiener(img_f)
         return np.clip(wiener_filtered * 255.0, 0, 255).astype("uint8")

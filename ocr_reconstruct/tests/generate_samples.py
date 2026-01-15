@@ -8,7 +8,7 @@ try:
     RESAMPLING = Image.Resampling
 except AttributeError:
     # Older Pillow versions
-    RESAMPLING = Image
+    RESAMPLING = Image  # type: ignore
 
 OUT_DIR = os.path.join(os.path.dirname(__file__), "data")
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -16,7 +16,7 @@ os.makedirs(OUT_DIR, exist_ok=True)
 try:
     DEFAULT_FONT = ImageFont.load_default()
 except Exception:  # pylint: disable=broad-exception-caught
-    DEFAULT_FONT = None
+    DEFAULT_FONT = None  # type: ignore
 
 
 def make_base(text="HELLO WORLD", size=(400, 120)):

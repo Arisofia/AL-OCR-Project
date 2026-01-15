@@ -7,11 +7,15 @@ import logging
 import uuid
 from typing import Any, Dict, Optional
 
-import boto3
-from botocore.config import Config
-from botocore.exceptions import ClientError
-from tenacity import (retry, stop_after_attempt, wait_exponential,
-                      retry_if_exception_type)
+import boto3  # type: ignore
+from botocore.config import Config  # type: ignore
+from botocore.exceptions import ClientError  # type: ignore
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 
 logger = logging.getLogger("ocr-service.storage")
 
@@ -129,11 +133,12 @@ class StorageService:
             return False
 
         try:
+
             @retry(
                 stop=stop_after_attempt(self.max_retries),
                 wait=wait_exponential(multiplier=0.1, min=0.1, max=2),
                 retry=retry_if_exception_type(ClientError),
-                reraise=True
+                reraise=True,
             )
             def _do_put():
                 logger.debug(
@@ -152,5 +157,7 @@ class StorageService:
 
             return _do_put()
         except Exception as e:
-            logger.error("Exceeded S3 put_object retry attempts or encountered error: %s", e)
+            logger.error(
+                "Exceeded S3 put_object retry attempts or encountered error: %s", e
+            )
             return False

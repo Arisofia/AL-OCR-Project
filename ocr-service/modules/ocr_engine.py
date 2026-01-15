@@ -9,16 +9,19 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
-import pytesseract
+import pytesseract  # type: ignore
 
 try:
     from ocr_reconstruct import process_bytes as recon_process_bytes
     from ocr_reconstruct.modules.enhance import ImageEnhancer
     from ocr_reconstruct.modules.reconstruct import PixelReconstructor
+
     RECON_AVAILABLE = True
 except ImportError:
-    class ImageEnhancer:
+
+    class ImageEnhancer:  # type: ignore[no-redef]
         """Minimal ImageEnhancer fallback."""
+
         def sharpen(self, img: np.ndarray) -> np.ndarray:
             kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
             return cv2.filter2D(img, -1, kernel)
@@ -28,8 +31,8 @@ except ImportError:
             _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY)
             return thresh
 
-    PixelReconstructor = None
-    recon_process_bytes = None
+    PixelReconstructor = None  # type: ignore[assignment, misc]
+    recon_process_bytes = None  # type: ignore[assignment]
     RECON_AVAILABLE = False
 
 
@@ -65,7 +68,7 @@ class IterativeOCREngine:
         self.config = config or EngineConfig()
         self.enhancer = enhancer or ImageEnhancer()
         self.reconstructor = reconstructor or (
-            PixelReconstructor() if PixelReconstructor else None
+            PixelReconstructor() if PixelReconstructor is not None else None
         )
         self.advanced_reconstructor = (
             advanced_reconstructor or AdvancedPixelReconstructor()
@@ -98,24 +101,27 @@ class IterativeOCREngine:
             logger.warning("Reconstruction pipeline failed: %s", e)
             return None, None
 
+    def _preprocess_for_ocr(
+        self, img: np.ndarray, iteration: int, use_reconstruction: bool
+    ) -> np.ndarray:
+        """Encapsulates image enhancement and layer management logic."""
+        enhanced = self.enhancer.sharpen(img) if self.enhancer else img
+
+        if use_reconstruction and iteration == 0 and self.reconstructor:
+            # Apply advanced overlay elimination for initial high-signal pass
+            rectified = self.reconstructor.remove_redactions(enhanced)
+            return self.reconstructor.remove_color_overlay(rectified)
+
+        gray = cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY)
+        return self.enhancer.apply_threshold(gray) if self.enhancer else gray
+
     def _perform_ocr_iteration(
         self, img: np.ndarray, iteration: int, use_reconstruction: bool
     ) -> Tuple[str, np.ndarray]:
         """
         Single-cycle OCR execution: Enhancement -> Thresholding -> Extraction.
         """
-        # Phase 1: Enhancement and Layer Management
-        enhanced = (
-            self.enhancer.sharpen(img) if self.enhancer else img
-        )
-
-        if use_reconstruction and iteration == 0 and self.reconstructor:
-            # Apply advanced overlay elimination for initial high-signal pass
-            img = self.reconstructor.remove_redactions(enhanced)
-            thresh = self.reconstructor.remove_color_overlay(img)
-        else:
-            gray = cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY)
-            thresh = self.enhancer.apply_threshold(gray) if self.enhancer else gray
+        thresh = self._preprocess_for_ocr(img, iteration, use_reconstruction)
 
         # Phase 2: Whole-document text extraction
         try:
@@ -241,13 +247,15 @@ class IterativeOCREngine:
                 confidence = self.confidence_scorer.calculate(text)
 
                 method = "region-based" if is_region_pass else "full-page"
-                iteration_history.append({
-                    "iteration": i + 1,
-                    "text_length": len(text),
-                    "confidence": confidence,
-                    "method": method,
-                    "preview_text": f"{text[:50]}..." if len(text) > 50 else text
-                })
+                iteration_history.append(
+                    {
+                        "iteration": i + 1,
+                        "text_length": len(text),
+                        "confidence": confidence,
+                        "method": method,
+                        "preview_text": f"{text[:50]}..." if len(text) > 50 else text,
+                    }
+                )
 
                 if confidence > best_confidence:
                     best_text, best_confidence = text, confidence
@@ -313,15 +321,17 @@ class IterativeOCREngine:
         confidence = self.confidence_scorer.calculate(extracted_text)
 
         # Step 5: Autonomous Feedback Loop
-        asyncio.create_task(self.learning_engine.learn_from_result(
-            doc_type=doc_type,
-            font_meta={
-                "source": "ai_reconstruction",
-                "model": ai_result.get("model", "unknown"),
-                "layout": layout_type,
-            },
-            accuracy_score=confidence,
-        ))
+        asyncio.create_task(
+            self.learning_engine.learn_from_result(
+                doc_type=doc_type,
+                font_meta={
+                    "source": "ai_reconstruction",
+                    "model": ai_result.get("model", "unknown"),
+                    "layout": layout_type,
+                },
+                accuracy_score=confidence,
+            )
+        )
 
         return {
             "text": extracted_text,

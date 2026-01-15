@@ -6,9 +6,9 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
-import boto3
-from botocore.config import Config
-from botocore.exceptions import ClientError
+import boto3  # type: ignore
+from botocore.config import Config  # type: ignore
+from botocore.exceptions import ClientError  # type: ignore
 
 logger = logging.getLogger("ocr-service.textract")
 
@@ -24,6 +24,7 @@ class TextractService:
     def __init__(self, settings: Optional[Any] = None):
         if not settings:
             from config import get_settings
+
             settings = get_settings()
 
         self.max_retries = getattr(settings, "aws_max_retries", 3)

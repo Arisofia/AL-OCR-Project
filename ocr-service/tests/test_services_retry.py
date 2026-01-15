@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 import pytest
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError  # type: ignore
 from services.storage import StorageService
 from services.textract import TextractService
 

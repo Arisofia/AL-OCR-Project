@@ -76,6 +76,7 @@ def test_handler_missing_info():
 def test_handler_with_aws_request_id(s3_event):
     """Test that handler extracts RequestId from AWS ClientErrors."""
     from botocore.exceptions import ClientError
+
     with patch("lambda_handler.get_services") as mock_get_services:
         mock_textract = MagicMock()
         mock_storage = MagicMock()
@@ -83,7 +84,7 @@ def test_handler_with_aws_request_id(s3_event):
 
         error_response = {
             "Error": {"Code": "AccessDenied", "Message": "No access"},
-            "ResponseMetadata": {"RequestId": "123-456-789"}
+            "ResponseMetadata": {"RequestId": "123-456-789"},
         }
         mock_textract.analyze_document.side_effect = ClientError(
             error_response, "AnalyzeDocument"

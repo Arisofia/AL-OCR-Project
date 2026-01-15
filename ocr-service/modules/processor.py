@@ -21,11 +21,7 @@ class OCRProcessor:
     Orchestrates the OCR lifecycle, managing extraction and storage.
     """
 
-    def __init__(
-        self,
-        ocr_engine: IterativeOCREngine,
-        storage_service: StorageService
-    ):
+    def __init__(self, ocr_engine: IterativeOCREngine, storage_service: StorageService):
         self.ocr_engine = ocr_engine
         self.storage_service = storage_service
 
@@ -41,7 +37,7 @@ class OCRProcessor:
         """
         Executes the full OCR pipeline: Validation, Extraction, and Cloud Persistence.
         """
-        self._validate_file_type(file.content_type)
+        self._validate_file_type(file.content_type or "")
 
         start_time = time.time()
         contents = await file.read()
@@ -55,39 +51,42 @@ class OCRProcessor:
 
             if "error" in result:
                 raise HTTPException(
-                    status_code=400,
-                    detail=f"Extraction failure: {result['error']}"
+                    status_code=400, detail=f"Extraction failure: {result['error']}"
                 )
 
             # Synchronize raw document and extracted intelligence to S3
             s3_key = await self._persist_results(
-                contents, file.filename, file.content_type, result
+                contents,
+                file.filename or "unknown",
+                file.content_type or "image/png",
+                result,
             )
 
             # Enrich response with traceability metadata
-            result.update({
-                "filename": file.filename,
-                "processing_time": round(time.time() - start_time, 3),
-                "s3_key": s3_key,
-                "request_id": request_id
-            })
+            result.update(
+                {
+                    "filename": file.filename or "unknown",
+                    "processing_time": round(time.time() - start_time, 3),
+                    "s3_key": s3_key,
+                    "request_id": request_id,
+                }
+            )
             return result
 
         except HTTPException:
             raise
         except Exception as e:
-            self._handle_pipeline_failure(file.filename, request_id, e)
+            self._handle_pipeline_failure(file.filename or "unknown", request_id, e)
             raise HTTPException(
                 status_code=500,
-                detail="Internal processing failure in OCR orchestrator"
+                detail="Internal processing failure in OCR orchestrator",
             ) from e
 
     def _validate_file_type(self, content_type: str):
         """Ensures the uploaded file is an image."""
         if not content_type or not content_type.startswith("image/"):
             raise HTTPException(
-                status_code=400,
-                detail="File must be a valid image format"
+                status_code=400, detail="File must be a valid image format"
             )
 
     async def _execute_ocr_strategy(
@@ -128,7 +127,7 @@ class OCRProcessor:
             )
 
         upload_results = await asyncio.gather(*upload_tasks)
-        return upload_results[0]
+        return str(upload_results[0])
 
     def _handle_pipeline_failure(
         self, filename: str, request_id: str, error: Exception

@@ -4,7 +4,7 @@ Thin wrapper around pytesseract to centralize config and calls.
 
 import cv2
 import numpy as np
-import pytesseract
+import pytesseract  # type: ignore
 
 
 def image_to_text(
@@ -17,7 +17,7 @@ def image_to_text(
     if len(img.shape) == 3:
         img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     else:
-        img_gray = img
+        img_gray = img  # type: ignore
 
     config = f"--oem {oem} --psm {psm}"
     text = pytesseract.image_to_string(img_gray, lang=lang, config=config)

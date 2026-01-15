@@ -10,8 +10,7 @@ from typing import Any, Dict, Optional
 
 from config import get_settings
 
-from .ai_providers import (GeminiVisionProvider, OpenAIVisionProvider,
-                           VisionProvider)
+from .ai_providers import GeminiVisionProvider, OpenAIVisionProvider, VisionProvider
 
 logger = logging.getLogger("ocr-service.advanced-recon")
 

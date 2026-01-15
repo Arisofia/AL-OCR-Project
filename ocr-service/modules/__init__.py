@@ -15,7 +15,7 @@ except ImportError:
     import cv2
     import numpy as _np
 
-    class ImageEnhancer:
+    class ImageEnhancer:  # type: ignore[no-redef]
         """Minimal ImageEnhancer fallback used for tests and lightweight deployments."""
 
         def sharpen(self, img: _np.ndarray) -> _np.ndarray:
@@ -28,11 +28,11 @@ except ImportError:
             if len(img.shape) == 3:
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             else:
-                gray = img
+                gray = img  # type: ignore
             _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY)
             return thresh
 
-    class PixelReconstructor:
+    class PixelReconstructor:  # type: ignore[no-redef]
         """Very small stub of PixelReconstructor to satisfy imports in tests."""
 
         def reconstruct(self, img: _np.ndarray) -> _np.ndarray:

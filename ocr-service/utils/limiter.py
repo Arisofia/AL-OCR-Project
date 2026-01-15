@@ -2,8 +2,9 @@
 Rate limiting utilities for the OCR Service.
 Provides fallback mechanisms when slowapi is not available.
 """
+
 import logging
-from typing import Any, Callable
+from typing import Callable
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -11,9 +12,9 @@ from fastapi.responses import JSONResponse
 logger = logging.getLogger("ocr-service.limiter")
 
 try:
-    from slowapi import Limiter, _rate_limit_exceeded_handler
-    from slowapi.errors import RateLimitExceeded
-    from slowapi.util import get_remote_address
+    from slowapi import Limiter, _rate_limit_exceeded_handler  # type: ignore
+    from slowapi.errors import RateLimitExceeded  # type: ignore
+    from slowapi.util import get_remote_address  # type: ignore
 except ImportError:  # pragma: no cover
     logger.warning("slowapi not found, using no-op rate limiter")
 
@@ -33,7 +34,7 @@ except ImportError:  # pragma: no cover
         """No-op rate limit handler for environments without slowapi."""
         return JSONResponse(
             status_code=429,
-            content={"detail": "Rate limit exceeded (fallback handler)"}
+            content={"detail": "Rate limit exceeded (fallback handler)"},
         )
 
     _rate_limit_exceeded_handler = _no_rate_limit_handler
@@ -42,6 +43,7 @@ except ImportError:  # pragma: no cover
     def get_remote_address(request: Request) -> str:
         """Extracts remote address from request or defaults to local host."""
         return getattr(getattr(request, "client", None), "host", "127.0.0.1")
+
 
 def init_limiter() -> Limiter:
     """Initializes and returns a Limiter instance."""

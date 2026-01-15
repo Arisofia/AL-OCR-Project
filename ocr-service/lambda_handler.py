@@ -9,7 +9,7 @@ import os
 import urllib.parse
 from typing import Any, Dict, Tuple
 
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError  # type: ignore
 from config import get_settings
 from services.storage import StorageService
 from services.textract import TextractService
@@ -36,20 +36,17 @@ def process_record(record: Dict[str, Any], request_id: str = "N/A") -> None:
     key = urllib.parse.unquote_plus(s3_info.get("object", {}).get("key", ""))
 
     if not bucket or not key:
-        logger.warning('Payload error: Missing S3 bucket or key reference')
+        logger.warning("Payload error: Missing S3 bucket or key reference")
         return
 
     textract_service, storage_service = get_services(bucket)
 
     # Standardize output naming convention for deterministic downstream consumption
-    out_key = (
-        f"{settings.output_prefix.rstrip('/')}/"
-        f"{os.path.basename(key)}.json"
-    )
+    out_key = f"{settings.output_prefix.rstrip('/')}/" f"{os.path.basename(key)}.json"
 
     try:
         # Route documents based on format requirements (Async for PDFs, Sync for images)
-        if key.lower().endswith('.pdf'):
+        if key.lower().endswith(".pdf"):
             job_id = textract_service.start_detection(bucket, key)
             if not job_id:
                 raise RuntimeError(f"Textract job initiation failure for {key}")
@@ -77,7 +74,9 @@ def process_record(record: Dict[str, Any], request_id: str = "N/A") -> None:
         request_id = e.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
         logger.error(
             "AWS Service Failure | Key: %s | RequestId: %s | Error: %s",
-            key, request_id, e
+            key,
+            request_id,
+            e,
         )
         err_obj = {
             "error": "aws_service_failure",
@@ -104,13 +103,13 @@ def process_record(record: Dict[str, Any], request_id: str = "N/A") -> None:
         raise
 
 
-def handler(event: Dict[str, Any], context: Any) -> Dict[str, str]:
+def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Main Lambda handler for orchestrating S3 document triggers.
     Ensures full traceability and partial failure reporting.
     """
     request_id = getattr(context, "aws_request_id", "local-test")
-    records = event.get('Records', [])
+    records = event.get("Records", [])
     logger.info("Lambda trigger | RID: %s | Records: %d", request_id, len(records))
 
     failures = 0

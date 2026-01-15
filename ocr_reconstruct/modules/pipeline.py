@@ -74,7 +74,7 @@ class IterativeOCR:
             best_local_img = depixelated
 
         # Strategy Phase 2: Telea Inpainting for foreground isolation
-        mask = (thresholded == 255).astype('uint8') * 255
+        mask = (thresholded == 255).astype("uint8") * 255
         inpainted = cv2.inpaint(current, mask, 3, cv2.INPAINT_TELEA)
         inp_th = self.enhancer.apply_threshold(inpainted)
         text_inp = image_to_text(inp_th)
@@ -95,7 +95,7 @@ class IterativeOCR:
         """
         current = self.enhancer.to_gray(img)
         best_overall_text = ""
-        meta = {"iterations": []}
+        meta: Dict[str, Any] = {"iterations": []}
 
         for i in range(self.iterations):
             # Step 1: Sequential Enhancement and Extraction
@@ -165,7 +165,7 @@ class IterativeOCR:
         text, final_img, meta = self.process_image(img)
 
         # Re-encode for downstream presentation or storage
-        success, buf = cv2.imencode('.png', final_img)
+        success, buf = cv2.imencode(".png", final_img)
         img_bytes = buf.tobytes() if success else None
 
         return text, img_bytes, meta
@@ -175,8 +175,5 @@ def process_bytes(
     image_bytes: bytes, iterations: int = 3, save_iterations: bool = False
 ) -> Tuple[str, Optional[bytes], Dict[str, Any]]:
     """Stateless entry point for ephemeral image byte processing."""
-    pipeline = IterativeOCR(
-        iterations=iterations,
-        save_iterations=save_iterations
-    )
+    pipeline = IterativeOCR(iterations=iterations, save_iterations=save_iterations)
     return pipeline.process_bytes(image_bytes)

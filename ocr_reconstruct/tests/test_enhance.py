@@ -2,8 +2,7 @@ import os
 
 import cv2
 
-from ocr_reconstruct.modules.enhance import (adaptive_threshold, sharpen,
-                                             to_gray)
+from ocr_reconstruct.modules.enhance import adaptive_threshold, sharpen, to_gray
 
 
 def test_sharpen_and_threshold():
