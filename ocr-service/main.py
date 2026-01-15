@@ -26,7 +26,7 @@ try:
     from slowapi import Limiter, _rate_limit_exceeded_handler
     from slowapi.errors import RateLimitExceeded
     from slowapi.util import get_remote_address
-except Exception:  # pragma: no cover - slowapi optional in tests
+except (ImportError, ModuleNotFoundError):  # pragma: no cover - slowapi optional in tests
     class _NoopLimiter:
         def __init__(self, *_args, **_kwargs):
             pass
