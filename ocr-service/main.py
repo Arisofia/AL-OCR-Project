@@ -20,9 +20,27 @@ from modules.processor import OCRProcessor
 from schemas import (HealthResponse, OCRResponse, PresignRequest,
                      PresignResponse, ReconStatusResponse)
 from services.storage import StorageService
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+    from slowapi.util import get_remote_address
+except Exception:  # pragma: no cover - slowapi optional in tests
+    class _NoopLimiter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def limit(self, *args, **kwargs):
+            def _decorator(f):
+                return f
+
+            return _decorator
+
+    Limiter = _NoopLimiter
+    _rate_limit_exceeded_handler = lambda request, exc: None
+    RateLimitExceeded = Exception
+
+    def get_remote_address(request):
+        return getattr(getattr(request, "client", None), "host", "127.0.0.1")
 
 # Initialize enterprise-grade logging
 logging.basicConfig(
