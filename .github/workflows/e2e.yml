@@ -83,8 +83,10 @@ jobs:
 
       - name: Check Netlify secret availability
         id: check_netlify_secrets
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: |
-          if [ -n "${{ secrets.NETLIFY_AUTH_TOKEN }}" ]; then
+          if [ -n "$NETLIFY_AUTH_TOKEN" ]; then
             echo "has_netlify=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_netlify=false" >> "$GITHUB_OUTPUT"
@@ -110,9 +112,9 @@ jobs:
           OCR_API_KEY: ${{ secrets.OCR_API_KEY || '' }}
         run: |
           nohup uvicorn main:app --host 0.0.0.0 --port 8000 &
-          # Wait for health endpoint
+          # Wait for health endpoint (fail on HTTP 5xx/4xx as well)
           for i in {1..30}; do
-            if curl -sS http://localhost:8000/health >/dev/null; then
+            if curl -sSf http://localhost:8000/health >/dev/null; then
               echo "Backend healthy"
               exit 0
             fi
@@ -126,10 +128,10 @@ jobs:
       - name: Start frontend (serve built site when not deploying externally)
         working-directory: ./frontend
         run: |
-          if [ -z "${{ env.DEPLOY_URL }}" ]; then
+          if [ -z "$DEPLOY_URL" ]; then
             nohup npx -y http-server dist -p 5173 --silent &
             for i in {1..20}; do
-              if curl -sS http://localhost:5173 >/dev/null; then
+              if curl -sSf http://localhost:5173 >/dev/null; then
                 echo "Frontend (built) healthy"
                 exit 0
               fi
@@ -145,9 +147,9 @@ jobs:
       - name: Run Playwright tests
         working-directory: ./frontend
         env:
-          BASE_URL: ${{ env.DEPLOY_URL || 'http://localhost:5173' }}
           VITE_API_KEY: ${{ secrets.STAGING_API_KEY || '' }}
         run: |
+          export BASE_URL="${DEPLOY_URL:-http://localhost:5173}"
           echo "Using BASE_URL=$BASE_URL"
           npx playwright test --config=playwright.config.ts
 
