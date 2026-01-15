@@ -9,7 +9,7 @@ import {
   Image as ImageIcon,
   Zap
 } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion as Motion, AnimatePresence } from 'framer-motion'
 import './App.css'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
@@ -20,7 +20,6 @@ const IS_DEV = import.meta.env.MODE === 'development'
 const API_KEY = import.meta.env.VITE_API_KEY || (IS_DEV ? 'default_secret_key' : undefined)
 
 if (!API_KEY && !IS_DEV) {
-  // eslint-disable-next-line no-console
   console.error('[Config Error] VITE_API_KEY is not set. Define VITE_API_KEY in your environment.')
   throw new Error('Missing VITE_API_KEY environment variable')
 }
@@ -54,7 +53,7 @@ function App() {
         } else {
           setHealth('unhealthy')
         }
-      } catch (error) {
+      } catch {
         setHealth('offline')
       }
     }
@@ -99,12 +98,12 @@ function App() {
     <div className="app-container">
       <header>
         <div className="logo-section">
-          <motion.h1 
+          <Motion.h1 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
           >
             AL Financial <span style={{ color: '#111827' }}>OCR</span>
-          </motion.h1>
+          </Motion.h1>
         </div>
         <div className="status-badge">
           <div className={`status-dot ${health !== 'healthy' ? 'offline' : ''}`} 
@@ -120,7 +119,7 @@ function App() {
               <input type="file" onChange={handleFileChange} accept="image/*" />
               <div className="dropzone-content">
                 {preview ? (
-                  <motion.img 
+                  <Motion.img 
                     initial={{ scale: 0.9, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     src={preview} 
@@ -173,7 +172,7 @@ function App() {
 
             <AnimatePresence mode="wait">
               {loading ? (
-                <motion.div 
+                <Motion.div 
                   key="loading"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -182,9 +181,9 @@ function App() {
                 >
                   <Loader2 className="animate-spin" size={48} color="#e2e8f0" />
                   <p>Our AI is reading your document...</p>
-                </motion.div>
+                </Motion.div>
               ) : result ? (
-                <motion.div 
+                <Motion.div 
                   key="result"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -205,9 +204,9 @@ function App() {
                     ))}
                   </div>
                   <pre className="ocr-text">{result.text}</pre>
-                </motion.div>
+                </Motion.div>
               ) : (
-                <motion.div 
+                <Motion.div 
                   key="empty"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -215,7 +214,7 @@ function App() {
                 >
                   <FileText size={48} color="#e2e8f0" />
                   <p>Upload a document to see extracted text</p>
-                </motion.div>
+                </Motion.div>
               )}
             </AnimatePresence>
           </div>
