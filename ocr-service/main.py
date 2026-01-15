@@ -7,7 +7,7 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, cast, Type
+from typing import Any, cast, Type  # type: ignore
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, Security, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -37,7 +37,7 @@ from utils.limiter import (
     init_limiter,
 )
 from utils.monitoring import init_monitoring
-from botocore.exceptions import ClientError  # type: ignore
+from botocore.exceptions import ClientError
 
 # Load settings
 settings = get_settings()

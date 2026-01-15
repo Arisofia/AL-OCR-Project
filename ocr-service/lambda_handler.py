@@ -82,6 +82,7 @@ def process_record(record: Dict[str, Any], request_id: str = "N/A") -> None:
                 "Storage failure: Could not persist extraction",
                 extra={"key": key, "request_id": request_id},
             )
+            raise RuntimeError(f"Failed to persist extraction results for {key}")
         else:
             logger.info(
                 "Result persisted",

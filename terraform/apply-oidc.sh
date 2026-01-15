@@ -11,7 +11,11 @@ terraform init
 # Resolve Account ID
 RESOLVED_ACCOUNT_ID=${TF_VAR_account_id:-$AWS_ACCOUNT_ID}
 if [ -z "$RESOLVED_ACCOUNT_ID" ]; then
-    RESOLVED_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text 2>/dev/null || echo "510701314494")
+    RESOLVED_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+    if [ -z "$RESOLVED_ACCOUNT_ID" ]; then
+        echo "ERROR: Could not resolve AWS Account ID. Set TF_VAR_account_id or AWS_ACCOUNT_ID, or ensure valid AWS credentials." >&2
+        exit 1
+    fi
 fi
 
 # Ejecutar el plan
