@@ -104,7 +104,8 @@ jobs:
       - name: Run Type Checking (mypy)
         continue-on-error: true
         run: |
-          mypy ocr_service ocr_reconstruct --ignore-missing-imports --no-strict-optional
+          # Install missing stubs automatically and run non-interactively
+          mypy --install-types --non-interactive ocr_service ocr_reconstruct --ignore-missing-imports --no-strict-optional
 
       - name: Run Linting (flake8)
         continue-on-error: true

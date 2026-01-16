@@ -24,26 +24,35 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Build Docker image
+        id: build_image
         run: |
-          docker build -t al-ocr-service:ci -f ocr_service/Dockerfile .
+          IMAGE=al-ocr-service:ci
+          docker build -t "$IMAGE" -f ocr_service/Dockerfile .
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
 
       - name: Run container runtime checks
         run: |
-          bash tests/container/run_container_checks.sh al-ocr-service:ci 8080
+          bash tests/container/run_container_checks.sh ${{ steps.build_image.outputs.image }} 8080
 
       - name: Trivy Scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'al-ocr-service:ci'
+          image-ref: ${{ steps.build_image.outputs.image }}
           format: 'table'
           exit-code: '1'
           vuln-type: 'os,library'
 
-      - name: Dockle (CIS checks)
-        uses: goodwithtech/dockle-action@v1
-        with:
-          image: 'al-ocr-service:ci'
-          exit_code: 1
+      - name: Install Dockle
+        run: |
+          set -euxo pipefail
+          DOCKLE_VERSION="0.4.9"
+          curl -fsSL "https://github.com/goodwithtech/dockle/releases/download/v${DOCKLE_VERSION}/dockle_${DOCKLE_VERSION}_Linux-64bit.tar.gz" -o dockle.tar.gz
+          tar -xzf dockle.tar.gz
+          sudo mv dockle /usr/local/bin/dockle
+
+      - name: Run Dockle (CIS checks)
+        run: |
+          dockle --exit-code 1 ${{ steps.build_image.outputs.image }}
 
       - name: Upload scan artifacts
         if: always()
