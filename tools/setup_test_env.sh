@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+
 # Setup script to create a reproducible test environment and run pytest.
 # - Prefer local Python 3.11 if available
 # - Fallback to Docker if Python 3.11 isn't available
+# - Auto-export AWS_ACCOUNT_ID if not set (for AWS integration tests)
+if [ -z "$AWS_ACCOUNT_ID" ]; then
+  export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "")
+fi
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SERVICE_DIR="$PROJECT_ROOT/ocr-service"
+SERVICE_DIR="$PROJECT_ROOT/ocr_service"
 VENV_DIR="$PROJECT_ROOT/.venv"
 PYTHON_BIN=""
 
@@ -41,5 +46,5 @@ else
     exit 2
   fi
 
-  docker run --rm -v "${PROJECT_ROOT}":/app -w /app python:3.11 bash -lc "python -m pip install -U pip && python -m pip install -r ocr-service/requirements.txt pytest && python -m pip install -e ocr_reconstruct && PYTHONPATH=/app/ocr-service:/app python -m pytest -q"
+  docker run --rm -v "${PROJECT_ROOT}":/app -w /app python:3.11 bash -lc "python -m pip install -U pip && python -m pip install -r ocr_service/requirements.txt pytest && python -m pip install -e ocr_reconstruct && PYTHONPATH=/app/ocr_service:/app python -m pytest -q"
 fi

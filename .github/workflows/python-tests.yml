@@ -1,17 +1,16 @@
----
 name: Python Tests
 
 on:
   pull_request:
     paths:
-      - 'ocr-service/**'
+      - 'ocr_service/**'
       - 'ocr_reconstruct/**'
       - '.github/workflows/python-tests.yml'
   push:
     branches:
       - main
     paths:
-      - 'ocr-service/**'
+      - 'ocr_service/**'
       - 'ocr_reconstruct/**'
   workflow_dispatch:
 
@@ -22,12 +21,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.10', '3.11']
+        python-version: [3.8, 3.9, 3.10, 3.11]
     steps:
       # actions/checkout v4.2.2
+      # ---- Setup & Validation ----
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Validate required secrets
+      - name: Validate Secrets
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
           OCR_API_KEY: ${{ secrets.OCR_API_KEY }}
@@ -55,7 +55,7 @@ jobs:
           fi
 
 
-      # actions/setup-python v5.0.0
+      # ---- Python & Dependencies ----
       - name: Setup Python
         uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c
         with:
@@ -69,17 +69,16 @@ jobs:
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
 
-      # actions/cache v4.0.2
       - name: Cache pip
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', 'requirements-dev.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
       - name: Cache pre-commit hooks
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.0.2
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: ~/.cache/pre-commit
           key: ${{ runner.os }}-pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
@@ -88,31 +87,30 @@ jobs:
 
       - name: Install Linting & Security Tools
         run: |
-          pip install flake8 pylint mypy bandit pip-audit types-requests types-python-dateutil
+          pip install -r requirements-dev.txt
 
       - name: Install ocr_reconstruct (editable) and deps
         run: |
-          set -x
           python -m pip install -e ./ocr_reconstruct
-          pip install -r ocr_reconstruct/requirements.txt
 
       - name: Install OCR service deps
         run: |
-          pip install -r ocr-service/requirements.txt
+          pip install -r ocr_service/requirements.txt
 
+      # ---- Quality & Security ----
       - name: Run Security Scan (bandit)
         run: |
-          bandit -r ocr-service ocr_reconstruct -ll
+          bandit -r ocr_service ocr_reconstruct -ll
 
       - name: Run Dependency Audit (pip-audit)
         run: |
-          pip-audit -r ocr-service/requirements.txt
+          pip-audit -r ocr_service/requirements.txt
           pip-audit -r ocr_reconstruct/requirements.txt
 
       - name: Run Type Checking (mypy)
         continue-on-error: true
         run: |
-          mypy ocr-service ocr_reconstruct --ignore-missing-imports --no-strict-optional
+          mypy ocr_service ocr_reconstruct --ignore-missing-imports --no-strict-optional
 
       - name: Run Linting (flake8)
         continue-on-error: true
@@ -120,21 +118,25 @@ jobs:
           # Use the root .flake8 config if it exists
           flake8 . \
             --count --select=E9,F63,F7,F82 --show-source --statistics
-          flake8 ocr-service ocr_reconstruct --count --max-complexity=10 --max-line-length=88 --statistics
+          flake8 ocr_service ocr_reconstruct --count --max-complexity=10 --max-line-length=88 --statistics
+
+      - name: Run Formatting Check (black)
+        continue-on-error: true
+        run: |
+          black --check ocr_service ocr_reconstruct
 
       - name: Run Linting (pylint)
         continue-on-error: true
         run: |
           # Only lint the core service folders
-          pylint ocr-service ocr_reconstruct --fail-under=8.0
+          pylint ocr_service ocr_reconstruct --fail-under=8.0
 
       - name: Run Pre-commit Hooks
         continue-on-error: true
         run: |
-          pip install pre-commit
           pre-commit run --all-files
 
-      - name: Save ocr-service pip environment (debug)
+      - name: Save ocr_service pip environment (debug)
         if: ${{ always() }}
         run: |
           mkdir -p artifacts || true
@@ -144,13 +146,14 @@ jobs:
           env > artifacts/env.txt || true
 
       # actions/upload-artifact v4.4.3
-      - name: Upload ocr-service pip debug artifact
+      - name: Upload ocr_service pip debug artifact
         if: ${{ always() }}
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
         with:
-          name: ocr-service-pip-debug-${{ matrix.python-version }}
+          name: ocr_service-pip-debug-${{ matrix.python-version }}
           path: artifacts
 
+      # ---- Tests ----
       - name: Generate sample images
         run: |
           python ocr_reconstruct/tests/generate_samples.py
@@ -162,21 +165,18 @@ jobs:
           fi
 
       - name: Run ocr_reconstruct tests
-        continue-on-error: true
         run: |
           pytest ocr_reconstruct/tests -q
 
       - name: Uninstall editable ocr_reconstruct to avoid module name collisions
-        continue-on-error: true
         run: |
           pip uninstall -y ocr_reconstruct || true
 
-      - name: Run ocr-service tests
+      - name: Run ocr_service tests
         env:
-          OCR_API_KEY: ${{ secrets.OCR_API_KEY || '' }}
-          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/ocr-service
-        continue-on-error: true
-        working-directory: ./ocr-service
+          OCR_API_KEY: ${{ secrets.OCR_API_KEY }}
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/ocr_service
+        working-directory: ./ocr_service
         run: |
           # Run quick import checks and save output to a debug file for artifact upload
           python - <<'PY' > debug_imports.txt
@@ -200,14 +200,14 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          file: ./ocr-service/coverage.xml
+          file: ./ocr_service/coverage.xml
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false
       # actions/upload-artifact v4.4.3
-      - name: Upload ocr-service debug artifact
+      - name: Upload ocr_service debug artifact
         if: ${{ always() }}
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
         with:
-          name: ocr-service-debug-${{ matrix.python-version }}
-          path: ./ocr-service/debug_imports.txt
+          name: ocr_service-debug-${{ matrix.python-version }}
+          path: ./ocr_service/debug_imports.txt

@@ -8,7 +8,6 @@ COPY package*.json ./
 
 
 # Install dependencies
-COPY package-lock.json ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 # Copy source code

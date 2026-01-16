@@ -5,11 +5,10 @@ Note: These are intentionally conservative heuristics for research;
 full recovery is not guaranteed.
 """
 
+from typing import Optional
+
 import cv2
 import numpy as np
-
-
-from typing import Optional
 
 
 class PixelReconstructor:

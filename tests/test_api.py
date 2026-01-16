@@ -1,2 +1,5 @@
+import pytest
+
+
 def test_dummy():
-    pass
+    pytest.skip("Placeholder test; implement or remove.")

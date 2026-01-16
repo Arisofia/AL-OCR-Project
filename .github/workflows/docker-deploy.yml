@@ -43,6 +43,12 @@ jobs:
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: ocr-service/Dockerfile
+
+      - name: Run Black (auto-format)
+        run: |
+          pip install black
+          black ocr-service ocr_reconstruct src || true
+          black --check ocr-service ocr_reconstruct src
       - name: Configure AWS Credentials
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         # aws-actions/configure-aws-credentials v4.0.2

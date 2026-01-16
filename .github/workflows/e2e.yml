@@ -38,6 +38,12 @@ jobs:
           pip install -r ocr-service/requirements.txt
           pip install -r ocr_reconstruct/requirements.txt
 
+      - name: Run Black (auto-format)
+        run: |
+          pip install black
+          black ocr-service ocr_reconstruct src || true
+          black --check ocr-service ocr_reconstruct src
+
       - name: Cache npm
         uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
         with:

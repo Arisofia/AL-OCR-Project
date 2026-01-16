@@ -1,0 +1,10 @@
+flake8
+pylint
+mypy
+bandit
+pip-audit
+black
+pre-commit
+types-requests
+types-python-dateutil
+types-redis

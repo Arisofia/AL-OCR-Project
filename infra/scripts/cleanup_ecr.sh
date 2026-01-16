@@ -7,6 +7,10 @@ set -euo pipefail
 
 REPO="al-ocr-service"
 REGION="us-east-1"
+# Auto-export AWS_ACCOUNT_ID if not set
+if [ -z "$AWS_ACCOUNT_ID" ]; then
+  export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "")
+fi
 MODE="untagged"  # untagged | older-than | all
 DAYS=30
 

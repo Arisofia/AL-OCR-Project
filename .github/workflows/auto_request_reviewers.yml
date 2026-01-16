@@ -1,0 +1,40 @@
+name: Auto-request Reviewers
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened, edited]
+
+jobs:
+  request-reviewers:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request reviewers automatically
+        uses: actions/github-script@v7 # v7.0.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Use updated automation reviewers (codex replaces coderabbit)
+            const reviewers = ['gemini-help', 'codex', 'openia'];
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              console.log('No pull request payload, skipping');
+              return;
+            }
+            if (pr.draft) {
+              console.log(`PR #${pr.number} is a draft; skipping reviewer requests.`);
+              return;
+            }
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            try {
+              await github.rest.pulls.requestReviewers({
+                owner,
+                repo,
+                pull_number: pr.number,
+                reviewers
+              });
+              console.log(`Requested reviewers: ${reviewers.join(', ')}`);
+            } catch (err) {
+              // Logging and continue — invalid or non-collaborator reviewers will cause an error
+              console.log(`Warning: unable to request all reviewers: ${err.message}`);
+            }

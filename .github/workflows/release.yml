@@ -7,6 +7,10 @@ on:
     paths:
       - '**'
   workflow_dispatch:
+  permissions:
+    contents: write
+    issues: write
+    pull-requests: write
 
 jobs:
   release:
@@ -17,6 +21,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Run Black (auto-format)
+        run: |
+          pip install black
+          black ocr-service ocr_reconstruct src || true
+          black --check ocr-service ocr_reconstruct src
       - name: Install semantic-release and plugins
         run: |
           npm install -g semantic-release @semantic-release/changelog @semantic-release/git @semantic-release/commit-analyzer @semantic-release/release-notes-generator

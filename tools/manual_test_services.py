@@ -5,10 +5,11 @@ Uses mocking to simulate AWS interactions without requiring real credentials.
 
 import sys
 import os
+import typing
 from unittest.mock import MagicMock
 
-# Add ocr-service to path
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "ocr-service"))
+# Add ocr_service to path
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "ocr_service"))
 
 
 class FakeBoto3Module:
@@ -28,13 +29,12 @@ class FakeBoto3Module:
         return self._mocks[name]
 
 
-# Inject fake boto3 BEFORE importing services
-sys.modules["boto3"] = FakeBoto3Module()
+sys.modules["boto3"] = typing.cast(typing.Any, FakeBoto3Module())
 sys.modules["botocore"] = MagicMock()
 sys.modules["botocore.exceptions"] = MagicMock()
 sys.modules["botocore.config"] = MagicMock()
 
-# pylint: disable=wrong-import-position
+# Inject fake boto3 BEFORE importing services
 from services.storage import StorageService  # noqa: E402
 from services.textract import TextractService  # noqa: E402
 

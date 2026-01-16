@@ -51,4 +51,3 @@ For a fully containerized development environment including a simulated AWS envi
 
 ### Continuous Integration
 GitHub Actions workflows are configured to run tests on multiple Python versions (3.9, 3.10, 3.11) on each push/PR to `main`.
-

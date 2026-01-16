@@ -32,5 +32,3 @@ services:
         - "8080:8080"
       volumes:
         - ./data/label-studio:/label-studio/data
-
-

@@ -73,7 +73,7 @@ test.describe('OCR Flow', () => {
 
     const statusBadge = page.locator('.status-badge');
     await expect(statusBadge).toContainText('System offline', { timeout: 10000 });
-    
+
     const extractButton = page.getByRole('button', { name: /Extract Data/i });
     await expect(extractButton).toBeDisabled();
   });

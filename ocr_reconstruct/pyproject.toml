@@ -22,4 +22,3 @@ dependencies = [
 markers = [
     "integration: marks tests as integration tests (slow, requires Tesseract)"
 ]
-

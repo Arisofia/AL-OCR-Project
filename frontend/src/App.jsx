@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
-import { 
-  Upload, 
-  FileText, 
-  Loader2, 
-  CheckCircle2, 
-  AlertCircle, 
+import {
+  Upload,
+  FileText,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
   Image as ImageIcon,
   Zap
 } from 'lucide-react'
@@ -98,7 +98,7 @@ function App() {
     <div className="app-container">
       <header>
         <div className="logo-section">
-          <Motion.h1 
+          <Motion.h1
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
           >
@@ -106,7 +106,7 @@ function App() {
           </Motion.h1>
         </div>
         <div className="status-badge">
-          <div className={`status-dot ${health !== 'healthy' ? 'offline' : ''}`} 
+          <div className={`status-dot ${health !== 'healthy' ? 'offline' : ''}`}
                style={{ backgroundColor: health === 'healthy' ? '#22c55e' : '#ef4444' }} />
           <span>System {health}</span>
         </div>
@@ -119,12 +119,12 @@ function App() {
               <input type="file" onChange={handleFileChange} accept="image/*" />
               <div className="dropzone-content">
                 {preview ? (
-                  <Motion.img 
+                  <Motion.img
                     initial={{ scale: 0.9, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
-                    src={preview} 
-                    className="preview-image" 
-                    alt="Preview" 
+                    src={preview}
+                    className="preview-image"
+                    alt="Preview"
                   />
                 ) : (
                   <>
@@ -138,9 +138,9 @@ function App() {
               </div>
             </div>
 
-            <button 
-              className="btn-primary" 
-              onClick={handleUpload} 
+            <button
+              className="btn-primary"
+              onClick={handleUpload}
               disabled={loading || !file || health !== 'healthy'}
             >
               {loading ? (
@@ -172,7 +172,7 @@ function App() {
 
             <AnimatePresence mode="wait">
               {loading ? (
-                <Motion.div 
+                <Motion.div
                   key="loading"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -183,7 +183,7 @@ function App() {
                   <p>Our AI is reading your document...</p>
                 </Motion.div>
               ) : result ? (
-                <Motion.div 
+                <Motion.div
                   key="result"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -192,10 +192,10 @@ function App() {
                 >
                   <div className="iteration-pills" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
                     {result.iterations?.map((it) => (
-                      <span key={it.iteration} style={{ 
-                        fontSize: '0.7rem', 
-                        padding: '2px 8px', 
-                        background: '#e2e8f0', 
+                      <span key={it.iteration} style={{
+                        fontSize: '0.7rem',
+                        padding: '2px 8px',
+                        background: '#e2e8f0',
                         borderRadius: '4px',
                         color: '#475569'
                       }}>
@@ -206,7 +206,7 @@ function App() {
                   <pre className="ocr-text">{result.text}</pre>
                 </Motion.div>
               ) : (
-                <Motion.div 
+                <Motion.div
                   key="empty"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
