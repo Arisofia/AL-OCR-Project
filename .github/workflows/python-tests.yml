@@ -167,36 +167,17 @@ jobs:
           fi
 
       - name: Run ocr_reconstruct tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           pytest ocr_reconstruct/tests -q
-
-      - name: Uninstall editable ocr_reconstruct to avoid module name collisions
-        run: |
-          pip uninstall -y ocr_reconstruct || true
 
       - name: Run ocr_service tests
         env:
           OCR_API_KEY: ${{ secrets.OCR_API_KEY }}
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/ocr_service
-        working-directory: ./ocr_service
         run: |
-          # Run quick import checks and save output to a debug file for artifact upload
-          python - <<'PY' > debug_imports.txt
-          import os, sys, importlib
-          print('OCR_API_KEY:', os.getenv('OCR_API_KEY'))
-          print('PYTHONPATH:', os.getenv('PYTHONPATH'))
-          print('sys.path:', sys.path)
-          for name in ('services', 'modules', 'main', 'lambda_handler'):
-              try:
-                  m = importlib.import_module(name)
-                  print(name, '->', getattr(m, '__file__', '<builtin>'))
-              except Exception as e:
-                  print('IMPORT ERROR', name, type(e), e)
-          PY
-
-          # Show the debug file for logs and then run tests
-          cat debug_imports.txt || true
-          pytest tests -q --cov=. --cov-report=xml
+          pytest ocr_service/tests -q --cov=ocr_service --cov-report=xml
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
