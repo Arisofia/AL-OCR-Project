@@ -4,10 +4,15 @@ Provides fallback mechanisms when slowapi is not available.
 """
 
 import logging
-from typing import Any, Callable
+from typing import Optional
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from opentelemetry import trace
+
+# SlowAPI imports placed near other third-party imports
+from slowapi import Limiter  # type: ignore
+from slowapi.errors import RateLimitExceeded  # type: ignore
+from slowapi.util import get_remote_address  # type: ignore
 
 tracer = trace.get_tracer(__name__)
 
@@ -21,41 +26,10 @@ __all__ = [
     "_rate_limit_exceeded_handler_with_logging",
 ]
 
-try:
-    from slowapi import Limiter, _rate_limit_exceeded_handler  # type: ignore
-    from slowapi.errors import RateLimitExceeded  # type: ignore
-    from slowapi.util import get_remote_address  # type: ignore
-except ImportError:  # pragma: no cover
-    logger.warning("slowapi not found, using no-op rate limiter")
 
-    class _NoopLimiter:
-        def __init__(self, *_args: Any, **_kwargs: Any) -> None:
-            pass
-
-        def limit(self, *_args: Any, **_kwargs: Any) -> Callable:
-            def _decorator(f: Callable) -> Callable:
-                return f
-
-            return _decorator
-
-    Limiter: Any = _NoopLimiter  # type: ignore[no-redef]
-
-    def _no_rate_limit_handler(_request: Request, _exc: Exception) -> JSONResponse:
-        """No-op rate limit handler for environments without slowapi."""
-        return JSONResponse(
-            status_code=429,
-            content={"detail": "Rate limit exceeded (fallback handler)"},
-        )
-
-    _rate_limit_exceeded_handler: Any = _no_rate_limit_handler  # type: ignore[no-redef]
-    RateLimitExceeded: Any = Exception  # type: ignore[no-redef]
-
-    def get_remote_address(request: Request) -> str:
-        """Extracts remote address from request or defaults to local host."""
-        return getattr(getattr(request, "client", None), "host", "127.0.0.1")
-
-
-def _rate_limit_exceeded_handler_with_logging(request: Request, exc: Exception) -> Any:
+def _rate_limit_exceeded_handler_with_logging(
+    request: Request, exc: RateLimitExceeded
+) -> JSONResponse:
     """Enhanced rate limit handler with structured logging and tracing."""
     with tracer.start_as_current_span("limiter.rate_limit_exceeded"):
         logger.warning(
@@ -66,11 +40,19 @@ def _rate_limit_exceeded_handler_with_logging(request: Request, exc: Exception) 
                 "detail": str(exc),
             },
         )
-        return _rate_limit_exceeded_handler(request, exc)  # type: ignore[arg-type]
+        return JSONResponse(
+            status_code=429,
+            content={"detail": str(exc)},
+        )
 
 
-def init_limiter() -> Limiter:
-    """Initializes and returns a Limiter instance with tracing."""
+def init_limiter() -> Optional[Limiter]:
+    """Initializes and returns a Limiter instance with tracing.
+
+    Returns:
+        Optional[Limiter]: The initialized Limiter instance, or None if initialization
+        fails.
+    """
     with tracer.start_as_current_span("limiter.init_limiter"):
         try:
             limiter = Limiter(key_func=get_remote_address)
@@ -78,4 +60,4 @@ def init_limiter() -> Limiter:
             return limiter
         except Exception as e:
             logger.error(f"Failed to initialize Limiter: {e}")
-            raise
+            return None
