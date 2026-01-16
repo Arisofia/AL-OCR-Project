@@ -58,7 +58,7 @@ if [ "$HEALTH_OK" -eq 0 ]; then
   LOGS=$(cat container-logs.txt || true)
   echo "$LOGS"
   # Accept Lambda-style images (they run the Lambda bootstrap instead of an HTTP server)
-  if echo "$LOGS" | grep -E -q "/var/runtime/bootstrap|Lambda Runtime|exec .*bootstrap|bootstrap"; then
+  if grep -F -q "bootstrap" container-logs.txt || echo "$LOGS" | grep -E -q "Lambda Runtime"; then
     echo "[CI] Detected Lambda runtime in container logs; treating as OK for Lambda-style image."
     # Stop the container now that we know it started correctly
     docker stop "$CONTAINER_NAME" || true
