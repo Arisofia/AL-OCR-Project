@@ -31,7 +31,7 @@ def test_generate_presigned_post_success(mock_boto):
     settings = get_settings()
     settings.s3_bucket_name = "test-bucket"
 
-    headers = {settings.api_key_header_name: settings.ocr_api_key}
+    headers = {str(settings.api_key_header_name): str(settings.ocr_api_key)}
     body = {"key": "uploads/test.png", "content_type": "image/png", "expires_in": 600}
 
     response = client.post("/presign", json=body, headers=headers)
@@ -46,7 +46,7 @@ def test_generate_presigned_post_missing_bucket(_mock_boto):
     settings = get_settings()
     settings.s3_bucket_name = None
 
-    headers = {settings.api_key_header_name: settings.ocr_api_key}
+    headers = {str(settings.api_key_header_name): str(settings.ocr_api_key)}
     body = {"key": "uploads/test.png"}
 
     response = client.post("/presign", json=body, headers=headers)

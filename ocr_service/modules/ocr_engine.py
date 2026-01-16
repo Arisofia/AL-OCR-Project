@@ -31,9 +31,9 @@ except ImportError:
             _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY)
             return thresh
 
-    ImageEnhancer = _FallbackImageEnhancer  # type: ignore[assignment, misc]
-    PixelReconstructor = None  # type: ignore[assignment, misc]
-    recon_process_bytes = None  # type: ignore[assignment]
+    ImageEnhancer: Any = _FallbackImageEnhancer  # type: ignore[assignment, no-redef]
+    PixelReconstructor: Any = None  # type: ignore[assignment, no-redef]
+    recon_process_bytes: Any = None  # type: ignore[assignment, no-redef]
     RECON_AVAILABLE = False
 
 

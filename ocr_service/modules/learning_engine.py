@@ -104,7 +104,9 @@ class LearningEngine:
         # Check cache first
         if doc_type in self._knowledge_cache:
             logger.debug("Knowledge cache hit for %s", doc_type)
-            return self._knowledge_cache[doc_type]
+            from typing import cast
+
+            return cast(Optional[Dict[str, Any]], self._knowledge_cache[doc_type])
 
         try:
 
@@ -126,7 +128,9 @@ class LearningEngine:
             knowledge = result.data[0] if result.data else None
             if knowledge:
                 self._knowledge_cache[doc_type] = knowledge
-            return knowledge
+            from typing import cast
+
+            return cast(Optional[Dict[str, Any]], knowledge)
         except Exception as e:
             logger.error("Failed to fetch pattern knowledge: %s", e)
             return None

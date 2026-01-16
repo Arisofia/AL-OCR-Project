@@ -68,11 +68,9 @@ app.add_exception_handler(
 def get_request_id(request: Request) -> str:
     """Extracts AWS Request ID from Mangum scope or defaults to local trace."""
     scope = request.scope
-    return (
-        scope["aws.context"].aws_request_id
-        if "aws.context" in scope
-        else "local-development"
-    )
+    if "aws.context" in scope:
+        return cast(str, scope["aws.context"].aws_request_id)
+    return "local-development"
 
 
 @app.middleware("http")

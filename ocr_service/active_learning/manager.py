@@ -30,7 +30,7 @@ class UncertaintySampling(QueryStrategy):
         sequence_confidence = np.min(max_probs, axis=1)
         uncertainty_scores = 1 - sequence_confidence
         selected_indices = np.argsort(uncertainty_scores)[-n_samples:]
-        return selected_indices.tolist()
+        return list(map(int, selected_indices.tolist()))
 
 
 class ActiveLearningLoop:

@@ -34,10 +34,10 @@ def test_image_enhancer_sharpen():
     # Create a blurred image to see sharpening effect
     img = np.zeros((100, 100, 3), dtype=np.uint8)
     cv2.rectangle(img, (25, 25), (75, 75), (255, 255, 255), -1)
-    img = cv2.GaussianBlur(img, (5, 5), 0)
+    img = cv2.GaussianBlur(img, (5, 5), 0)  # type: ignore
 
     enhancer = ImageEnhancer()
-    sharpened = enhancer.sharpen(img)
+    sharpened = enhancer.sharpen(img)  # type: ignore
 
     assert sharpened.shape == img.shape
     assert np.any(sharpened != img)
@@ -48,7 +48,7 @@ def test_image_enhancer_threshold():
     Tests the thresholding functionality of the ImageEnhancer.
     """
     img = np.zeros((100, 100), dtype=np.uint8)
-    cv2.putText(img, "TEST", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, 255, 2)
+    cv2.putText(img, "TEST", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,), 2)
 
     enhancer = ImageEnhancer()
     thresh = enhancer.apply_threshold(img)

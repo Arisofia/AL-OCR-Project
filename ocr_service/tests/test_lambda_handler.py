@@ -64,7 +64,9 @@ def test_handler_textract_failure(s3_event):
 
 def test_handler_missing_info():
     """Test handler with missing bucket or key."""
-    bad_event = {"Records": [{"s3": {}}]}
+    from typing import Any, Dict
+
+    bad_event: Dict[str, Any] = {"Records": [{"s3": {}}]}
     with patch("ocr_service.lambda_handler.logger") as mock_logger:
         response = handler(bad_event, None)
         assert response == {"status": "ok"}

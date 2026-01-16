@@ -91,7 +91,8 @@ class ALOrchestrator:
         if not self.learning_engine.client:
             return []
 
-        def _fetch():
+        def _fetch() -> Any:
+            assert self.learning_engine.client is not None
             return (
                 self.learning_engine.client.table("learning_patterns")
                 .select("*")
@@ -103,15 +104,20 @@ class ALOrchestrator:
         result = await asyncio.to_thread(_fetch)
         if not result:
             return []
-        return result.data if result.data else []
+        from typing import cast
+
+        return cast(List[Dict[str, Any]], result.data if result.data else [])
 
     def _prepare_for_validation(self, df: pd.DataFrame) -> pd.DataFrame:
         """Maps Supabase schema to Validation Gate schema."""
         # Schema: [id, doc_type, font_metadata, accuracy_score, created_at, version]
         v_df = pd.DataFrame()
-        v_df["image_path"] = df.get("id", "unknown").apply(
-            lambda x: f"s3://bucket/{x}.png"
-        )
+        ids = df.get("id")
+        if ids is not None and hasattr(ids, "apply"):
+            v_df["image_path"] = ids.apply(lambda x: f"s3://bucket/{x}.png")
+        else:
+            v_df["image_path"] = "unknown"
+
         v_df["ocr_text"] = "mock_text"  # In real AL, we'd store the actual text
         v_df["confidence"] = df.get("accuracy_score", 0.0)
         v_df["user_label"] = "pending"

@@ -81,28 +81,28 @@ class Settings(BaseSettings):
     )
 
     @model_validator(mode="after")
-    def validate_required_secrets(cls, values):
+    def validate_required_secrets(self) -> "Settings":
         missing = []
-        if not values.ocr_api_key:
+        if not self.ocr_api_key:
             missing.append("ocr_api_key")
-        if values.environment == "production":
+        if self.environment == "production":
             # In production, require Sentry and at least one AI key
-            if not values.sentry_dsn:
+            if not self.sentry_dsn:
                 missing.append("sentry_dsn")
             if not (
-                values.openai_api_key
-                or values.gemini_api_key
-                or values.hugging_face_hub_token
-                or values.perplexity_api_key
+                self.openai_api_key
+                or self.gemini_api_key
+                or self.hugging_face_hub_token
+                or self.perplexity_api_key
             ):
                 missing.append("AI provider key (openai/gemini/huggingface/perplexity)")
         if missing:
             logging.error("Missing required secrets: %s", ", ".join(missing))
-            raise ValueError("Missing required secrets: %s" % ", ".join(missing))
-        return values
+            raise ValueError(f"Missing required secrets: {', '.join(missing)}")
+        return self
 
 
-def _log_settings_load():
+def _log_settings_load() -> None:
     logging.info("Loading application settings from environment and .env file.")
 
 

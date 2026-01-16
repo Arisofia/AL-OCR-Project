@@ -4,7 +4,7 @@ Amazon Textract integration service for high-throughput financial document intel
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import boto3  # type: ignore
 from botocore.config import Config  # type: ignore
@@ -53,13 +53,15 @@ class TextractService:
                 retry=retry_if_exception_type(ClientError),
                 reraise=True,
             )
-            def _do_start():
+            def _do_start() -> Optional[str]:
+                from typing import cast
+
                 resp = self.client.start_document_text_detection(
                     DocumentLocation={"S3Object": {"Bucket": bucket, "Name": key}}
                 )
-                return resp.get("JobId")
+                return cast(Optional[str], resp.get("JobId"))
 
-            return _do_start()
+            return cast(Optional[str], _do_start())
         except ClientError as e:
             request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
             logger.error("Start detection failed after retries | RID: %s", request_id)
@@ -83,13 +85,18 @@ class TextractService:
                 retry=retry_if_exception_type(ClientError),
                 reraise=True,
             )
-            def _do_analyze():
-                return self.client.analyze_document(
-                    Document={"S3Object": {"Bucket": bucket, "Name": key}},
-                    FeatureTypes=features,
+            def _do_analyze() -> Dict[str, Any]:
+                from typing import cast
+
+                return cast(
+                    Dict[str, Any],
+                    self.client.analyze_document(
+                        Document={"S3Object": {"Bucket": bucket, "Name": key}},
+                        FeatureTypes=features,
+                    ),
                 )
 
-            return _do_analyze()
+            return cast(Dict[str, Any], _do_analyze())
         except ClientError as e:
             request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
             logger.error("Analyze document failed after retries | RID: %s", request_id)

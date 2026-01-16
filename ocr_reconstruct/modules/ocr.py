@@ -20,5 +20,5 @@ def image_to_text(
         img_gray = img  # type: ignore
 
     config = f"--oem {oem} --psm {psm}"
-    text = pytesseract.image_to_string(img_gray, lang=lang, config=config)
+    text = str(pytesseract.image_to_string(img_gray, lang=lang, config=config))
     return text.strip()

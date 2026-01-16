@@ -32,7 +32,12 @@ class PixelReconstructor:
         # 3 clusters: Background, Text, and Overlay (e.g., highlighter)
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
         _, _, centers = cv2.kmeans(
-            pixels, 3, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS
+            pixels,
+            3,
+            np.array([], dtype=np.int32),
+            criteria,
+            10,
+            cv2.KMEANS_RANDOM_CENTERS,
         )
 
         # Find which center is likely the overlay (usually bright but not pure white)
@@ -141,9 +146,12 @@ def deblur_wiener(img: np.ndarray, kernel: Optional[np.ndarray] = None) -> np.nd
     img_f = img.astype("float32") / 255.0
     try:
         from scipy import signal  # type: ignore
+        from typing import cast
 
         wiener_filtered = signal.wiener(img_f)
-        return np.clip(wiener_filtered * 255.0, 0, 255).astype("uint8")
+        return cast(np.ndarray, np.clip(wiener_filtered * 255.0, 0, 255)).astype(
+            "uint8"
+        )
     except (ImportError, Exception):
         # Fallback to a simple sharpening filter
         sharpen_kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])

@@ -1,6 +1,11 @@
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+# Set dummy environment variables for Pydantic Settings validation
+os.environ.setdefault("OCR_API_KEY", "test-api-key")
+os.environ.setdefault("ENVIRONMENT", "development")
 
 
 @pytest.fixture

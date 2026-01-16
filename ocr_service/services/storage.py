@@ -116,12 +116,14 @@ class StorageService:
             raise RuntimeError("S3 Storage not properly configured for presigning")
 
         try:
-            return self.s3_client.generate_presigned_post(
-                Bucket=self.bucket_name,
-                Key=key,
-                Fields={"Content-Type": content_type},
-                Conditions=[["starts-with", "$Content-Type", content_type]],
-                ExpiresIn=expires_in,
+            return dict(
+                self.s3_client.generate_presigned_post(
+                    Bucket=self.bucket_name,
+                    Key=key,
+                    Fields={"Content-Type": content_type},
+                    Conditions=[["starts-with", "$Content-Type", content_type]],
+                    ExpiresIn=expires_in,
+                )
             )
         except ClientError as e:
             logger.error("Failed to generate presigned POST: %s", e)
@@ -186,7 +188,8 @@ class StorageService:
                 retry=retry_if_exception_type(ClientError),
                 reraise=True,
             )
-            def _do_put():
+            def _do_put() -> bool:
+                assert self.s3_client is not None
                 logger.debug(
                     "Attempting to put object to S3: bucket=%s, key=%s",
                     self.bucket_name,
@@ -201,7 +204,7 @@ class StorageService:
                 logger.info("Successfully put object to S3: key=%s", key)
                 return True
 
-            return _do_put()
+            return bool(_do_put())
         except Exception as e:
             logger.error(
                 "Exceeded S3 put_object retry attempts or encountered error: %s", e
