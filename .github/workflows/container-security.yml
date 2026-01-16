@@ -1,0 +1,63 @@
+name: Container Build & Security
+
+on:
+  push:
+    paths:
+      - 'ocr_service/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU and Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build Docker image
+        run: |
+          docker build -t al-ocr-service:ci -f ocr_service/Dockerfile .
+
+      - name: Run container runtime checks
+        run: |
+          bash tests/container/run_container_checks.sh al-ocr-service:ci 8080
+
+      - name: Trivy Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'al-ocr-service:ci'
+          format: 'table'
+          exit-code: '1'
+          vuln-type: 'os,library'
+
+      - name: Dockle (CIS checks)
+        uses: goodwithtech/dockle-action@v1
+        with:
+          image: 'al-ocr-service:ci'
+          exit_code: 1
+
+      - name: Upload scan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-scans
+          path: |
+            ./**/trivy* || true
+            ./**/dockle* || true
+
+  lint-dockerfile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install hadolint
+        run: |
+          sudo wget -O /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/latest/download/hadolint-$(uname -s)-$(uname -m) && sudo chmod +x /usr/local/bin/hadolint
+      - name: Lint Dockerfile
+        run: hadolint ocr_service/Dockerfile
