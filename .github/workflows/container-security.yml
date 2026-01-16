@@ -368,9 +368,19 @@ jobs:
           path: lambda_benchmark_results.txt
 
       - name: Conditional rollback (optional)
-        if: env.ENABLE_LAMBDA_ROLLBACK == 'true' && env.PREV_IMAGE_URI != ''
         run: |
           set -euo pipefail
+          # Evaluate conditions inside the step to avoid invalid context access warnings
+          if [ "${ENABLE_LAMBDA_ROLLBACK:-}" != "true" ]; then
+            echo "ENABLE_LAMBDA_ROLLBACK not set to 'true'; skipping rollback check."
+            exit 0
+          fi
+
+          if [ -z "${PREV_IMAGE_URI:-}" ]; then
+            echo "PREV_IMAGE_URI empty; no previous image recorded, skipping rollback."
+            exit 0
+          fi
+
           THRESHOLD=${{ secrets.ROLLBACK_COLD_MS }}
           if [ -z "${THRESHOLD:-}" ]; then
             echo "ROLLBACK_COLD_MS not set; skipping automatic rollback check."

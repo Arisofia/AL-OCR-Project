@@ -49,3 +49,53 @@ def test_rate_limit_handler_response_and_logging(monkeypatch):
     extra = kwargs.get("extra", {})
     assert extra.get("path") == "/presign"
     assert extra.get("detail") == "429: 5 per 1 minute"
+
+
+def test_rate_limit_handler_response_shape(monkeypatch):
+    """The handler should return a 429 JSONResponse with the standardized detail.
+
+    This exercises the handler directly (minimal Request scope) and ensures
+    the JSON shape remains stable regardless of the original exception text.
+    """
+    from starlette.requests import Request
+    from starlette.responses import JSONResponse
+
+    scope = {
+        "type": "http",
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": "/presign",
+        "raw_path": b"/presign",
+        "query_string": b"",
+        "headers": [],
+        "client": ("testclient", 50000),
+        "server": ("testserver", 80),
+    }
+
+    request = Request(scope)
+
+    # Original exception message that should be logged but not echoed back
+    message = "Too many OCR requests"
+    exc = type("_DummyRL", (), {"__str__": lambda self: message})()
+
+    handler = limiter_mod._rate_limit_exceeded_handler_with_logging
+
+    from unittest.mock import MagicMock
+
+    mock_logger = MagicMock()
+    monkeypatch.setattr(limiter_mod, "logger", mock_logger)
+
+    response = handler(request, exc)  # type: ignore
+
+    assert isinstance(response, JSONResponse)
+    import json
+
+    assert response.status_code == 429
+    assert json.loads(response.body) == {"detail": "Rate limit exceeded"}
+
+    # Confirm the original message was logged in the structured extra
+    mock_logger.warning.assert_called()
+    args, kwargs = mock_logger.warning.call_args
+    extra = kwargs.get("extra", {})
+    assert extra.get("detail") == message
