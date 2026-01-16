@@ -36,7 +36,10 @@ def process_record(record: Dict[str, Any], request_id: str = "N/A") -> None:
     key = urllib.parse.unquote_plus(s3_info.get("object", {}).get("key", ""))
 
     if not bucket or not key:
-        logger.warning("Payload error: Missing S3 bucket or key reference")
+        logger.warning(
+            "Payload error: Missing S3 bucket or key reference",
+            extra={"request_id": request_id},
+        )
         return
 
     textract_service, storage_service = get_services(bucket)
