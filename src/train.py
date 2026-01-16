@@ -24,14 +24,16 @@ def train():
     try:
         import matplotlib.pyplot as plt
 
-        plt.figure(figsize=(8, 6))
-        plt.text(0.5, 0.5, "Placeholder Confusion Matrix", ha="center", va="center")
-        plt.savefig("confusion_matrix.png")
-        plt.close()
+        try:
+            plt.figure(figsize=(8, 6))
+            plt.text(0.5, 0.5, "Placeholder Confusion Matrix", ha="center", va="center")
+            plt.savefig("confusion_matrix.png")
+        finally:
+            plt.close()
     except ImportError:
-        # Create an empty file if matplotlib is missing
-        with open("confusion_matrix.png", "w") as f:
-            f.write("Placeholder")
+        # Write a valid PNG header as a fallback if matplotlib is missing
+        with open("confusion_matrix.png", "wb") as f:
+            f.write(b"\x89PNG\r\n\x1a\n")  # PNG file signature
 
     print("Training placeholder completed.")
 
