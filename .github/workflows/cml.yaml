@@ -26,9 +26,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install dvc[s3] cml matplotlib pandas
+          python -m pip install --upgrade pip
+          pip install --no-cache-dir -r requirements.txt
+          pip install --no-cache-dir cml
 
       - name: Pull data from DVC
         env:

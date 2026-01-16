@@ -55,3 +55,6 @@ terraform/tfplan
 /data/raw
 /data/validated
 /data/label-studio
+
+# Audit
+pip_audit_results.json

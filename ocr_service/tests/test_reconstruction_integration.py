@@ -62,7 +62,7 @@ def test_reconstruction_enabled(tmp_path, monkeypatch):
 
         # Mock the engine's run_reconstruction to return something
         with patch(
-            "modules.ocr_engine.IterativeOCREngine._run_reconstruction"
+            "ocr_service.modules.ocr_engine.IterativeOCREngine._run_reconstruction"
         ) as mock_recon:
             mock_recon.return_value = (
                 {"preview_text": "recon text", "meta": "data"},
