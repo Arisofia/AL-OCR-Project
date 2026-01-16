@@ -32,6 +32,5 @@ def setup_logging(level=logging.INFO):
     root_logger.setLevel(level)
 
     # Set some specific loggers to higher levels to reduce noise
-    logging.getLogger("boto3").setLevel(logging.WARNING)  # noqa: E1101
-    logging.getLogger("botocore").setLevel(logging.WARNING)  # noqa: E1101
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)  # noqa: E1101
+    for name in ("boto3", "botocore", "uvicorn.access"):
+        logging.getLogger(name).setLevel(logging.WARNING)  # noqa: E1101
