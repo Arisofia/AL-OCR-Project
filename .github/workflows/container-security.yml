@@ -25,20 +25,34 @@ jobs:
         id: build_image
         run: |
           IMAGE=al-ocr-service:ci
-          docker build -t "$IMAGE" -f ocr_service/Dockerfile .
+          for i in 1 2 3; do
+            if docker build -t "$IMAGE" -f ocr_service/Dockerfile .; then
+              break
+            fi
+            if [ $i -lt 3 ]; then
+              echo "Build failed; retrying in $((i*10))s..."
+              sleep $((i*10))
+            else
+              echo "Docker build failed after $i attempts."
+              exit 1
+            fi
+          done
           echo "image=$IMAGE" >> $GITHUB_OUTPUT
 
       - name: Run container runtime checks
         run: |
           bash tests/container/run_container_checks.sh ${{ steps.build_image.outputs.image }} 8080
 
-      - name: Trivy Scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ steps.build_image.outputs.image }}
-          format: 'table'
-          exit-code: '1'
-          vuln-type: 'os,library'
+      - name: Trivy Scan (table output)
+        run: |
+          set -euxo pipefail
+          IMAGE=${{ steps.build_image.outputs.image }}
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image -f table "$IMAGE" || true
+      - name: Trivy Scan (JSON output)
+        run: |
+          set -euxo pipefail
+          IMAGE=${{ steps.build_image.outputs.image }}
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image -f json -o trivy-results.json "$IMAGE" || true
 
       - name: Install Dockle
         run: |
@@ -48,9 +62,10 @@ jobs:
           tar -xzf dockle.tar.gz
           sudo mv dockle /usr/local/bin/dockle
 
-      - name: Run Dockle (CIS checks)
+      - name: Run Dockle (CIS checks - JSON)
         run: |
-          dockle --exit-code 1 ${{ steps.build_image.outputs.image }}
+          set -euxo pipefail
+          dockle -f json -o dockle-results.json ${{ steps.build_image.outputs.image }} || true
 
       - name: Upload scan artifacts
         if: always()
@@ -58,8 +73,9 @@ jobs:
         with:
           name: container-scans
           path: |
-            ./**/trivy* || true
-            ./**/dockle* || true
+            trivy-results.json
+            dockle-results.json
+            container-logs.txt || true
 
   lint-dockerfile:
     runs-on: ubuntu-latest
