@@ -59,7 +59,7 @@ def _rate_limit_exceeded_handler_with_logging(
         )
         return JSONResponse(
             status_code=429,
-            content={"detail": str(exc)},
+            content={"detail": "Rate limit exceeded"},
         )
 
 

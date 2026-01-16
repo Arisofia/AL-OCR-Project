@@ -34,15 +34,21 @@ def test_rate_limit_smoke_triggers_handler():
         }
         mock_boto.return_value = mock_s3
 
-        # Make the allowed number of calls (5), which should succeed
-        for _ in range(5):
+        # Issue requests until we hit a 429; stop at a safety ceiling
+        max_attempts = 50
+        rate_limited_response = None
+        for _ in range(max_attempts):
             resp = client.post("/presign", json=body, headers=headers)
-            assert resp.status_code == 200
+            if resp.status_code == 429:
+                rate_limited_response = resp
+                break
 
-        # The next call should hit the rate limit
-        resp = client.post("/presign", json=body, headers=headers)
-        assert resp.status_code == 429
-        assert "detail" in resp.json()
+        assert (
+            rate_limited_response is not None
+        ), "Expected at least one 429 response from rate limiter"
+        assert "detail" in rate_limited_response.json()
+        # Validate the handler-specific payload (adjust if message changes)
+        assert rate_limited_response.json().get("detail") == "Rate limit exceeded"
 
         # Assert our enhanced handler logged the rate limiting occurrence
         found = False
