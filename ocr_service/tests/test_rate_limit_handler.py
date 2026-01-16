@@ -19,9 +19,16 @@ def test_rate_limit_handler_response_and_logging(monkeypatch):
     # Create a minimal ASGI scope for the Request
     scope = {"type": "http", "method": "POST", "path": "/presign", "headers": []}
     req = Request(scope)
-    # RateLimitExceeded expects a Limit object; construct a lightweight dummy
-    # that mimics the string representation used by our handler.
-    exc = type("_DummyRL", (), {"__str__": lambda self: "429: 5 per 1 minute"})()
+
+    # Use a tiny dummy instead of constructing a full Limit-backed exception
+    def _dummy_str(self):
+        return "429: 5 per 1 minute"
+
+    exc = type(
+        "_DummyRL",
+        (),
+        {"__str__": _dummy_str},
+    )()
 
     # Replace the module logger with a mock to assert logging behaviour
     from unittest.mock import MagicMock
@@ -29,7 +36,7 @@ def test_rate_limit_handler_response_and_logging(monkeypatch):
     mock = MagicMock()
     monkeypatch.setattr(limiter_mod, "logger", mock)
 
-    resp = handler(req, exc)
+    resp = handler(req, exc)  # type: ignore
 
     assert resp.status_code == 429
     data = json.loads(resp.body)
