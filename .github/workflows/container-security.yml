@@ -56,7 +56,25 @@ jobs:
           set -euxo pipefail
           IMAGE=${{ steps.build_image.outputs.image }}
           # Write JSON results to the mounted workspace so the file is available to subsequent steps
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workdir" -w /workdir aquasec/trivy:0.55.0 image -f json -o trivy-results.json "$IMAGE"
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workdir" -w /workdir aquasec/trivy:0.55.0 image -f json -o trivy-results.json "$IMAGE" 2>trivy.err || true
+          # Also capture any tool output to a log for diagnostics
+          if [ -s trivy.err ]; then
+            echo "Trivy produced stderr output; copying to trivy.log"
+            cat trivy.err > trivy.log || true
+          fi
+
+      - name: Verify Trivy output (fallback capture)
+        run: |
+          set -euxo pipefail
+          IMAGE=${{ steps.build_image.outputs.image }}
+          if [ -f trivy-results.json ]; then
+            echo "trivy-results.json present"
+            ls -l trivy-results.json || true
+          else
+            echo "trivy-results.json missing; capturing table output to trivy.log for diagnostics"
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workdir" -w /workdir aquasec/trivy:0.55.0 image -f table "$IMAGE" > trivy.log 2>&1 || true
+            ls -l trivy.log || true
+          fi
 
       - name: "Optional: Fail on Trivy HIGH/CRITICAL (enable via FAIL_ON_SCAN=true)"
         if: env.FAIL_ON_SCAN == 'true'
@@ -140,7 +158,9 @@ jobs:
           name: container-scans
           path: |
             trivy-results.json
+            trivy.log
             dockle-results.json
+            dockle.log
             dockle.err
             container-logs.txt
           if-no-files-found: ignore

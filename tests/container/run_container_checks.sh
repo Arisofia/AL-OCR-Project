@@ -62,8 +62,9 @@ if [ "$HEALTH_OK" -eq 0 ]; then
   LOGS=$(cat container-logs.txt || true)
   echo "$LOGS"
   # Accept Lambda-style images: look for common Lambda runtime signatures (case-insensitive)
-  if echo "$LOGS" | grep -qiE "bootstrap|lambda runtime|starting lambda|exec\s+['\"]?/var/runtime/bootstrap|Handler|Mangum|Rapid"; then
-    echo "[CI] Detected Lambda runtime in container logs; treating as OK for Lambda-style image."
+  # Match concrete Lambda runtime indicators to reduce false positives
+  if echo "$LOGS" | grep -qiE "/var/runtime/bootstrap|exec\s+['\"]?/var/runtime/bootstrap|Lambda Runtime|Starting Lambda|Mangum|Rapid|Handler\s*[:=]"; then
+    echo "[CI] Detected Lambda runtime in container logs (pattern matched); treating as OK for Lambda-style image."
     # Stop and remove the container now that we know it started correctly
     docker stop "$CONTAINER_NAME" || true
     docker rm "$CONTAINER_NAME" || true
