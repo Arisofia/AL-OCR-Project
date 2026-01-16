@@ -6,7 +6,10 @@
             "Action": [
                 "s3:PutObject",
                 "s3:GetObject",
-                "s3:ListBucket"
+                "s3:ListBucket",
+                "s3:CreateBucket",
+                "s3:PutBucket*",
+                "s3:GetBucket*"
             ],
             "Resource": [
                 "arn:aws:s3:::al-financial-documents-<YOUR_AWS_ACCOUNT_ID>",
@@ -18,6 +21,17 @@
             "Action": [
                 "textract:DetectDocumentText",
                 "textract:AnalyzeDocument"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "iam:CreateRole",
+                "iam:PutRolePolicy",
+                "iam:AttachRolePolicy",
+                "iam:CreateOpenIDConnectProvider",
+                "iam:PassRole"
             ],
             "Resource": "*"
         },
