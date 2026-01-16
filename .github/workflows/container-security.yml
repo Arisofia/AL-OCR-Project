@@ -75,7 +75,7 @@ jobs:
           path: |
             trivy-results.json
             dockle-results.json
-            container-logs.txt || true
+            container-logs.txt
 
   lint-dockerfile:
     runs-on: ubuntu-latest
