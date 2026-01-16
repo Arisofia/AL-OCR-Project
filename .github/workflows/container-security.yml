@@ -61,3 +61,103 @@ jobs:
           sudo wget -O /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/latest/download/hadolint-$(uname -s)-$(uname -m) && sudo chmod +x /usr/local/bin/hadolint
       - name: Lint Dockerfile
         run: hadolint ocr_service/Dockerfile
+
+  lambda-benchmark:
+    name: Lambda Cold-Start & Synthetic Benchmark
+    runs-on: ubuntu-latest
+    needs: build-and-scan
+    if: ${{ secrets.AWS_ACCESS_KEY_ID && secrets.AWS_SECRET_ACCESS_KEY && secrets.AWS_REGION && secrets.AWS_ACCOUNT_ID && secrets.ECR_REPOSITORY && secrets.AWS_LAMBDA_FUNCTION_NAME }}
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+      LAMBDA_FUNCTION_NAME: ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }}
+      LAMBDA_ROLE_ARN: ${{ secrets.AWS_LAMBDA_ROLE_ARN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        run: |
+          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+
+      - name: Ensure ECR repository exists
+        run: |
+          if ! aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1; then
+            aws ecr create-repository --repository-name "$ECR_REPOSITORY" || true
+          fi
+
+      - name: Tag and push image to ECR
+        run: |
+          IMAGE_TAG="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:ci-${{ github.run_id }}"
+          docker tag al-ocr-service:ci "$IMAGE_TAG"
+          docker push "$IMAGE_TAG"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+
+      - name: Deploy or update Lambda image
+        run: |
+          set -euo pipefail
+          FN="$LAMBDA_FUNCTION_NAME"
+          IMAGE_URI="$IMAGE_TAG"
+          if aws lambda get-function --function-name "$FN" >/dev/null 2>&1; then
+            echo "Updating Lambda function code to image $IMAGE_URI"
+            aws lambda update-function-code --function-name "$FN" --image-uri "$IMAGE_URI" --publish
+          else
+            if [ -z "${LAMBDA_ROLE_ARN:-}" ]; then
+              echo "LAMBDA_ROLE_ARN not provided. Cannot create Lambda function. Exiting." >&2
+              exit 2
+            fi
+            echo "Creating Lambda function $FN with image $IMAGE_URI"
+            aws lambda create-function --function-name "$FN" --package-type Image --code ImageUri="$IMAGE_URI" --role "$LAMBDA_ROLE_ARN" --timeout 30 --memory-size 1024 --publish
+          fi
+
+      - name: Wait for Lambda deployment
+        run: |
+          sleep 10
+
+      - name: Run cold-start and benchmark invocations
+        id: benchmark
+        run: |
+          FN="$LAMBDA_FUNCTION_NAME"
+          OUT_FILE=./lambda_benchmark_results.txt
+          echo "Lambda Benchmark Results" > $OUT_FILE
+
+          # force a new instance by updating environment variable to a new value to trigger cold start
+          aws lambda update-function-configuration --function-name "$FN" --environment "Variables={CI_RUN_ID=${{ github.run_id }}}" || true
+          sleep 5
+
+          # first invocation (cold start)
+          START=$(date +%s%3N)
+          aws lambda invoke --function-name "$FN" --payload '{}' response.json >/dev/null
+          END=$(date +%s%3N)
+          COLD_MS=$((END-START))
+          echo "cold_start_ms: $COLD_MS" | tee -a $OUT_FILE
+
+          # warm invocations
+          ITER=5
+          for i in $(seq 1 $ITER); do
+            START=$(date +%s%3N)
+            aws lambda invoke --function-name "$FN" --payload '{}' response.json >/dev/null
+            END=$(date +%s%3N)
+            ELAPSED=$((END-START))
+            echo "warm_invocation_$i: $ELAPSED" | tee -a $OUT_FILE
+            sleep 0.5
+          done
+
+          # summarize
+          awk '/warm_invocation_/ {sum+= $2; count+=1; if(max=="" || $2>max) max=$2} END {print "warm_mean_ms="(count?sum/count:0)" warm_max_ms="(max?max:0)}' response.json > /dev/null 2>&1 || true
+          cat $OUT_FILE
+          echo "::set-output name=result-file::$OUT_FILE"
+
+      - name: Upload benchmark artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-benchmark-results
+          path: lambda_benchmark_results.txt
