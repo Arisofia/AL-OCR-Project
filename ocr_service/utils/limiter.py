@@ -7,14 +7,31 @@ import logging
 from typing import Optional
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from opentelemetry import trace
+
+# opentelemetry optional; fallback to noop tracer if unavailable
+try:
+    from opentelemetry import trace
+
+    tracer = trace.get_tracer(__name__)
+except ImportError:  # pragma: no cover - opentelemetry not present
+
+    class _NoopSpan:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class _NoopTracer:
+        def start_as_current_span(self, name: str):
+            return _NoopSpan()
+
+    tracer = _NoopTracer()
 
 # SlowAPI imports placed near other third-party imports
 from slowapi import Limiter  # type: ignore
 from slowapi.errors import RateLimitExceeded  # type: ignore
 from slowapi.util import get_remote_address  # type: ignore
-
-tracer = trace.get_tracer(__name__)
 
 logger = logging.getLogger("ocr-service.limiter")
 

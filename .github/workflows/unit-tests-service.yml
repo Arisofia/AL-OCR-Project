@@ -1,0 +1,36 @@
+name: Unit tests — ocr_service
+
+on:
+  push:
+    paths:
+      - 'ocr_service/**'
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - 'ocr_service/**'
+      - '.github/workflows/**'
+  workflow_dispatch: {}
+
+jobs:
+  test-service:
+    name: Run ocr_service unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+
+      - name: Run ocr_service tests (skip integration)
+        run: |
+          set -euo pipefail
+          python -m pytest -q ocr_service -m "not integration"

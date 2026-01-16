@@ -11,31 +11,9 @@ import cv2
 import numpy as np
 import pytesseract  # type: ignore
 
-try:
-    from ocr_reconstruct import process_bytes as recon_process_bytes
-    from ocr_reconstruct.modules.enhance import ImageEnhancer
-    from ocr_reconstruct.modules.reconstruct import PixelReconstructor
-
-    RECON_AVAILABLE = True
-except ImportError:
-
-    class _FallbackImageEnhancer:
-        """Minimal ImageEnhancer fallback."""
-
-        def sharpen(self, img: np.ndarray) -> np.ndarray:
-            kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
-            return cv2.filter2D(img, -1, kernel)
-
-        def apply_threshold(self, img: np.ndarray) -> np.ndarray:
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
-            _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY)
-            return thresh
-
-    ImageEnhancer: Any = _FallbackImageEnhancer  # type: ignore[assignment, no-redef]
-    PixelReconstructor: Any = None  # type: ignore[assignment, no-redef]
-    recon_process_bytes: Any = None  # type: ignore[assignment, no-redef]
-    RECON_AVAILABLE = False
-
+from ocr_reconstruct import process_bytes as recon_process_bytes
+from ocr_reconstruct.modules.enhance import ImageEnhancer
+from ocr_reconstruct.modules.reconstruct import PixelReconstructor
 
 from .advanced_recon import AdvancedPixelReconstructor
 from .confidence import ConfidenceScorer
@@ -43,6 +21,8 @@ from .image_toolkit import ImageToolkit
 from .layout import DocumentLayoutAnalyzer
 from .learning_engine import LearningEngine
 from .ocr_config import EngineConfig, TesseractConfig
+
+RECON_AVAILABLE = True
 
 logger = logging.getLogger("ocr-service.engine")
 
@@ -199,7 +179,7 @@ class IterativeOCREngine:
         validation_error = ImageToolkit.validate_image(
             image_bytes, max_size_mb=self.config.max_image_size_mb
         )
-        return {"error": validation_error} if validation_error else None
+        return {"error": validation_error} if validation_error else {}
 
     def _should_use_region_ocr(
         self, iteration: int, confidence: float, region_count: int
