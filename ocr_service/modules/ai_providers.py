@@ -114,3 +114,93 @@ class GeminiVisionProvider(VisionProvider):
         except Exception as e:
             logger.error("Gemini Vision unexpected error: %s", e)
             return {"error": str(e)}
+
+
+class HuggingFaceVisionProvider(VisionProvider):
+    """
+    Implementation of VisionProvider using Hugging Face Inference Router.
+
+    Uses the new router host (https://router.huggingface.co) and retries on
+    rate-limits (429) with exponential backoff. Falls back to a simple JSON
+    response extraction.
+    """
+
+    def __init__(self, token: str, model: str = "runwayml/stable-diffusion-v1-5"):
+        self.token = token
+        self.model = model
+
+    async def reconstruct(self, image_bytes: bytes, prompt: str) -> Dict[str, Any]:
+        import asyncio
+
+        base64_image = base64.b64encode(image_bytes).decode("utf-8")
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.token}",
+        }
+        url = f"https://router.huggingface.co/models/{self.model}"
+        payload = {
+            "inputs": {
+                "image": f"data:image/jpeg;base64,{base64_image}",
+                "prompt": prompt,
+            }
+        }
+
+        max_attempts = 3
+        attempt = 0
+        while attempt < max_attempts:
+            async with httpx.AsyncClient() as client:
+                try:
+                    response = await client.post(
+                        url, headers=headers, json=payload, timeout=60.0
+                    )
+                except httpx.HTTPError as e:
+                    logger.error(
+                        "HuggingFace HTTP error on attempt %s: %s", attempt + 1, e
+                    )
+                    return {"error": f"HuggingFace HTTP error: {e}"}
+
+            # Retry on 429 with exponential backoff
+            if response.status_code == 429:
+                backoff = 2**attempt
+                logger.warning(
+                    "HuggingFace rate limited, retrying in %s seconds (attempt %s)",
+                    backoff,
+                    attempt + 1,
+                )
+                await asyncio.sleep(backoff)
+                attempt += 1
+                continue
+
+            try:
+                response.raise_for_status()
+                data = response.json()
+                # Many HF vision/text models return different shapes; be permissive
+                text = None
+                if isinstance(data, dict):
+                    text = (
+                        data.get("generated_text")
+                        or data.get("text")
+                        or data.get("result")
+                    )
+                elif isinstance(data, list) and data:
+                    first = data[0]
+                    if isinstance(first, dict):
+                        text = (
+                            first.get("generated_text")
+                            or first.get("text")
+                            or first.get("result")
+                        )
+                    elif isinstance(first, str):
+                        text = first
+                if text is None:
+                    text = data
+                return {"text": text, "model": self.model}
+            except httpx.HTTPError as e:
+                logger.error("HuggingFace response parsing failed: %s", e)
+                return {"error": f"HuggingFace HTTP error: {e}"}
+            except Exception as e:
+                logger.error("HuggingFace unexpected error: %s", e)
+                return {"error": str(e)}
+
+        # If we've exhausted attempts without success, return an error
+        return {"error": "Exceeded maximum retry attempts due to rate limiting"}
