@@ -43,8 +43,8 @@ jobs:
       - name: Run Black (auto-format)
         run: |
           pip install black
-          black ocr-service ocr_reconstruct src || true
-          black --check ocr-service ocr_reconstruct src
+          black ocr_service ocr_reconstruct src || true
+          black --check ocr_service ocr_reconstruct src
       - name: Checkov Security Scan
         uses: bridgecrewio/checkov-action@99bb2caf247dfd9f03cf984373bc6043d4e32ebf
         with:

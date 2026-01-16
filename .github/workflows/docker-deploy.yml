@@ -6,14 +6,14 @@ on:
     branches:
       - main
     paths:
-      - 'ocr-service/**'
+      - 'ocr_service/**'
       - 'ocr_reconstruct/**'
       - '.github/workflows/docker-deploy.yml'
   pull_request:
     branches:
       - main
     paths:
-      - 'ocr-service/**'
+      - 'ocr_service/**'
       - 'ocr_reconstruct/**'
       - '.github/workflows/docker-deploy.yml'
   workflow_dispatch:
@@ -34,7 +34,7 @@ jobs:
       - name: Run Checkov Security Scan (Docker context)
         uses: bridgecrewio/checkov-action@master
         with:
-          directory: ./ocr-service
+          directory: ./ocr_service
           framework: dockerfile
           quiet: true
           soft_fail: true
@@ -42,13 +42,13 @@ jobs:
       - name: Lint Dockerfile (hadolint)
         uses: hadolint/hadolint-action@v3.1.0
         with:
-          dockerfile: ocr-service/Dockerfile
+          dockerfile: ocr_service/Dockerfile
 
       - name: Run Black (auto-format)
         run: |
           pip install black
-          black ocr-service ocr_reconstruct src || true
-          black --check ocr-service ocr_reconstruct src
+          black ocr_service ocr_reconstruct src || true
+          black --check ocr_service ocr_reconstruct src
       - name: Configure AWS Credentials
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         # aws-actions/configure-aws-credentials v4.0.2
@@ -75,16 +75,16 @@ jobs:
       - name: Build image
         run: |
           # Use a local tag for building and scanning
-          TAG=al-ocr-service:${{ github.sha }}
+          TAG=al-ocr_service:${{ github.sha }}
           docker buildx build --platform linux/amd64 \
-            -t $TAG --load -f ./ocr-service/Dockerfile \
+            -t $TAG --load -f ./ocr_service/Dockerfile \
             --cache-from type=gha --cache-to type=gha,mode=max .
 
       # aquasecurity/trivy-action v0.28.0
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2
         with:
-          image-ref: al-ocr-service:${{ github.sha }}
+          image-ref: al-ocr_service:${{ github.sha }}
           format: 'table'
           exit-code: '0'
           ignore-unfixed: true
@@ -97,10 +97,10 @@ jobs:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
         run: |
           ECR_REGISTRY=${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
-          IMAGE_URI=${ECR_REGISTRY}/al-ocr-service:${{ github.sha }}
-          LATEST_URI=${ECR_REGISTRY}/al-ocr-service:latest
-          docker tag al-ocr-service:${{ github.sha }} $IMAGE_URI
-          docker tag al-ocr-service:${{ github.sha }} $LATEST_URI
+          IMAGE_URI=${ECR_REGISTRY}/al-ocr_service:${{ github.sha }}
+          LATEST_URI=${ECR_REGISTRY}/al-ocr_service:latest
+          docker tag al-ocr_service:${{ github.sha }} $IMAGE_URI
+          docker tag al-ocr_service:${{ github.sha }} $LATEST_URI
           docker push $IMAGE_URI
           docker push $LATEST_URI
 
@@ -109,7 +109,7 @@ jobs:
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
         run: |
-          IMAGE_URI=${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${{ github.sha }}
+          IMAGE_URI=${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/al-ocr_service:${{ github.sha }}
           aws lambda update-function-code \
             --function-name "$LAMBDA_FUNCTION_NAME" \
             --image-uri "$IMAGE_URI"

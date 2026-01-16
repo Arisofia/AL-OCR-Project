@@ -25,7 +25,7 @@ def make_base(text="HELLO WORLD", size=(400, 120)):
     img = Image.new("RGB", size, color=(255, 255, 255))
     d = ImageDraw.Draw(img)
     d.text((10, 40), text, fill=(0, 0, 0), font=DEFAULT_FONT)
-    path = os.path.join(OUT_DIR, "sample_clean.png")
+    path = os.path.join(OUT_DIR, "sample1.png")
     img.save(path)
     return path
 

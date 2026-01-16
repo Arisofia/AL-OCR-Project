@@ -5,7 +5,7 @@ on:
   pull_request:
     paths:
       - 'frontend/**'
-      - 'ocr-service/**'
+      - 'ocr_service/**'
       - '.github/workflows/e2e.yml'
   workflow_dispatch:
 
@@ -35,14 +35,14 @@ jobs:
       - name: Install Python deps
         run: |
           python -m pip install --upgrade pip
-          pip install -r ocr-service/requirements.txt
+          pip install -r ocr_service/requirements.txt
           pip install -r ocr_reconstruct/requirements.txt
 
       - name: Run Black (auto-format)
         run: |
           pip install black
-          black ocr-service ocr_reconstruct src || true
-          black --check ocr-service ocr_reconstruct src
+          black ocr_service ocr_reconstruct src || true
+          black --check ocr_service ocr_reconstruct src
 
       - name: Cache npm
         uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
@@ -115,9 +115,9 @@ jobs:
           echo "Deployed preview to $DEPLOY_URL"
 
       - name: Start backend
-        working-directory: ./ocr-service
+        working-directory: ./ocr_service
         env:
-          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/ocr-service
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/ocr_service
           OCR_API_KEY: ${{ secrets.OCR_API_KEY || '' }}
         run: |
           nohup uvicorn main:app --host 0.0.0.0 --port 8000 > ../backend.log 2>&1 &
