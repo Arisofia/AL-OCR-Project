@@ -69,16 +69,32 @@ jobs:
     name: Lambda Cold-Start & Synthetic Benchmark
     runs-on: ubuntu-latest
     needs: build-and-scan
-    if: ${{ secrets.AWS_ACCESS_KEY_ID && secrets.AWS_SECRET_ACCESS_KEY && secrets.AWS_REGION && secrets.AWS_ACCOUNT_ID && secrets.ECR_REPOSITORY && secrets.AWS_LAMBDA_FUNCTION_NAME }}
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       LAMBDA_FUNCTION_NAME: ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }}
       LAMBDA_ROLE_ARN: ${{ secrets.AWS_LAMBDA_ROLE_ARN }}
+      ENABLE_LAMBDA_ROLLBACK: ${{ secrets.ENABLE_LAMBDA_ROLLBACK }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        run: |
+          missing=""
+          for var in AWS_REGION AWS_ACCOUNT_ID ECR_REPOSITORY LAMBDA_FUNCTION_NAME AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            if [ -z "${!var:-}" ]; then
+              missing="$missing $var"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "Skipping Lambda benchmark: missing required secrets:$missing"
+            exit 0
+          fi
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
@@ -179,7 +195,7 @@ jobs:
           path: lambda_benchmark_results.txt
 
       - name: Conditional rollback (optional)
-        if: ${{ secrets.ENABLE_LAMBDA_ROLLBACK == 'true' && env.PREV_IMAGE_URI != '' }}
+        if: env.ENABLE_LAMBDA_ROLLBACK == 'true' && env.PREV_IMAGE_URI != ''
         run: |
           set -euo pipefail
           THRESHOLD=${{ secrets.ROLLBACK_COLD_MS }}
@@ -199,9 +215,9 @@ jobs:
           fi
 
       - name: Slack notification (optional)
-        if: ${{ secrets.SLACK_WEBHOOK_URL }}
+        if: env.SLACK_WEBHOOK_URL
         run: |
-          WEBHOOK=${{ secrets.SLACK_WEBHOOK_URL }}
+          WEBHOOK=${{ env.SLACK_WEBHOOK_URL }}
           BODY=$(cat lambda_benchmark_results.txt | sed ':a;N;$!ba;s/\n/\n/g')
           PAYLOAD=$(jq -n --arg text "Lambda benchmark run ${{ github.run_id }} for ${{ env.LAMBDA_FUNCTION_NAME }}\n\n$BODY" '{text: $text}')
           curl -sS -X POST -H 'Content-type: application/json' --data "$PAYLOAD" "$WEBHOOK"
