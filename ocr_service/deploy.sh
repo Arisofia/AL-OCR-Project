@@ -1,20 +1,17 @@
 #!/bin/bash
 
-
 # Configuration
-AWS_REGION=${AWS_REGION:-"us-east-1"}
-# Auto-export AWS_ACCOUNT_ID if not set
+AWS_REGION="us-east-1"
+# Resolve Account ID
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text 2>/dev/null)
+
 if [ -z "$AWS_ACCOUNT_ID" ]; then
-  export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "")
-fi
-if [ -z "$AWS_ACCOUNT_ID" ]; then
-  echo "Error: AWS_ACCOUNT_ID is not set and could not be resolved."
-  echo "Please set AWS_ACCOUNT_ID or configure AWS credentials."
-  exit 1
+    echo "Error: Could not resolve AWS Account ID. Please ensure you have AWS credentials configured."
+    exit 1
 fi
 
-ECR_REPOSITORY=${ECR_REPOSITORY:-"al-ocr-service"}
-LAMBDA_FUNCTION_NAME=${LAMBDA_FUNCTION_NAME:-"AL-OCR-Processor"}
+ECR_REPOSITORY="al-ocr-service"
+LAMBDA_FUNCTION_NAME="AL-OCR-Processor"
 
 # Login to ECR
 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com

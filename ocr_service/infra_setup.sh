@@ -7,14 +7,14 @@ set -e
 # --- Configuration & Defaults ---
 AWS_REGION=${AWS_REGION:-"us-east-1"}
 
-# Auto-export AWS_ACCOUNT_ID if not set
+# Resolve Account ID
 if [ -z "$AWS_ACCOUNT_ID" ]; then
-  export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "")
+    AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text 2>/dev/null)
 fi
+
 if [ -z "$AWS_ACCOUNT_ID" ]; then
-  echo "Error: AWS_ACCOUNT_ID is not set and could not be resolved."
-  echo "Please set AWS_ACCOUNT_ID or configure AWS credentials."
-  exit 1
+    echo "Error: Could not resolve AWS Account ID. Please ensure you have AWS credentials configured."
+    exit 1
 fi
 
 ECR_REPOSITORY=${ECR_REPOSITORY:-"al-ocr-service"}
