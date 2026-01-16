@@ -1,7 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: "pip"
-    directory: "/ocr-service"
+    directory: "/ocr_service"
     schedule:
       interval: "weekly"
   - package-ecosystem: "pip"
