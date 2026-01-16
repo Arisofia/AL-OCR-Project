@@ -147,6 +147,58 @@ jobs:
             exit 1
           fi
 
+      - name: Scan summary (report)
+        if: always()
+        run: |
+          set -euo pipefail
+          echo "== Scan Summary (report) =="
+          if [ -f trivy-results.json ]; then
+            T_HIGH=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH" or .Severity=="CRITICAL")] | length' trivy-results.json || echo 0)
+            echo "Trivy high/critical findings: ${T_HIGH}"
+          else
+            echo "trivy-results.json not found; see trivy.log or trivy.err"
+          fi
+
+          if [ -f dockle-results.json ]; then
+            D_COUNT=$(jq 'length' dockle-results.json || echo 0)
+            echo "Dockle findings: ${D_COUNT}"
+          else
+            echo "dockle-results.json not found; see dockle.log or dockle.err"
+          fi
+
+      - name: "Optional: Fail on scan findings (enable via FAIL_ON_SCAN=true)"
+        if: env.FAIL_ON_SCAN == 'true'
+        run: |
+          set -euo pipefail
+          FOUND=0
+
+          if [ -f trivy-results.json ]; then
+            HIGH=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH" or .Severity=="CRITICAL")] | length' trivy-results.json || echo 0)
+            echo "Trivy high/critical: ${HIGH}"
+            if [ "$HIGH" -gt 0 ]; then
+              FOUND=1
+            fi
+          else
+            echo "trivy-results.json missing; see trivy.log or trivy.err"
+            FOUND=1
+          fi
+
+          if [ -f dockle-results.json ]; then
+            DOCKLE_COUNT=$(jq 'length' dockle-results.json || echo 0)
+            echo "Dockle findings: ${DOCKLE_COUNT}"
+            if [ "$DOCKLE_COUNT" -gt 0 ]; then
+              FOUND=1
+            fi
+          else
+            echo "dockle-results.json missing; see dockle.log or dockle.err"
+            FOUND=1
+          fi
+
+          if [ "$FOUND" -gt 0 ]; then
+            echo "Security scan summary indicates failures or missing artifacts. Failing due to FAIL_ON_SCAN=true"
+            exit 1
+          fi
+
       - name: Run container runtime checks
         run: |
           bash tests/container/run_container_checks.sh ${{ steps.build_image.outputs.image }} 8080
