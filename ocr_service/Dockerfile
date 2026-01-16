@@ -29,9 +29,9 @@ FROM public.ecr.aws/lambda/python:3.11
 WORKDIR /var/task
 
 # Runtime dependencies only
+# Note: Amazon Linux 2023 (Lambda Python 3.11) uses dnf/yum but shadow-utils
+# and tesseract may require different handling than AL2.
 RUN yum install -y \
-    https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm && \
-    yum install -y \
     tesseract \
     tesseract-langpack-spa \
     tesseract-langpack-eng \
@@ -39,12 +39,12 @@ RUN yum install -y \
     shadow-utils && \
     yum clean all
 
-
 # Copy installed packages from builder
 COPY --from=builder /install /var/lang
 
 # Create a non-root user for security (best practice)
-RUN useradd -m appuser && chown -R appuser:appuser /var/task
+# Using absolute path for useradd to ensure it is found in AL2023
+RUN /usr/sbin/useradd -m appuser && chown -R appuser:appuser /var/task
 
 # Copy application code with non-root ownership
 COPY --chown=appuser:appuser ocr_service/ /var/task/ocr_service/
