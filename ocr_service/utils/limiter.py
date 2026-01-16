@@ -8,12 +8,12 @@ from typing import Optional
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-# opentelemetry optional; fallback to noop tracer if unavailable
+# opentelemetry optional; provide a no-op tracer fallback when missing
 try:
     from opentelemetry import trace
 
     tracer = trace.get_tracer(__name__)
-except ImportError:  # pragma: no cover - opentelemetry not present
+except ImportError:  # pragma: no cover - fallback if opentelemetry missing
 
     class _NoopSpan:
         def __enter__(self):

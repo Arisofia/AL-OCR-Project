@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
 from ocr_service.config import get_settings
-from ocr_service.main import app
+from ocr_service.main import app, limiter
 
 
 def test_rate_limit_smoke_triggers_handler():
@@ -11,6 +11,10 @@ def test_rate_limit_smoke_triggers_handler():
     """
     settings = get_settings()
     settings.s3_bucket_name = "test-bucket"
+
+    # Reset limiter storage to ensure a clean state for this test
+    if hasattr(limiter, "reset"):
+        limiter.reset()
 
     client = TestClient(app)
     headers = {str(settings.api_key_header_name): str(settings.ocr_api_key)}
