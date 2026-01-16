@@ -50,13 +50,13 @@ jobs:
           set -euxo pipefail
           IMAGE=${{ steps.build_image.outputs.image }}
           # Mount the repo into the Trivy container so table output can access local images and any files are written to the runner
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workdir" -w /workdir aquasec/trivy image -f table "$IMAGE" || true
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workdir" -w /workdir aquasec/trivy:0.55.0 image -f table "$IMAGE"
       - name: Trivy Scan (JSON output)
         run: |
           set -euxo pipefail
           IMAGE=${{ steps.build_image.outputs.image }}
           # Write JSON results to the mounted workspace so the file is available to subsequent steps
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workdir" -w /workdir aquasec/trivy image -f json -o trivy-results.json "$IMAGE" || true
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workdir" -w /workdir aquasec/trivy:0.55.0 image -f json -o trivy-results.json "$IMAGE"
 
       - name: "Optional: Fail on Trivy HIGH/CRITICAL (enable via FAIL_ON_SCAN=true)"
         if: env.FAIL_ON_SCAN == 'true'
@@ -105,8 +105,12 @@ jobs:
             fi
           else
             echo "Local image id not found; falling back to image name $IMAGE (may require registry access)"
-            dockle -f json -o dockle-results.json "$IMAGE" 2>dockle.err || true
-            cat dockle.err || true
+            if dockle -f json -o dockle-results.json "$IMAGE" 2>dockle.err; then
+              echo "Dockle scan completed"
+            else
+              echo "Dockle scan failed or found issues; see dockle.err"
+              cat dockle.err || true
+            fi
           fi
 
       - name: "Optional: Fail on Dockle findings (enable via FAIL_ON_SCAN=true)"
