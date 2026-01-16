@@ -4,13 +4,14 @@ import sentry_sdk
 from .custom_logging import setup_logging
 
 
-def init_monitoring(settings: Any, integrations: Optional[List[Any]] = None):
+def init_monitoring(settings: Any, integrations: Optional[List[Any]] = None, **kwargs):
     """
     Unified initialization for logging and Sentry monitoring.
 
     Args:
         settings: Application settings object containing sentry_dsn and environment.
         integrations: Optional list of Sentry integrations to add.
+        **kwargs: Additional parameters for sentry_sdk.init (e.g., release).
     """
     # 1. Initialize logging
     log_level = logging.INFO if settings.environment == "production" else logging.DEBUG
@@ -28,6 +29,7 @@ def init_monitoring(settings: Any, integrations: Optional[List[Any]] = None):
             environment=settings.environment,
             integrations=default_integrations,
             traces_sample_rate=1.0 if settings.environment != "production" else 0.1,
+            **kwargs,
         )
         logger.info(
             "Sentry SDK initialized with %d integrations", len(default_integrations)

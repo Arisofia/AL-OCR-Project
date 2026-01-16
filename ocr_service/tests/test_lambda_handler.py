@@ -5,7 +5,7 @@ Test suite for the OCR Lambda handler.
 from unittest.mock import MagicMock, patch
 
 import pytest
-from lambda_handler import handler
+from ocr_service.lambda_handler import handler
 
 
 @pytest.fixture
@@ -25,7 +25,7 @@ def s3_event():
 
 def test_handler_success(s3_event):
     """Test successful handler execution."""
-    with patch("lambda_handler.get_services") as mock_get_services:
+    with patch("ocr_service.lambda_handler.get_services") as mock_get_services:
         mock_textract = MagicMock()
         mock_storage = MagicMock()
         mock_get_services.return_value = (mock_textract, mock_storage)
@@ -42,7 +42,7 @@ def test_handler_success(s3_event):
 
 def test_handler_textract_failure(s3_event):
     """Test handler behavior when Textract fails."""
-    with patch("lambda_handler.get_services") as mock_get_services:
+    with patch("ocr_service.lambda_handler.get_services") as mock_get_services:
         mock_textract = MagicMock()
         mock_storage = MagicMock()
         mock_get_services.return_value = (mock_textract, mock_storage)
@@ -65,7 +65,7 @@ def test_handler_textract_failure(s3_event):
 def test_handler_missing_info():
     """Test handler with missing bucket or key."""
     bad_event = {"Records": [{"s3": {}}]}
-    with patch("lambda_handler.logger") as mock_logger:
+    with patch("ocr_service.lambda_handler.logger") as mock_logger:
         response = handler(bad_event, None)
         assert response == {"status": "ok"}
         mock_logger.warning.assert_called_with(
@@ -78,7 +78,7 @@ def test_handler_with_aws_request_id(s3_event):
     """Test that handler extracts RequestId from AWS ClientErrors."""
     from botocore.exceptions import ClientError  # type: ignore
 
-    with patch("lambda_handler.get_services") as mock_get_services:
+    with patch("ocr_service.lambda_handler.get_services") as mock_get_services:
         mock_textract = MagicMock()
         mock_storage = MagicMock()
         mock_get_services.return_value = (mock_textract, mock_storage)

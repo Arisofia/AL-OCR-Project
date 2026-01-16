@@ -3,55 +3,72 @@ Core API Gateway for the AL Financial OCR Service.
 Provides endpoints for document intelligence and S3 lifecycle management.
 """
 
-import json
 import logging
-import os
 import time
-import uuid
-from typing import Any, cast, Type  # type: ignore
 
+from ocr_service.utils.monitoring import init_monitoring
+
+import boto3
+from botocore.exceptions import ClientError
+from config import Settings, get_settings
 from fastapi import Depends, FastAPI, File, HTTPException, Request, Security, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
-from botocore.exceptions import ClientError
 from mangum import Mangum
-from pydantic import BaseModel
-from redis import Redis  # type: ignore
-
-from sentry_sdk.integrations.fastapi import FastApiIntegration
-
-from ocr_service.config import Settings, get_settings
-from ocr_service.modules.ocr_config import EngineConfig
-from ocr_service.modules.ocr_engine import IterativeOCREngine
-from ocr_service.modules.processor import OCRProcessor
-from ocr_service.modules.active_learning_orchestrator import ALOrchestrator
-from ocr_service.schemas import (
+from modules.ocr_config import EngineConfig
+from modules.ocr_engine import IterativeOCREngine
+from modules.processor import OCRProcessor
+from schemas import (
     HealthResponse,
     OCRResponse,
     PresignRequest,
     PresignResponse,
     ReconStatusResponse,
 )
-from ocr_service.services.storage import StorageService
-from ocr_service.utils.limiter import (
-    RateLimitExceeded,
-    _rate_limit_exceeded_handler_with_logging as _rate_limit_exceeded_handler,
-    init_limiter,
-)
-from ocr_service.utils.monitoring import init_monitoring
+from services.storage import StorageService
 
-# Load settings
-settings = get_settings()
+# slowapi is optional in test environments; silence static import errors for linters
+# pylint: disable=import-error
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+    from slowapi.util import get_remote_address
+except Exception:  # pragma: no cover - slowapi optional in tests
 
-# Initialize enterprise-grade monitoring (Logging + Sentry)
-init_monitoring(
-    settings,
-    integrations=[FastApiIntegration()],
-    release=f"ocr-service@{settings.version}",
+    class _NoopLimiter:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def limit(self, *_args, **_kwargs):
+            def _decorator(f):
+                return f
+
+            return _decorator
+
+    Limiter = _NoopLimiter
+
+    def _no_rate_limit_handler(_request, _exc):
+        """No-op rate limit handler for environments without slowapi."""
+        return None
+
+    _rate_limit_exceeded_handler = _no_rate_limit_handler
+    RateLimitExceeded = Exception
+
+    def get_remote_address(request):
+        return getattr(getattr(request, "client", None), "host", "127.0.0.1")
+
+
+# Initialize enterprise-grade logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("ocr-service")
 
-limiter = init_limiter()
+
+settings = get_settings()
+init_monitoring(settings, release=getattr(settings, "version", None))
+
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
     title=settings.app_name,
     description=settings.app_description,
@@ -60,19 +77,7 @@ app = FastAPI(
     redoc_url="/redoc" if settings.environment != "production" else None,
 )
 app.state.limiter = limiter
-app.add_exception_handler(
-    cast(Type[Exception], RateLimitExceeded), _rate_limit_exceeded_handler
-)
-
-
-def get_request_id(request: Request) -> str:
-    """Extracts AWS Request ID from Mangum scope or defaults to local trace."""
-    scope = request.scope
-    return (
-        scope["aws.context"].aws_request_id
-        if "aws.context" in scope
-        else "local-development"
-    )
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 @app.middleware("http")
@@ -80,48 +85,28 @@ async def add_process_time_and_logging(request: Request, call_next):
     """Logs request lifecycle and adds performance metadata to responses."""
     start_time = time.time()
 
-    # Extract request ID for traceability and attach to state
+    # Extract request ID for traceability
     request_id = get_request_id(request)
-    request.state.request_id = request_id
 
     logger.info(
-        "Request started",
-        extra={
-            "path": request.url.path,
-            "method": request.method,
-            "request_id": request_id,
-        },
+        "Request started | Path: %s | Method: %s | ID: %s",
+        request.url.path,
+        request.method,
+        request_id,
     )
 
-    try:
-        response = await call_next(request)
-    except Exception as exc:
-        process_time = time.time() - start_time
-        logger.error(
-            "Request failed",
-            extra={
-                "path": request.url.path,
-                "method": request.method,
-                "latency": f"{process_time:.4f}s",
-                "request_id": request_id,
-                "error": str(exc),
-            },
-            exc_info=True,
-        )
-        raise
+    response = await call_next(request)
 
     process_time = time.time() - start_time
     response.headers["X-Process-Time"] = f"{process_time:.4f}s"
     response.headers["X-Request-ID"] = request_id
 
     logger.info(
-        "Request finished",
-        extra={
-            "path": request.url.path,
-            "status": response.status_code,
-            "latency": f"{process_time:.4f}s",
-            "request_id": request_id,
-        },
+        "Request finished | Path: %s | Status: %d | Latency: %.4fs | ID: %s",
+        request.url.path,
+        response.status_code,
+        process_time,
+        request_id,
     )
 
     return response
@@ -168,13 +153,6 @@ def get_ocr_processor(
     return OCRProcessor(engine, storage)
 
 
-def get_al_orchestrator(
-    engine: IterativeOCREngine = Depends(get_ocr_engine),
-) -> ALOrchestrator:
-    """Provides an Active Learning orchestrator."""
-    return ALOrchestrator(engine.learning_engine)
-
-
 # Security and Identity Management
 api_key_header = APIKeyHeader(name=settings.api_key_header_name, auto_error=False)
 
@@ -191,44 +169,29 @@ async def get_api_key(
     )
 
 
+def get_request_id(request: Request) -> str:
+    """Extracts AWS Request ID from Mangum scope or defaults to local trace."""
+    scope = request.scope
+    if "aws.context" in scope:
+        return scope["aws.context"].aws_request_id
+    return "local-development"
+
+
 # Runtime Package Detection
 try:
     import ocr_reconstruct as _ocr_reconstruct_pkg  # type: ignore
 
     RECON_PKG_AVAILABLE = True
     RECON_PKG_VERSION = getattr(_ocr_reconstruct_pkg, "__version__", "unknown")
-except Exception:
+except (ImportError, Exception):
     RECON_PKG_AVAILABLE = False
     RECON_PKG_VERSION = None
 
 
 @app.get("/health", response_model=HealthResponse)
-async def health_check(
-    settings: Settings = Depends(get_settings),
-    storage: StorageService = Depends(get_storage_service),
-    engine: IterativeOCREngine = Depends(get_ocr_engine),
-) -> HealthResponse:
-    """Service availability heartbeat with dependency checks."""
-    services = {
-        "s3": "healthy" if storage.check_connection() else "unconfigured/degraded",
-        "supabase": (
-            "healthy"
-            if engine.learning_engine.check_connection()
-            else "unconfigured/degraded"
-        ),
-        "openai": "configured" if settings.openai_api_key else "missing",
-        "gemini": "configured" if settings.gemini_api_key else "missing",
-    }
-
-    # If a critical service is degraded, we might want to flag the whole service
-    status = "degraded" if services["s3"] == "unconfigured/degraded" else "healthy"
-
-    return HealthResponse(
-        status=status,
-        timestamp=time.time(),
-        environment=settings.environment,
-        services=services,
-    )
+async def health_check() -> HealthResponse:
+    """Service availability heartbeat."""
+    return HealthResponse(status="healthy", timestamp=time.time())
 
 
 @app.get("/recon/status", response_model=ReconStatusResponse)
@@ -280,7 +243,7 @@ async def generate_presigned_post(
     request: Request,
     req: PresignRequest,
     _api_key: str = Depends(get_api_key),
-    storage: StorageService = Depends(get_storage_service),
+    curr_settings: Settings = Depends(get_settings),
 ) -> PresignResponse:
     """
     Generates a secure, time-limited S3 POST URL for client-side direct uploads.
@@ -288,12 +251,19 @@ async def generate_presigned_post(
     """
     # Used by SlowAPI decorator for rate limiting; intentionally not accessed
     del request
+    bucket = curr_settings.s3_bucket_name
+    if not bucket:
+        raise HTTPException(status_code=500, detail="S3 bucket not configured")
+
+    s3 = boto3.client("s3", region_name=curr_settings.aws_region)
 
     try:
-        post = storage.generate_presigned_post(
-            key=req.key,
-            content_type=req.content_type or "application/octet-stream",
-            expires_in=req.expires_in or 3600,
+        post = s3.generate_presigned_post(
+            Bucket=bucket,
+            Key=req.key,
+            Fields={"Content-Type": req.content_type},
+            Conditions=[["starts-with", "$Content-Type", req.content_type]],
+            ExpiresIn=req.expires_in,
         )
     except ClientError as exc:
         request_id = exc.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
@@ -301,9 +271,6 @@ async def generate_presigned_post(
         raise HTTPException(
             status_code=500, detail=f"S3 rejected request [{request_id}]"
         ) from exc
-    except RuntimeError as exc:
-        logger.error("Configuration error during presign: %s", exc)
-        raise HTTPException(status_code=500, detail="S3 bucket not configured") from exc
     except Exception as exc:
         logger.exception("Unexpected failure during presign generation")
         raise HTTPException(
@@ -313,58 +280,10 @@ async def generate_presigned_post(
     return PresignResponse(url=post["url"], fields=post["fields"])
 
 
-# Job submission and status endpoints
-r = Redis(host=os.getenv("REDIS_HOST", "localhost"), port=6379, db=0)
-
-
-class OCRRequest(BaseModel):
-    image_url: str
-    document_type: str = "invoice"
-
-
-@app.post("/api/v1/extract")
-async def submit_job(request: OCRRequest):
-    job_id = str(uuid.uuid4())
-    job_payload = {
-        "id": job_id,
-        "url": request.image_url,
-        "status": "QUEUED",
-    }
-    r.set(f"job:{job_id}", json.dumps(job_payload))
-    r.rpush("ocr_tasks", job_id)
-    return {
-        "job_id": job_id,
-        "status": "QUEUED",
-        "check_url": f"/api/v1/jobs/{job_id}",
-    }
-
-
-@app.get("/api/v1/jobs/{job_id}")
-async def get_status(job_id: str):
-    if not (data := r.get(f"job:{job_id}")):
-        raise HTTPException(status_code=404, detail="Job not found")
-    return json.loads(cast(Any, data))
-
-
-@app.post("/al/trigger")
-async def trigger_al_cycle(
-    n_samples: int = 20,
-    _api_key: str = Depends(get_api_key),
-    orchestrator: ALOrchestrator = Depends(get_al_orchestrator),
-):
-    """Manually triggers an Active Learning cycle."""
-    result = await orchestrator.run_cycle(n_samples=n_samples)
-    if result.get("status") == "validation_failed":
-        raise HTTPException(
-            status_code=422, detail="Data validation failed during AL cycle"
-        )
-    return result
-
-
 # AWS Lambda Integration
 handler = Mangum(app)
 
 if __name__ == "__main__":
     import uvicorn  # type: ignore
 
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)  # nosec B104
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

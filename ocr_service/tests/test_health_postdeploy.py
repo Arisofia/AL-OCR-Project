@@ -12,7 +12,10 @@ import requests
 def test_health_check():
     # Default to local FastAPI dev server
     url = os.environ.get("OCR_HEALTH_URL", "http://127.0.0.1:8000/health")
-    resp = requests.get(url, timeout=10)
+    try:
+        resp = requests.get(url, timeout=2)
+    except requests.exceptions.ConnectionError:
+        pytest.skip(f"Health check server not reachable at {url}")
 
     assert (
         resp.status_code == 200

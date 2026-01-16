@@ -43,7 +43,9 @@ jobs:
 
           echo "## Model Metrics" > report.md
           if [ -f metrics.json ]; then
+            echo '\n```json' >> report.md
             cat metrics.json >> report.md
+            echo '\n```' >> report.md
           else
             echo "Metrics not found." >> report.md
           fi

@@ -14,7 +14,7 @@ sys.modules.setdefault("modules.processor", MagicMock(OCRProcessor=MagicMock()))
 # pylint: disable=wrong-import-position
 from ocr_service.config import get_settings  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-from main import app  # noqa: E402
+from ocr_service.main import app  # noqa: E402
 
 client = TestClient(app)
 

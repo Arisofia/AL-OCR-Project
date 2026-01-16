@@ -6,17 +6,12 @@ Can be run via cron job or manually.
 import asyncio
 import logging
 import sys
-import os
 
-# Add current directory to path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-# pylint: disable=wrong-import-position
-from ocr_service.modules.active_learning_orchestrator import (  # noqa: E402
+from ocr_service.modules.active_learning_orchestrator import (
     ALOrchestrator,
 )
-from ocr_service.modules.learning_engine import LearningEngine  # noqa: E402
-from ocr_service.utils.custom_logging import setup_logging  # noqa: E402
+from ocr_service.modules.learning_engine import LearningEngine
+from ocr_service.utils.custom_logging import setup_logging
 
 
 async def main():

@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: ocr_service/Dockerfile
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["uvicorn", "ocr_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "8000:8000"
     environment:
@@ -17,7 +17,7 @@ services:
     build:
       context: .
       dockerfile: ocr_service/Dockerfile
-    command: ["python", "worker.py"]
+    command: ["python", "-m", "ocr_service.worker"]
     environment:
       - REDIS_HOST=redis
       - ENVIRONMENT=production
@@ -26,8 +26,8 @@ services:
 
   redis:
     image: "redis:alpine"
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
 
   frontend:
     build:

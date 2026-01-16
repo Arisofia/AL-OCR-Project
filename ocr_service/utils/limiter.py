@@ -5,9 +5,11 @@ Provides fallback mechanisms when slowapi is not available.
 
 import logging
 from typing import Any, Callable
-
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from opentelemetry import trace
+
+tracer = trace.get_tracer(__name__)
 
 logger = logging.getLogger("ocr-service.limiter")
 
@@ -54,18 +56,26 @@ except ImportError:  # pragma: no cover
 
 
 def _rate_limit_exceeded_handler_with_logging(request: Request, exc: Exception) -> Any:
-    """Enhanced rate limit handler with structured logging."""
-    logger.warning(
-        "Rate limit exceeded",
-        extra={
-            "path": request.url.path,
-            "remote_addr": get_remote_address(request),
-            "detail": str(exc),
-        },
-    )
-    return _rate_limit_exceeded_handler(request, exc)  # type: ignore[arg-type]
+    """Enhanced rate limit handler with structured logging and tracing."""
+    with tracer.start_as_current_span("limiter.rate_limit_exceeded"):
+        logger.warning(
+            "Rate limit exceeded",
+            extra={
+                "path": request.url.path,
+                "remote_addr": get_remote_address(request),
+                "detail": str(exc),
+            },
+        )
+        return _rate_limit_exceeded_handler(request, exc)  # type: ignore[arg-type]
 
 
 def init_limiter() -> Limiter:
-    """Initializes and returns a Limiter instance."""
-    return Limiter(key_func=get_remote_address)
+    """Initializes and returns a Limiter instance with tracing."""
+    with tracer.start_as_current_span("limiter.init_limiter"):
+        try:
+            limiter = Limiter(key_func=get_remote_address)
+            logger.info("Limiter initialized successfully.")
+            return limiter
+        except Exception as e:
+            logger.error(f"Failed to initialize Limiter: {e}")
+            raise

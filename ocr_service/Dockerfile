@@ -43,12 +43,12 @@ COPY --from=builder /install /var/lang
 RUN useradd -m appuser && chown -R appuser:appuser /var/task
 
 # Copy application code with non-root ownership
-COPY --chown=appuser:appuser ocr_service/ /var/task
-COPY --chown=appuser:appuser ocr_reconstruct/ /var/task/ocr_reconstruct
+COPY --chown=appuser:appuser ocr_service/ /var/task/ocr_service/
+COPY --chown=appuser:appuser ocr_reconstruct/ /var/task/ocr_reconstruct/
 
 ENV PYTHONPATH=/var/task
 
 USER appuser
 
 # Set the CMD to the Lambda S3/Textract handler
-CMD [ "lambda_handler.handler" ]
+CMD [ "ocr_service.lambda_handler.handler" ]

@@ -26,6 +26,10 @@ class StorageService:
     Simple S3 wrapper with basic retry semantics.
 
     Retries are performed locally on transient ClientError exceptions (e.g. throttling).
+
+    Note on thread-safety: The underlying boto3 client is thread-safe, but
+    creating a new client per thread is generally recommended if session
+    configurations differ.
     """
 
     def __init__(
@@ -48,17 +52,26 @@ class StorageService:
         self._last_check_time = 0.0
         self._last_check_result = False
 
+        if not self.bucket_name:
+            logger.debug(
+                "S3 bucket name not provided; StorageService will run in degraded mode."
+            )
+
         # Disable botocore automatic retries when we use a local manual retry loop
         config = Config(retries={"max_attempts": 1, "mode": "standard"})
-        self.s3_client = (
-            boto3.client(
-                "s3",
-                config=config,
-                region_name=self.region,
+        try:
+            self.s3_client = (
+                boto3.client(
+                    "s3",
+                    config=config,
+                    region_name=self.region,
+                )
+                if self.bucket_name
+                else None
             )
-            if self.bucket_name
-            else None
-        )
+        except Exception as e:
+            logger.error("Failed to initialize boto3 S3 client: %s", e)
+            self.s3_client = None
 
     def check_connection(self) -> bool:
         """
@@ -66,6 +79,9 @@ class StorageService:
         Results are cached for 60 seconds to avoid redundant API calls.
         """
         if not self.s3_client or not self.bucket_name:
+            logger.debug(
+                "Connectivity check failed: S3 client or bucket name not configured."
+            )
             return False
 
         # Return cached result if fresh
@@ -75,7 +91,13 @@ class StorageService:
         try:
             self.s3_client.head_bucket(Bucket=self.bucket_name)
             self._last_check_result = True
-        except (ClientError, Exception):
+        except ClientError as e:
+            logger.debug(
+                "S3 connectivity check failed for bucket %s: %s", self.bucket_name, e
+            )
+            self._last_check_result = False
+        except Exception as e:
+            logger.warning("Unexpected error during S3 connectivity check: %s", e)
             self._last_check_result = False
 
         self._last_check_time = time.time()

@@ -2,7 +2,7 @@ import os
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
-from main import app
+from ocr_service.main import app
 
 
 def _get_test_image(base_path, tmp_path):
