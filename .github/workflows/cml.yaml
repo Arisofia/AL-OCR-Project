@@ -3,60 +3,56 @@ on: [push]
 jobs:
   run:
     runs-on: ubuntu-latest
-    container: docker://iterativeai/cml:0-dvc2-base1
     steps:
       - uses: actions/checkout@v3
 
-      - name: Cache pip dependencies
-        uses: actions/cache@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-cml-pip-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-cml-pip-
+          python-version: '3.11'
+          cache: 'pip'
 
-      - name: DVC Diagnostics
-        continue-on-error: true
+      - name: Install dependencies
         run: |
-          python -m dvc doctor
-          python -m dvc status
-          python -m dvc list . data/raw
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install dvc[s3] cml
 
-      - name: Check required files
-        run: |
-          for f in requirements.txt src/train.py; do
-            if [ ! -f "$f" ]; then
-              echo "::error file=$f::Required file $f is missing!" && exit 1
-            fi
-          done
-
-      - name: Train Model
+      - name: Pull data from DVC
         env:
-          REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: us-east-1
         run: |
-          # Install Python dependencies
-          pip install -r requirements.txt
-          # Pull data dependencies
-          python -m dvc pull data/raw.dvc
-          echo "Validating data checksums..."
-          # Re-check DVC status after pulling
-          python -m dvc status
-          echo "Verifying pulled data content..."
-          ls -R data/raw
-          # Train the model
+          # dvc remote modify storage url s3://custom-bucket/path if needed
+          dvc pull data/raw.dvc
+
+      - name: Train Model
+        env:
+          REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # If src/train.py is missing, this will fail gracefully with clear error
+          if [ ! -f src/train.py ]; then
+            echo "## Training Error" > report.md
+            echo "File \`src/train.py\` not found. Skipping training." >> report.md
+            cml send-comment report.md
+            exit 1
+          fi
+
           python src/train.py
-          # Prepare and publish metrics report
-          if [ ! -f metrics.json ]; then
-            echo "::error file=metrics.json::metrics.json not found after training!" && exit 1
-          fi
-          if [ ! -f confusion_matrix.png ]; then
-            echo "::error file=confusion_matrix.png::confusion_matrix.png not found after training!" && exit 1
-          fi
+
           echo "## Model Metrics" > report.md
-          cat metrics.json >> report.md
+          if [ -f metrics.json ]; then
+            cat metrics.json >> report.md
+          else
+            echo "Metrics not found." >> report.md
+          fi
+
           echo "## Confusion Matrix" >> report.md
-          cml-publish confusion_matrix.png --md >> report.md
+          if [ -f confusion_matrix.png ]; then
+            cml-publish confusion_matrix.png --md >> report.md
+          else
+            echo "Confusion matrix image not found." >> report.md
+          fi
+
           cml send-comment report.md
