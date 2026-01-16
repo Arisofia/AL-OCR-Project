@@ -89,10 +89,24 @@ jobs:
           IMAGE_ID=$(docker images -q "$IMAGE" || true)
           if [ -n "$IMAGE_ID" ]; then
             echo "Scanning local image id $IMAGE_ID with Dockle"
-            dockle -f json -o dockle-results.json "$IMAGE_ID" || true
+            # Try scanning the image ID; if Dockle fails (unauthorized), fall back to saving the image and scanning the tarball
+            if dockle -f json -o dockle-results.json "$IMAGE_ID" 2>dockle.err; then
+              echo "Dockle scan completed against image id"
+            else
+              echo "Dockle scan failed against image id; attempting local tar fallback"
+              cat dockle.err || true
+              docker save "$IMAGE" -o image.tar
+              if dockle -f json -o dockle-results.json image.tar 2>>dockle.err; then
+                echo "Dockle scan completed against image tar"
+              else
+                echo "Dockle failed against image tar; see dockle.err for details"
+                cat dockle.err || true
+              fi
+            fi
           else
             echo "Local image id not found; falling back to image name $IMAGE (may require registry access)"
-            dockle -f json -o dockle-results.json "$IMAGE" || true
+            dockle -f json -o dockle-results.json "$IMAGE" 2>dockle.err || true
+            cat dockle.err || true
           fi
 
       - name: "Optional: Fail on Dockle findings (enable via FAIL_ON_SCAN=true)"
