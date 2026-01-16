@@ -76,20 +76,9 @@ jobs:
             ls -l trivy.log || true
           fi
 
-      - name: "Optional: Fail on Trivy HIGH/CRITICAL (enable via FAIL_ON_SCAN=true)"
-        if: env.FAIL_ON_SCAN == 'true'
-        run: |
-          set -euo pipefail
-          if [ -f trivy-results.json ]; then
-            HIGH=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH" or .Severity=="CRITICAL")] | length' trivy-results.json)
-            if [ "$HIGH" -gt 0 ]; then
-              echo "Found $HIGH high/critical vulnerabilities in trivy-results.json"
-              exit 1
-            fi
-          else
-            echo "trivy-results.json not found"
-            exit 1
-          fi
+      # NOTE: Trivy-specific immediate fail step removed so Dockle and all scan artifacts
+      # are generated before any scan enforcement. Use the aggregated scan summary +
+      # "Optional: Fail on scan findings" step later to enforce FAIL_ON_SCAN behavior.
 
       - name: Install Dockle
         run: |
