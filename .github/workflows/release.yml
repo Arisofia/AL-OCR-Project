@@ -3,21 +3,22 @@ on:
   push:
     branches:
       - main
-    paths:
-      - '**'
-  workflow_dispatch:
 
-jobs:
-  release:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
     steps:
+      push:
+        branches:
+          - main
+        paths:
+          - '**'
+      workflow_dispatch:
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+        permissions:
+          contents: write
+          issues: write
+          pull-requests: write
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
