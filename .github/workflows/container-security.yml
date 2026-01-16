@@ -39,10 +39,6 @@ jobs:
           done
           echo "image=$IMAGE" >> $GITHUB_OUTPUT
 
-      - name: Run container runtime checks
-        run: |
-          bash tests/container/run_container_checks.sh ${{ steps.build_image.outputs.image }} 8080
-
       - name: Trivy Scan (table output)
         run: |
           set -euxo pipefail
@@ -66,6 +62,10 @@ jobs:
         run: |
           set -euxo pipefail
           dockle -f json -o dockle-results.json ${{ steps.build_image.outputs.image }} || true
+
+      - name: Run container runtime checks
+        run: |
+          bash tests/container/run_container_checks.sh ${{ steps.build_image.outputs.image }} 8080
 
       - name: Upload scan artifacts
         if: always()
