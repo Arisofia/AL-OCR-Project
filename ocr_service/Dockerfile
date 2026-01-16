@@ -2,7 +2,7 @@
 FROM public.ecr.aws/lambda/python:3.11 AS builder
 
 # Install build-time dependencies
-RUN yum install -y --no-install-recommends \
+RUN yum install -y \
     gcc \
     gcc-c++ \
     gcc-gfortran \
@@ -26,8 +26,10 @@ RUN pip install --prefix=/install --prefer-binary --no-cache-dir ./ocr_reconstru
 # Stage 2: Final lightweight runtime image
 FROM public.ecr.aws/lambda/python:3.11
 
+WORKDIR /var/task
+
 # Runtime dependencies only
-RUN yum install -y --no-install-recommends \
+RUN yum install -y \
     tesseract \
     tesseract-langpack-spa \
     tesseract-langpack-eng \

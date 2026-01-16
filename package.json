@@ -1,0 +1,10 @@
+{
+  "name": "al-ocr-project",
+  "version": "1.2.0",
+  "private": true,
+  "description": "Professional Iterative OCR & Pixel Reconstruction Project",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Arisofia/AL-OCR-Project.git"
+  }
+}
