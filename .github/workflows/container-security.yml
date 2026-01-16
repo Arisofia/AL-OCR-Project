@@ -13,9 +13,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-scan:
     runs-on: ubuntu-latest
+    env:
+      FAIL_ON_SCAN: 'false' # set to 'true' to make Trivy/Dockle failures block the job
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -52,6 +58,21 @@ jobs:
           # Write JSON results to the mounted workspace so the file is available to subsequent steps
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workdir" -w /workdir aquasec/trivy image -f json -o trivy-results.json "$IMAGE" || true
 
+      - name: "Optional: Fail on Trivy HIGH/CRITICAL (enable via FAIL_ON_SCAN=true)"
+        if: env.FAIL_ON_SCAN == 'true'
+        run: |
+          set -euo pipefail
+          if [ -f trivy-results.json ]; then
+            HIGH=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH" or .Severity=="CRITICAL")] | length' trivy-results.json)
+            if [ "$HIGH" -gt 0 ]; then
+              echo "Found $HIGH high/critical vulnerabilities in trivy-results.json"
+              exit 1
+            fi
+          else
+            echo "trivy-results.json not found"
+            exit 1
+          fi
+
       - name: Install Dockle
         run: |
           set -euxo pipefail
@@ -64,6 +85,22 @@ jobs:
         run: |
           set -euxo pipefail
           dockle -f json -o dockle-results.json ${{ steps.build_image.outputs.image }} || true
+
+      - name: "Optional: Fail on Dockle findings (enable via FAIL_ON_SCAN=true)"
+        if: env.FAIL_ON_SCAN == 'true'
+        run: |
+          set -euo pipefail
+          if [ -f dockle-results.json ]; then
+            # Dockle outputs an array of findings; fail if any findings present
+            COUNT=$(jq 'length' dockle-results.json || echo 0)
+            if [ "$COUNT" -gt 0 ]; then
+              echo "Dockle reported $COUNT findings"
+              exit 1
+            fi
+          else
+            echo "dockle-results.json not found"
+            exit 1
+          fi
 
       - name: Run container runtime checks
         run: |

@@ -32,12 +32,13 @@ echo "[CI] Starting container for health checks..."
 CONTAINER_NAME="alocr_ci_check_$RANDOM"
 docker run -d --rm --name "$CONTAINER_NAME" -p ${PORT}:${PORT} "$IMAGE" || { echo "[CI] ERROR: failed to start container"; docker logs "$CONTAINER_NAME" || true; exit 2; }
 
-# Capture an initial snapshot of container logs for debugging
+# Ensure the log file exists and capture an initial snapshot of container logs for debugging
+: > container-logs.txt
 set +e
 sleep 1
-docker logs "$CONTAINER_NAME" > container-logs.txt || true
+docker logs "$CONTAINER_NAME" >> container-logs.txt 2>&1 || true
 set -e
-echo "[CI] Wrote initial container logs to container-logs.txt"
+echo "[CI] Appended initial container logs to container-logs.txt"
 
 # Wait for health endpoint (tries common ports if default fails)
 HEALTH_OK=0
@@ -54,7 +55,7 @@ done
 if [ "$HEALTH_OK" -eq 0 ]; then
   echo "[CI] Health endpoint did not respond on port ${PORT} - checking for Lambda-style image..."
   # Capture logs to file for artifact upload and debugging
-  docker logs "$CONTAINER_NAME" > container-logs.txt || true
+  docker logs "$CONTAINER_NAME" >> container-logs.txt 2>&1 || true
   LOGS=$(cat container-logs.txt || true)
   echo "$LOGS"
   # Accept Lambda-style images: look for common Lambda runtime signatures (case-insensitive)
