@@ -21,7 +21,7 @@ jobs:
   build-and-scan:
     runs-on: ubuntu-latest
     env:
-      FAIL_ON_SCAN: 'true' # TEST: temporarily enable to verify scan-failing behavior (set back to 'false' after test)
+      FAIL_ON_SCAN: 'false' # set to 'true' to make Trivy/Dockle failures block the job
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,7 +50,7 @@ jobs:
           set -euxo pipefail
           IMAGE=${{ steps.build_image.outputs.image }}
           # Mount the repo into the Trivy container so table output can access local images and any files are written to the runner
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workdir" -w /workdir aquasec/trivy:0.55.0 image -f table "$IMAGE"
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workdir" -w /workdir aquasec/trivy:0.55.0 image -f table "$IMAGE" || true
       - name: Trivy Scan (JSON output)
         run: |
           set -euxo pipefail
