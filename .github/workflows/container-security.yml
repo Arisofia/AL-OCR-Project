@@ -84,7 +84,16 @@ jobs:
       - name: Run Dockle (CIS checks - JSON)
         run: |
           set -euxo pipefail
-          dockle -f json -o dockle-results.json ${{ steps.build_image.outputs.image }} || true
+          IMAGE=${{ steps.build_image.outputs.image }}
+          # Prefer scanning the local image ID to avoid registry auth issues (Dockle may try to fetch manifest)
+          IMAGE_ID=$(docker images -q "$IMAGE" || true)
+          if [ -n "$IMAGE_ID" ]; then
+            echo "Scanning local image id $IMAGE_ID with Dockle"
+            dockle -f json -o dockle-results.json "$IMAGE_ID" || true
+          else
+            echo "Local image id not found; falling back to image name $IMAGE (may require registry access)"
+            dockle -f json -o dockle-results.json "$IMAGE" || true
+          fi
 
       - name: "Optional: Fail on Dockle findings (enable via FAIL_ON_SCAN=true)"
         if: env.FAIL_ON_SCAN == 'true'

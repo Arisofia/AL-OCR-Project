@@ -30,15 +30,18 @@ echo "[CI] /tmp owner: $WRITE_OUT"
 # 3) Health endpoint
 echo "[CI] Starting container for health checks..."
 CONTAINER_NAME="alocr_ci_check_$RANDOM"
-docker run -d --rm --name "$CONTAINER_NAME" -p ${PORT}:${PORT} "$IMAGE" || { echo "[CI] ERROR: failed to start container"; docker logs "$CONTAINER_NAME" || true; exit 2; }
+# Do not use --rm so logs are available even if the container exits quickly
+docker run -d --name "$CONTAINER_NAME" -p ${PORT}:${PORT} "$IMAGE" || { echo "[CI] ERROR: failed to start container"; docker logs "$CONTAINER_NAME" || true; docker rm "$CONTAINER_NAME" || true; exit 2; }
 
-# Ensure the log file exists and capture an initial snapshot of container logs for debugging
+# Ensure the log file exists and capture multiple snapshots of container logs for debugging (append)
 : > container-logs.txt
 set +e
 sleep 1
-docker logs "$CONTAINER_NAME" >> container-logs.txt 2>&1 || true
+docker logs -t "$CONTAINER_NAME" >> container-logs.txt 2>&1 || true
+sleep 2
+docker logs -t "$CONTAINER_NAME" >> container-logs.txt 2>&1 || true
 set -e
-echo "[CI] Appended initial container logs to container-logs.txt"
+echo "[CI] Appended initial container logs to container-logs.txt (multiple snapshots)"
 
 # Wait for health endpoint (tries common ports if default fails)
 HEALTH_OK=0
@@ -61,8 +64,9 @@ if [ "$HEALTH_OK" -eq 0 ]; then
   # Accept Lambda-style images: look for common Lambda runtime signatures (case-insensitive)
   if echo "$LOGS" | grep -qiE "bootstrap|lambda runtime|starting lambda|exec\s+['\"]?/var/runtime/bootstrap|Handler|Mangum|Rapid"; then
     echo "[CI] Detected Lambda runtime in container logs; treating as OK for Lambda-style image."
-    # Stop the container now that we know it started correctly
+    # Stop and remove the container now that we know it started correctly
     docker stop "$CONTAINER_NAME" || true
+    docker rm "$CONTAINER_NAME" || true
     STOPPED=1
     HEALTH_OK=1
   else
@@ -82,6 +86,8 @@ else
     docker logs "$CONTAINER_NAME" || true
     exit 2
   fi
+  # Ensure container is removed after successful stop
+  docker rm "$CONTAINER_NAME" || true
 fi
 
 echo "[CI] Runtime checks passed for ${IMAGE}."
