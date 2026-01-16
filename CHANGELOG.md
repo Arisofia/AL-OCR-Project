@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/Arisofia/AL-OCR-Project/compare/v1.0.0...v1.0.1) (2026-01-16)
+
+
+### Bug Fixes
+
+* **tests:** robust health test; ci: dockle install + set image output; mypy install types ([81f8af6](https://github.com/Arisofia/AL-OCR-Project/commit/81f8af65630b694684b68c7a085c274c3c3237d9))
+
 # 1.0.0 (2026-01-16)
 
 
