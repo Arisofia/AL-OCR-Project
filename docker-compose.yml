@@ -1,34 +1,49 @@
-
 services:
-    api:
-      build:
-        context: .
-        dockerfile: ocr-service/Dockerfile
-      command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-      ports:
-        - "8000:8000"
-      environment:
-        - REDIS_HOST=redis
-      depends_on:
-        - redis
+  api:
+    build:
+      context: .
+      dockerfile: ocr_service/Dockerfile
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_HOST=redis
+      - ENVIRONMENT=production
+      - OCR_API_KEY=test_production_key
+    depends_on:
+      - redis
 
-    worker:
-      build:
-        context: .
-        dockerfile: ocr-service/Dockerfile
-      command: ["python", "worker.py"]
-      environment:
-        - REDIS_HOST=redis
-      depends_on:
-        - redis
+  worker:
+    build:
+      context: .
+      dockerfile: ocr_service/Dockerfile
+    command: ["python", "worker.py"]
+    environment:
+      - REDIS_HOST=redis
+      - ENVIRONMENT=production
+    depends_on:
+      - redis
 
-    redis:
-      image: "redis:alpine"
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6379:6379"
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    environment:
+      - VITE_API_BASE=http://localhost:8000
+      - VITE_API_KEY=test_production_key
+    depends_on:
+      - api
 
-    label-studio:
-      image: "heartexlabs/label-studio:latest"
-      ports:
-        - "8080:8080"
-      volumes:
-        - ./data/label-studio:/label-studio/data
+  label-studio:
+    image: "heartexlabs/label-studio:latest"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data/label-studio:/label-studio/data
