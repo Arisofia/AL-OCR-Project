@@ -140,9 +140,13 @@ jobs:
           fi
 
       - name: "Optional: Fail on Dockle findings (enable via FAIL_ON_SCAN=true)"
-        if: env.FAIL_ON_SCAN == 'true'
         run: |
           set -euo pipefail
+          if [ "${FAIL_ON_SCAN:-}" != 'true' ]; then
+            echo "FAIL_ON_SCAN != 'true'; skipping Dockle fail check."
+            exit 0
+          fi
+
           if [ -f dockle-results.json ]; then
             # Dockle outputs an object with a 'details' array; fail if any findings present
             COUNT=$(jq '.details | length // 0' dockle-results.json || echo 0)
@@ -175,9 +179,13 @@ jobs:
           fi
 
       - name: "Optional: Fail on scan findings (enable via FAIL_ON_SCAN=true)"
-        if: env.FAIL_ON_SCAN == 'true'
         run: |
           set -euo pipefail
+          if [ "${FAIL_ON_SCAN:-}" != 'true' ]; then
+            echo "FAIL_ON_SCAN != 'true'; skipping aggregated fail check."
+            exit 0
+          fi
+
           FOUND=0
 
           if [ -f trivy-results.json ]; then
@@ -398,9 +406,14 @@ jobs:
           fi
 
       - name: Slack notification (optional)
-        if: env.SLACK_WEBHOOK_URL
         run: |
-          WEBHOOK=${{ env.SLACK_WEBHOOK_URL }}
+          # Perform in-step check to avoid invalid context access when secrets/env missing
+          if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
+            echo "SLACK_WEBHOOK_URL not set; skipping Slack notification."
+            exit 0
+          fi
+
+          WEBHOOK="${SLACK_WEBHOOK_URL}"
           BODY=$(cat lambda_benchmark_results.txt | sed ':a;N;$!ba;s/\n/\n/g')
           PAYLOAD=$(jq -n --arg text "Lambda benchmark run ${{ github.run_id }} for ${{ env.LAMBDA_FUNCTION_NAME }}\n\n$BODY" '{text: $text}')
           curl -sS -X POST -H 'Content-type: application/json' --data "$PAYLOAD" "$WEBHOOK"
