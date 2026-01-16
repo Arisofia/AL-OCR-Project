@@ -6,6 +6,9 @@ on:
       - 'ocr_service/**'
       - '.github/workflows/**'
   workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * *' # Daily at 06:00 UTC (scheduled Lambda benchmarking)
+
 
 permissions:
   contents: read
@@ -101,6 +104,16 @@ jobs:
           docker push "$IMAGE_TAG"
           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
 
+      - name: Capture previous Lambda image (if exists)
+        id: prev_image
+        run: |
+          FN="$LAMBDA_FUNCTION_NAME"
+          PREV_IMAGE=$(aws lambda get-function --function-name "$FN" --query 'Configuration.Code' --output text 2>/dev/null || true)
+          # Attempt to extract ImageUri if present
+          PREV_IMAGE_URI=$(aws lambda get-function --function-name "$FN" --query 'Code.ImageUri' --output text 2>/dev/null || true || true)
+          echo "PREV_IMAGE_URI=${PREV_IMAGE_URI:-}" >> $GITHUB_ENV
+          echo "Previous image: ${PREV_IMAGE_URI:-<none>}"
+
       - name: Deploy or update Lambda image
         run: |
           set -euo pipefail
@@ -151,13 +164,44 @@ jobs:
             sleep 0.5
           done
 
-          # summarize
-          awk '/warm_invocation_/ {sum+= $2; count+=1; if(max=="" || $2>max) max=$2} END {print "warm_mean_ms="(count?sum/count:0)" warm_max_ms="(max?max:0)}' response.json > /dev/null 2>&1 || true
-          cat $OUT_FILE
-          echo "::set-output name=result-file::$OUT_FILE"
+          # compute summary and expose output via GITHUB_OUTPUT
+          WARM_MEAN=$(awk '/warm_invocation_/ {sum+= $2; count+=1} END {print (count?sum/count:0)}' $OUT_FILE || echo 0)
+          WARM_MAX=$(awk '/warm_invocation_/ {if($2>max) max=$2} END {print (max?max:0)}' $OUT_FILE || echo 0)
+          echo "cold_start_ms=$COLD_MS" | tee -a $OUT_FILE
+          echo "warm_mean_ms=$WARM_MEAN" | tee -a $OUT_FILE
+          echo "warm_max_ms=$WARM_MAX" | tee -a $OUT_FILE
+          echo "result_file=$OUT_FILE" >> $GITHUB_OUTPUT
 
       - name: Upload benchmark artifact
         uses: actions/upload-artifact@v4
         with:
           name: lambda-benchmark-results
           path: lambda_benchmark_results.txt
+
+      - name: Conditional rollback (optional)
+        if: ${{ secrets.ENABLE_LAMBDA_ROLLBACK == 'true' && env.PREV_IMAGE_URI != '' }}
+        run: |
+          set -euo pipefail
+          THRESHOLD=${{ secrets.ROLLBACK_COLD_MS }}
+          if [ -z "${THRESHOLD:-}" ]; then
+            echo "ROLLBACK_COLD_MS not set; skipping automatic rollback check."
+            exit 0
+          fi
+          COLD_MS=$(awk -F': ' '/cold_start_ms/ {print $2; exit}' lambda_benchmark_results.txt || echo 0)
+          echo "Cold start measured: $COLD_MS ms; threshold: $THRESHOLD ms"
+          if [ "$COLD_MS" -gt "$THRESHOLD" ]; then
+            echo "Cold start exceeded threshold; rolling back to ${PREV_IMAGE_URI}" >&2
+            aws lambda update-function-code --function-name "$LAMBDA_FUNCTION_NAME" --image-uri "${PREV_IMAGE_URI}" --publish
+            echo "Rollback performed to ${PREV_IMAGE_URI}"
+            echo "rollback_performed=true" >> $GITHUB_OUTPUT
+          else
+            echo "No rollback necessary." >> $GITHUB_OUTPUT
+          fi
+
+      - name: Slack notification (optional)
+        if: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          WEBHOOK=${{ secrets.SLACK_WEBHOOK_URL }}
+          BODY=$(cat lambda_benchmark_results.txt | sed ':a;N;$!ba;s/\n/\n/g')
+          PAYLOAD=$(jq -n --arg text "Lambda benchmark run ${{ github.run_id }} for ${{ env.LAMBDA_FUNCTION_NAME }}\n\n$BODY" '{text: $text}')
+          curl -sS -X POST -H 'Content-type: application/json' --data "$PAYLOAD" "$WEBHOOK"
