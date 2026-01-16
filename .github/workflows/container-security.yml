@@ -21,7 +21,7 @@ jobs:
   build-and-scan:
     runs-on: ubuntu-latest
     env:
-      FAIL_ON_SCAN: 'false' # set to 'true' to make Trivy/Dockle failures block the job
+      FAIL_ON_SCAN: 'true' # TEST: temporarily enable to verify scan-failing behavior (set back to 'false' after test)
     steps:
       - name: Checkout
         uses: actions/checkout@v4
