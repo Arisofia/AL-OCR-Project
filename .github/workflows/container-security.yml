@@ -93,31 +93,49 @@ jobs:
         run: |
           set -euxo pipefail
           IMAGE=${{ steps.build_image.outputs.image }}
-          # Prefer scanning the local image ID to avoid registry auth issues (Dockle may try to fetch manifest)
-          IMAGE_ID=$(docker images -q "$IMAGE" || true)
-          if [ -n "$IMAGE_ID" ]; then
-            echo "Scanning local image id $IMAGE_ID with Dockle"
-            # Try scanning the image ID; if Dockle fails (unauthorized), fall back to saving the image and scanning the tarball
-            if dockle -f json -o dockle-results.json "$IMAGE_ID" 2>dockle.err; then
-              echo "Dockle scan completed against image id"
-            else
-              echo "Dockle scan failed against image id; attempting local tar fallback"
-              cat dockle.err || true
-              docker save "$IMAGE" -o image.tar
-              if dockle -f json -o dockle-results.json image.tar 2>>dockle.err; then
-                echo "Dockle scan completed against image tar"
-              else
-                echo "Dockle failed against image tar; see dockle.err for details"
-                cat dockle.err || true
-              fi
-            fi
+
+          # Strategy:
+          # 1) Try scanning the image by name (repo:tag) which works for local images
+          # 2) If that fails, try scanning the image id
+          # 3) If still failing, docker save/load and try scanning again
+          # 4) As a final fallback, run Dockle in a container with the repo mounted so output can be written to the host
+
+          echo "Attempting Dockle scan for image name: $IMAGE"
+          if dockle -f json -o dockle-results.json "$IMAGE" 2>dockle.err; then
+            echo "Dockle scan completed against image name $IMAGE"
           else
-            echo "Local image id not found; falling back to image name $IMAGE (may require registry access)"
-            if dockle -f json -o dockle-results.json "$IMAGE" 2>dockle.err; then
-              echo "Dockle scan completed"
+            echo "Dockle scan failed against image name; trying image id"
+            cat dockle.err || true
+            IMAGE_ID=$(docker images -q "$IMAGE" || true)
+            if [ -n "$IMAGE_ID" ]; then
+              echo "Found image id $IMAGE_ID; attempting Dockle scan against id"
+              if dockle -f json -o dockle-results.json "$IMAGE_ID" 2>>dockle.err; then
+                echo "Dockle scan completed against image id"
+              else
+                echo "Dockle failed against image id; attempting docker save/load fallback"
+                cat dockle.err || true
+                docker save "$IMAGE" -o image.tar || true
+                docker load -i image.tar || true
+                # Try scanning by name again after load
+                if dockle -f json -o dockle-results.json "$IMAGE" 2>>dockle.err; then
+                  echo "Dockle scan completed against loaded image name"
+                else
+                  echo "Dockle still failed after docker load; attempting containerized Dockle as a last resort"
+                  cat dockle.err || true
+                  docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workdir" goodwithtech/dockle:0.4.9 -f json -o /workdir/dockle-results.json "$IMAGE" 2>>dockle.err || true
+                fi
+              fi
             else
-              echo "Dockle scan failed or found issues; see dockle.err"
-              cat dockle.err || true
+              echo "Image id not found; attempting docker save/load fallback"
+              docker save "$IMAGE" -o image.tar || true
+              docker load -i image.tar || true
+              if dockle -f json -o dockle-results.json "$IMAGE" 2>>dockle.err; then
+                echo "Dockle scan completed after docker load"
+              else
+                echo "Dockle failed after docker load; attempting containerized Dockle"
+                cat dockle.err || true
+                docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workdir" goodwithtech/dockle:0.4.9 -f json -o /workdir/dockle-results.json "$IMAGE" 2>>dockle.err || true
+              fi
             fi
           fi
 
@@ -151,7 +169,7 @@ jobs:
 
           if [ -f dockle-results.json ]; then
             DOCKLE_COUNT=$(jq '.details | length // 0' dockle-results.json || echo 0)
-            echo "Dockle findings: ${D_COUNT}"
+            echo "Dockle findings: ${DOCKLE_COUNT}"
           else
             echo "dockle-results.json not found; see dockle.log or dockle.err"
           fi
@@ -174,7 +192,7 @@ jobs:
           fi
 
           if [ -f dockle-results.json ]; then
-            DOCKLE_COUNT=$(jq 'length' dockle-results.json || echo 0)
+            DOCKLE_COUNT=$(jq '.details | length // 0' dockle-results.json || echo 0)
             echo "Dockle findings: ${DOCKLE_COUNT}"
             if [ "$DOCKLE_COUNT" -gt 0 ]; then
               FOUND=1
