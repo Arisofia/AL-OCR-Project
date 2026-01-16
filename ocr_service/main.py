@@ -5,8 +5,10 @@ Provides endpoints for document intelligence and S3 lifecycle management.
 
 import logging
 import time
+from typing import Optional
 
 from ocr_service.utils.monitoring import init_monitoring
+from ocr_service.utils.custom_logging import setup_logging
 
 import boto3
 from botocore.exceptions import ClientError
@@ -27,41 +29,24 @@ from ocr_service.schemas import (
 )
 from ocr_service.services.storage import StorageService
 
-# slowapi is optional in test environments; silence static import errors for linters
-# pylint: disable=import-error
+# Runtime package detection for optional reconstruction capability
 try:
-    from slowapi import Limiter, _rate_limit_exceeded_handler
-    from slowapi.errors import RateLimitExceeded
-    from slowapi.util import get_remote_address
-except Exception:  # pragma: no cover - slowapi optional in tests
+    import ocr_reconstruct as _ocr_reconstruct_pkg  # type: ignore
 
-    class _NoopLimiter:
-        def __init__(self, *_args, **_kwargs):
-            pass
+    RECON_PKG_AVAILABLE = True
+    RECON_PKG_VERSION = getattr(_ocr_reconstruct_pkg, "__version__", "unknown")
+except Exception:
+    RECON_PKG_AVAILABLE = False
+    RECON_PKG_VERSION = "not-installed"
 
-        def limit(self, *_args, **_kwargs):
-            def _decorator(f):
-                return f
-
-            return _decorator
-
-    Limiter = _NoopLimiter
-
-    def _no_rate_limit_handler(_request, _exc):
-        """No-op rate limit handler for environments without slowapi."""
-        return None
-
-    _rate_limit_exceeded_handler = _no_rate_limit_handler
-    RateLimitExceeded = Exception
-
-    def get_remote_address(request):
-        return getattr(getattr(request, "client", None), "host", "127.0.0.1")
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+from ocr_service.utils.limiter import _rate_limit_exceeded_handler_with_logging
 
 
 # Initialize enterprise-grade logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+setup_logging(level=logging.INFO)
 logger = logging.getLogger("ocr-service")
 
 
@@ -77,7 +62,7 @@ app = FastAPI(
     redoc_url="/redoc" if settings.environment != "production" else None,
 )
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler_with_logging)
 
 
 @app.middleware("http")
@@ -128,7 +113,14 @@ app.add_middleware(
 def get_storage_service(
     curr_settings: Settings = Depends(get_settings),
 ) -> StorageService:
-    """Provides an authenticated StorageService instance for S3 operations."""
+    """Provides an authenticated StorageService instance for S3 operations.
+
+    Args:
+        curr_settings: The application settings.
+
+    Returns:
+        StorageService: An instance of the storage service.
+    """
     return StorageService(
         bucket_name=curr_settings.s3_bucket_name, settings=curr_settings
     )
@@ -137,7 +129,14 @@ def get_storage_service(
 def get_ocr_engine(
     curr_settings: Settings = Depends(get_settings),
 ) -> IterativeOCREngine:
-    """Provides a configured IterativeOCREngine for document analysis."""
+    """Provides a configured IterativeOCREngine for document analysis.
+
+    Args:
+        curr_settings: The application settings.
+
+    Returns:
+        IterativeOCREngine: An instance of the OCR engine.
+    """
     config = EngineConfig(
         max_iterations=curr_settings.ocr_iterations,
         enable_reconstruction=curr_settings.enable_reconstruction,
@@ -149,7 +148,15 @@ def get_ocr_processor(
     engine: IterativeOCREngine = Depends(get_ocr_engine),
     storage: StorageService = Depends(get_storage_service),
 ) -> OCRProcessor:
-    """Orchestrates the high-level OCR processing pipeline."""
+    """Orchestrates the high-level OCR processing pipeline.
+
+    Args:
+        engine: The OCR engine instance.
+        storage: The storage service instance.
+
+    Returns:
+        OCRProcessor: An instance of the OCR processor.
+    """
     return OCRProcessor(engine, storage)
 
 
@@ -158,10 +165,21 @@ api_key_header = APIKeyHeader(name=settings.api_key_header_name, auto_error=Fals
 
 
 async def get_api_key(
-    header_value: str = Security(api_key_header),
+    header_value: Optional[str] = Security(api_key_header),
     curr_settings: Settings = Depends(get_settings),
 ) -> str:
-    """Enforces API Key authentication for protected resources."""
+    """Enforces API Key authentication for protected resources.
+
+    Args:
+        header_value: The API key provided in the request header.
+        curr_settings: The application settings.
+
+    Returns:
+        str: The validated API key.
+
+    Raises:
+        HTTPException: If the API key is invalid or missing.
+    """
     if header_value == curr_settings.ocr_api_key:
         return header_value
     raise HTTPException(
@@ -170,23 +188,19 @@ async def get_api_key(
 
 
 def get_request_id(request: Request) -> str:
-    """Extracts AWS Request ID from Mangum scope or defaults to local trace."""
+    """Extracts AWS Request ID from Mangum scope or defaults to local trace.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        str: The AWS Request ID if available, otherwise 'local-development'.
+    """
     scope = request.scope
     if "aws.context" in scope:
         # Ensure we return a string even if the underlying context provides Any
         return str(getattr(scope["aws.context"], "aws_request_id", "local-development"))
     return "local-development"
-
-
-# Runtime Package Detection
-try:
-    import ocr_reconstruct as _ocr_reconstruct_pkg  # type: ignore
-
-    RECON_PKG_AVAILABLE = True
-    RECON_PKG_VERSION = getattr(_ocr_reconstruct_pkg, "__version__", "unknown")
-except (ImportError, Exception):
-    RECON_PKG_AVAILABLE = False
-    RECON_PKG_VERSION = None
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -249,6 +263,15 @@ async def generate_presigned_post(
     """
     Generates a secure, time-limited S3 POST URL for client-side direct uploads.
     Optimizes server bandwidth by offloading document transfer to AWS S3.
+
+    Args:
+        request: The incoming HTTP request.
+        req: The presign request details.
+        _api_key: The validated API key.
+        curr_settings: The application settings.
+
+    Returns:
+        PresignResponse: The presigned URL and fields.
     """
     # Used by SlowAPI decorator for rate limiting; intentionally not accessed
     del request
