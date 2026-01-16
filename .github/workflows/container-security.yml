@@ -43,12 +43,14 @@ jobs:
         run: |
           set -euxo pipefail
           IMAGE=${{ steps.build_image.outputs.image }}
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image -f table "$IMAGE" || true
+          # Mount the repo into the Trivy container so table output can access local images and any files are written to the runner
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workdir" -w /workdir aquasec/trivy image -f table "$IMAGE" || true
       - name: Trivy Scan (JSON output)
         run: |
           set -euxo pipefail
           IMAGE=${{ steps.build_image.outputs.image }}
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image -f json -o trivy-results.json "$IMAGE" || true
+          # Write JSON results to the mounted workspace so the file is available to subsequent steps
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workdir" -w /workdir aquasec/trivy image -f json -o trivy-results.json "$IMAGE" || true
 
       - name: Install Dockle
         run: |
