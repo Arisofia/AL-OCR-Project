@@ -25,3 +25,4 @@ redis==5.0.1
 pandas==2.2.3
 great_expectations==0.18.21
 evidently==0.4.38
+matplotlib==3.9.2

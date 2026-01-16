@@ -13,7 +13,7 @@ RUN yum install -y \
     pkgconfig \
     make
 
-RUN python -m pip install --upgrade pip setuptools wheel
+RUN python -m pip install --no-cache-dir --upgrade pip==24.3.1 setuptools==75.6.0 wheel==0.45.1
 
 # Install dependencies to a temporary directory
 WORKDIR /build
