@@ -20,21 +20,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Pre-pull buildkit image (retry)
-        run: |
-          set -euo pipefail
-          IMG=moby/buildkit:buildx-stable-1
-          for i in 1 2 3; do
-            if docker pull "$IMG"; then
-              echo "Pulled $IMG"
-              break
-            fi
-            echo "Pull attempt $i failed, retrying..."
-            sleep $((i*5))
-          done
-
-      - name: Set up QEMU and Docker Buildx
-        uses: docker/setup-buildx-action@v2
 
       - name: Build Docker image
         id: build_image
