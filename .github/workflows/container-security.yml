@@ -137,6 +137,7 @@ jobs:
           path: |
             trivy-results.json
             dockle-results.json
+            dockle.err
             container-logs.txt
 
   lint-dockerfile:
