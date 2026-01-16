@@ -34,7 +34,7 @@ CONTAINER_NAME="alocr_ci_check_$RANDOM"
 docker run -d --name "$CONTAINER_NAME" -p ${PORT}:${PORT} "$IMAGE" || { echo "[CI] ERROR: failed to start container"; docker logs "$CONTAINER_NAME" || true; docker rm "$CONTAINER_NAME" || true; exit 2; }
 
 # Ensure the log file exists and capture multiple snapshots of container logs for debugging (append)
-: > container-logs.txt
+touch container-logs.txt
 set +e
 sleep 1
 docker logs -t "$CONTAINER_NAME" >> container-logs.txt 2>&1 || true

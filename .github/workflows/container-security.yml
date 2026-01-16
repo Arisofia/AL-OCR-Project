@@ -143,6 +143,7 @@ jobs:
             dockle-results.json
             dockle.err
             container-logs.txt
+          if-no-files-found: ignore
 
   lint-dockerfile:
     runs-on: ubuntu-latest

@@ -11,16 +11,16 @@ RUN yum install -y \
     lapack-devel \
     blas-devel \
     pkgconfig \
-    make
+    make && \
+    yum clean all
 
-RUN python -m pip install --no-cache-dir --upgrade pip==24.3.1 setuptools==75.6.0 wheel==0.45.1
-
-# Install dependencies to a temporary directory
+# Prepare build workspace and install Python tooling and dependencies in one step
 WORKDIR /build
 COPY ocr_reconstruct ./ocr_reconstruct
 COPY ocr_service/requirements.txt ./ocr_service/requirements.txt
 
-RUN pip install --prefix=/install --prefer-binary --no-cache-dir ./ocr_reconstruct && \
+RUN python -m pip install --no-cache-dir --upgrade pip==24.3.1 setuptools==75.6.0 wheel==0.45.1 && \
+    pip install --prefix=/install --prefer-binary --no-cache-dir ./ocr_reconstruct && \
     pip install --prefix=/install --prefer-binary --no-cache-dir -r ./ocr_service/requirements.txt
 
 # Stage 2: Final lightweight runtime image

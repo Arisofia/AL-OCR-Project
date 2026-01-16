@@ -11,9 +11,21 @@ REPO=${GITHUB_REPO:-$(gh repo view --json nameWithOwner -q .nameWithOwner)}
 echo "Monitoring workflow: $WORKFLOW_FILE in repo $REPO"
 
 # Trigger the workflow
-RUN_ID=$(gh workflow run "$WORKFLOW_FILE" --repo "$REPO" --ref main --json id -q '.id')
-if [ -z "$RUN_ID" ]; then
+if ! gh workflow run "$WORKFLOW_FILE" --repo "$REPO" --ref main; then
   echo "Failed to trigger workflow. Exiting." >&2
+  exit 2
+fi
+# Wait up to 60s for the workflow run to appear
+RUN_ID=""
+for i in $(seq 1 12); do
+  RUN_ID=$(gh run list --workflow "$WORKFLOW_FILE" --repo "$REPO" --limit 5 --json databaseId,event,createdAt -q 'map(select(.event=="workflow_dispatch")) | sort_by(.createdAt) | reverse | .[0].databaseId' 2>/dev/null || true)
+  if [ -n "$RUN_ID" ]; then
+    break
+  fi
+  sleep 5
+done
+if [ -z "$RUN_ID" ]; then
+  echo "Failed to find new run for workflow $WORKFLOW_FILE after waiting. Exiting." >&2
   exit 2
 fi
 
