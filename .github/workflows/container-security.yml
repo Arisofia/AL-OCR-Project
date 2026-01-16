@@ -55,8 +55,9 @@ jobs:
         run: |
           set -euxo pipefail
           IMAGE=${{ steps.build_image.outputs.image }}
-          # Write JSON results to the mounted workspace so the file is available to subsequent steps
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workdir" -w /workdir aquasec/trivy:0.55.0 image -f json -o trivy-results.json "$IMAGE" 2>trivy.err || true
+          # Mount the repo into the Trivy container and write JSON directly to the host (/output) so
+          # the results persist after the container exits (avoid --rm deleting container-local files)
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/output" -w /output aquasec/trivy:0.55.0 image -f json -o /output/trivy-results.json "$IMAGE" 2>trivy.err || true
           # Also capture any tool output to a log for diagnostics
           if [ -s trivy.err ]; then
             echo "Trivy produced stderr output; copying to trivy.log"
@@ -125,8 +126,8 @@ jobs:
         run: |
           set -euo pipefail
           if [ -f dockle-results.json ]; then
-            # Dockle outputs an array of findings; fail if any findings present
-            COUNT=$(jq 'length' dockle-results.json || echo 0)
+            # Dockle outputs an object with a 'details' array; fail if any findings present
+            COUNT=$(jq '.details | length // 0' dockle-results.json || echo 0)
             if [ "$COUNT" -gt 0 ]; then
               echo "Dockle reported $COUNT findings"
               exit 1
@@ -149,7 +150,7 @@ jobs:
           fi
 
           if [ -f dockle-results.json ]; then
-            D_COUNT=$(jq 'length' dockle-results.json || echo 0)
+            DOCKLE_COUNT=$(jq '.details | length // 0' dockle-results.json || echo 0)
             echo "Dockle findings: ${D_COUNT}"
           else
             echo "dockle-results.json not found; see dockle.log or dockle.err"
