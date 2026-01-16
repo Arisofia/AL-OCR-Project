@@ -3,35 +3,40 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
     steps:
-      push:
-        branches:
-          - main
-        paths:
-          - '**'
-      workflow_dispatch:
-
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-        permissions:
-          contents: write
-          issues: write
-          pull-requests: write
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
 
       - name: Run Black (auto-format)
         run: |
           pip install black
           black ocr_service ocr_reconstruct src || true
           black --check ocr_service ocr_reconstruct src
+
       - name: Install semantic-release and plugins
         run: |
           npm install -g semantic-release @semantic-release/changelog @semantic-release/git @semantic-release/commit-analyzer @semantic-release/release-notes-generator
+
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
