@@ -9,7 +9,9 @@ services:
     environment:
       - REDIS_HOST=redis
       - ENVIRONMENT=production
-      - OCR_API_KEY=test_production_key
+      # OCR_API_KEY should be injected securely via environment or Docker secrets, not hardcoded
+      # - OCR_API_KEY=test_production_key
+    # For local dev, inject OCR_API_KEY with: export OCR_API_KEY=your_key && docker compose up
     depends_on:
       - redis
 
@@ -26,8 +28,9 @@ services:
 
   redis:
     image: "redis:alpine"
-    expose:
-      - "6379"
+    # Security: Do not expose Redis port to host. Only internal containers can access.
+    # expose:
+    #   - "6379"
 
   frontend:
     build:
@@ -37,7 +40,9 @@ services:
       - "80:80"
     environment:
       - VITE_API_BASE=http://localhost:8000
-      - VITE_API_KEY=test_production_key
+      # VITE_API_KEY should be injected securely via environment or Docker secrets, not hardcoded
+      # - VITE_API_KEY=test_production_key
+    # For local dev, inject VITE_API_KEY with: export VITE_API_KEY=your_key && docker compose up
     depends_on:
       - api
 
