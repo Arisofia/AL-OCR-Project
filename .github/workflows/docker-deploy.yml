@@ -29,7 +29,7 @@ jobs:
       LAMBDA_FUNCTION_NAME: al-ocr-processor
     steps:
       # actions/checkout v4.2.2
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98
 
       - name: Validate Secrets
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
