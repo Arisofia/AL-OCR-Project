@@ -14,17 +14,19 @@ from ocr_service.modules.ai_providers import HuggingFaceVisionProvider
 
 
 # ...existing code...
+
+
 async def main():
     """
     Main entrypoint for the Hugging Face Vision CLI tool.
 
     This tool reads an image file and sends it to the Hugging Face Vision
-    Provider for reconstruction. It then prints the reconstructed text and
-    any metadata returned by the provider.
+    Provider for reconstruction. It then prints the reconstructed text and any
+    metadata returned by the provider.
 
     Args:
         image_path (str): Path to the image file to process
-        prompt (str): Prompt to send to the model
+        prompt (str): Prompt to send to the model (default: see above)
         token (str): Hugging Face Token (overrides HUGGING_FACE_HUB_TOKEN env var)
         model (str): Model ID to use (default: runwayml/stable-diffusion-v1-5)
     """
@@ -84,6 +86,7 @@ async def main():
     # Send request to Hugging Face
     print(f"Sending request to Hugging Face (prompt: '{args.prompt[:50]}...')...")
     try:
+        # Send image file and prompt to the Hugging Face Vision Provider
         result = await provider.reconstruct(image_bytes, args.prompt)
         if "error" in result:
             print(f"Error from provider: {result['error']}")
