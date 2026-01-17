@@ -19,18 +19,13 @@ except Exception:  # pragma: no cover - fallback for local dev
 
 
 async def main():
-    """
-    CLI tool to interact with the Gemini Vision Provider for testing and reconstruction.
-
-    Accepts an image path and an optional prompt to send to the model.
-    """
     parser = argparse.ArgumentParser(description="Gemini Vision CLI")
     parser.add_argument("image_path", help="Path to the image file to process")
     parser.add_argument(
         "--prompt",
         default=(
-            "Analyze this document image and reconstruct the underlying text. "
-            "Provide concise, corrected output suitable for downstream parsing."
+            "Analyze this document image. Identify any obscured, pixelated, "
+            "or layered parts. Reconstruct the underlying text."
         ),
         help="Prompt to send to the model",
     )
@@ -42,17 +37,17 @@ async def main():
         sys.exit(1)
 
     if not os.path.exists(args.image_path):
-        print(f"Error: Image file not found at {args.image_path}")
+        print("Error: Image file not found at", args.image_path)
         sys.exit(1)
 
     print("Initializing GeminiVisionProvider...")
     provider = GeminiVisionProvider(api_key=settings.gemini_api_key)
 
-    print(f"Reading image: {args.image_path}")
+    print("Reading image:", args.image_path)
     with open(args.image_path, "rb") as f:
         image_bytes = f.read()
 
-    print(f"Sending request to Gemini (prompt: '{args.prompt[:50]}...')...")
+    print(f"Sending request to Gemini (prompt: {args.prompt[:50]}...)")
     try:
         result = await provider.reconstruct(image_bytes, args.prompt)
         if "error" in result:
@@ -63,7 +58,7 @@ async def main():
             print("\n--- Metadata ---")
             print(f"Model: {result.get('model')}")
     except Exception as e:
-        print(f"Exception occurred: {e}")
+        print("Exception occurred:", e)
 
 
 if __name__ == "__main__":
