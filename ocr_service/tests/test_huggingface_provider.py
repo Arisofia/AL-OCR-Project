@@ -29,7 +29,7 @@ class _MockClient:
     async def __aexit__(self, exc_type, exc, tb):
         return False
 
-    async def post(self, url, headers=None, json=None, timeout=None):
+    async def post(self, url, headers=None, json=None, _timeout=None):
         self.calls.append({"url": url, "headers": headers, "json": json})
         resp = self._responses.pop(0)
         return resp

@@ -5,6 +5,26 @@ from ocr_service.config import get_settings
 from ocr_service.main import app, limiter
 
 
+def _exhaust_rate_limit(client, url, body, headers, max_attempts=50):
+    """Helper to exhaust rate limit and return the 429 response."""
+    for _ in range(max_attempts):
+        resp = client.post(url, json=body, headers=headers)
+        if resp.status_code == 429:
+            return resp
+    return None
+
+
+def _verify_log_emission(mock_logger, expected_path):
+    """Helper to verify the structured log was emitted."""
+    log_calls = mock_logger.warning.call_args_list
+    was_logged = any(
+        args[0] == "Rate limit exceeded"
+        and kwargs.get("extra", {}).get("path") == expected_path
+        for args, kwargs in log_calls
+    )
+    assert was_logged, "Expected structured rate limit warning log was not emitted"
+
+
 def test_rate_limit_smoke_triggers_handler():
     """Make repeated requests to a rate-limited endpoint and ensure our
     handler runs on 429.
@@ -13,8 +33,7 @@ def test_rate_limit_smoke_triggers_handler():
     settings.s3_bucket_name = "test-bucket"
 
     # Reset limiter storage to ensure a clean state for this test
-    if hasattr(limiter, "reset"):
-        limiter.reset()
+    getattr(limiter, "reset", lambda: None)()
 
     client = TestClient(app)
     headers = {str(settings.api_key_header_name): str(settings.ocr_api_key)}
@@ -34,14 +53,7 @@ def test_rate_limit_smoke_triggers_handler():
         }
         mock_boto.return_value = mock_s3
 
-        # Issue requests until we hit a 429; stop at a safety ceiling
-        max_attempts = 50
-        rate_limited_response = None
-        for _ in range(max_attempts):
-            resp = client.post("/presign", json=body, headers=headers)
-            if resp.status_code == 429:
-                rate_limited_response = resp
-                break
+        rate_limited_response = _exhaust_rate_limit(client, "/presign", body, headers)
 
         assert (
             rate_limited_response is not None
@@ -51,12 +63,4 @@ def test_rate_limit_smoke_triggers_handler():
         assert rate_limited_response.json().get("detail") == "Rate limit exceeded"
 
         # Assert our enhanced handler logged the rate limiting occurrence
-        found = False
-        for call in mock_logger.warning.call_args_list:
-            args, kwargs = call
-            if args and args[0] == "Rate limit exceeded":
-                extra = kwargs.get("extra", {})
-                if extra.get("path") == "/presign":
-                    found = True
-                    break
-        assert found, "Expected structured rate limit warning log was not emitted"
+        _verify_log_emission(mock_logger, "/presign")

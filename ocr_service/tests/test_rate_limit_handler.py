@@ -21,7 +21,7 @@ def test_rate_limit_handler_response_and_logging(monkeypatch):
     req = Request(scope)
 
     # Use a tiny dummy instead of constructing a full Limit-backed exception
-    def _dummy_str(self):
+    def _dummy_str(_self):
         return "429: 5 per 1 minute"
 
     exc = type(
@@ -44,8 +44,8 @@ def test_rate_limit_handler_response_and_logging(monkeypatch):
 
     # Ensure structured log was emitted with expected payload
     mock.warning.assert_called()
-    args, kwargs = mock.warning.call_args
-    assert args[0] == "Rate limit exceeded"
+    _, kwargs = mock.warning.call_args
+    assert kwargs.get("extra", {}) != {}
     extra = kwargs.get("extra", {})
     assert extra.get("path") == "/presign"
     assert extra.get("detail") == "429: 5 per 1 minute"
@@ -96,6 +96,6 @@ def test_rate_limit_handler_response_shape(monkeypatch):
 
     # Confirm the original message was logged in the structured extra
     mock_logger.warning.assert_called()
-    args, kwargs = mock_logger.warning.call_args
+    _, kwargs = mock_logger.warning.call_args
     extra = kwargs.get("extra", {})
     assert extra.get("detail") == message

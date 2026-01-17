@@ -94,7 +94,7 @@ jobs:
 
       - name: Install dependencies (minimal for tests)
         run: |
-          # Install test/dev tools and a minimal set of runtime packages to avoid 
+          # Install test/dev tools and a minimal set of runtime packages to avoid
           # dependency-resolution conflicts in CI. Adjust as needed if tests require
           # heavier packages (e.g., label-studio, dvc) - those are not needed for
           # unit tests and slow down / complicate the job.

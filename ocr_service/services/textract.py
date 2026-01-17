@@ -54,7 +54,6 @@ class TextractService:
                 reraise=True,
             )
             def _do_start() -> Optional[str]:
-                from typing import cast
 
                 resp = self.client.start_document_text_detection(
                     DocumentLocation={"S3Object": {"Bucket": bucket, "Name": key}}
@@ -86,7 +85,6 @@ class TextractService:
                 reraise=True,
             )
             def _do_analyze() -> Dict[str, Any]:
-                from typing import cast
 
                 return cast(
                     Dict[str, Any],

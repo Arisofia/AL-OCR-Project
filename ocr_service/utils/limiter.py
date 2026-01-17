@@ -23,7 +23,7 @@ except ImportError:  # pragma: no cover - fallback if opentelemetry missing
             return False
 
     class _NoopTracer:
-        def start_as_current_span(self, name: str):
+        def start_as_current_span(self, _name: str):
             return _NoopSpan()
 
     tracer = _NoopTracer()
@@ -76,5 +76,5 @@ def init_limiter() -> Optional[Limiter]:
             logger.info("Limiter initialized successfully.")
             return limiter
         except Exception as e:
-            logger.error(f"Failed to initialize Limiter: {e}")
+            logger.error("Failed to initialize Limiter: %s", e)
             return None

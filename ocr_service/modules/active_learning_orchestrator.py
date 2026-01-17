@@ -106,7 +106,7 @@ class ALOrchestrator:
             return []
         from typing import cast
 
-        return cast(List[Dict[str, Any]], result.data if result.data else [])
+        return cast(List[Dict[str, Any]], result.data or [])
 
     def _prepare_for_validation(self, df: pd.DataFrame) -> pd.DataFrame:
         """Maps Supabase schema to Validation Gate schema."""

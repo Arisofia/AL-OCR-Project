@@ -67,8 +67,7 @@ def process_record(record: Dict[str, Any], request_id: str = "N/A") -> None:
             logger.info("Sync analysis completed | Key: %s", key)
 
         # Persist extracted intelligence to enterprise storage
-        saved = storage_service.save_json(output, out_key)
-        if not saved:
+        if not storage_service.save_json(output, out_key):
             logger.error("Storage failure: Could not persist extraction for %s", key)
         else:
             logger.info("Result persisted | Path: s3://%s/%s", bucket, out_key)
