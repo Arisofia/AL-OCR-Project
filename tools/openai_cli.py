@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CLI tool to interact with the Gemini Vision Provider for testing and reconstruction.
+CLI tool to interact with the OpenAI Vision Provider for testing and reconstruction.
 """
 import argparse
 import asyncio
@@ -10,16 +10,16 @@ import sys
 try:
     # Try normal imports first (works when package is installed)
     from ocr_service.config import get_settings
-    from ocr_service.modules.ai_providers import GeminiVisionProvider
+    from ocr_service.modules.ai_providers import OpenAIVisionProvider
 except Exception:  # pragma: no cover - fallback for local dev
     # Fall back to adding project root to sys.path for local development
     sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
     from ocr_service.config import get_settings
-    from ocr_service.modules.ai_providers import GeminiVisionProvider
+    from ocr_service.modules.ai_providers import OpenAIVisionProvider
 
 
 async def main():
-    parser = argparse.ArgumentParser(description="Gemini Vision CLI")
+    parser = argparse.ArgumentParser(description="OpenAI Vision CLI")
     parser.add_argument("image_path", help="Path to the image file to process")
     parser.add_argument(
         "--prompt",
@@ -31,16 +31,16 @@ async def main():
     )
     parser.add_argument(
         "--api-key",
-        help="Gemini API Key (overrides GEMINI_API_KEY env var)",
+        help="OpenAI API Key (overrides OPENAI_API_KEY env var)",
     )
     args = parser.parse_args()
 
     settings = get_settings()
-    api_key = args.api_key or settings.gemini_api_key
+    api_key = args.api_key or settings.openai_api_key
 
     if not api_key:
         print(
-            "Error: GEMINI_API_KEY is not set in your environment or .env file, "
+            "Error: OPENAI_API_KEY is not set in your environment or .env file, "
             "and --api-key was not provided."
         )
         sys.exit(1)
@@ -49,14 +49,14 @@ async def main():
         print("Error: Image file not found at", args.image_path)
         sys.exit(1)
 
-    print("Initializing GeminiVisionProvider...")
-    provider = GeminiVisionProvider(api_key=api_key)
+    print("Initializing OpenAIVisionProvider...")
+    provider = OpenAIVisionProvider(api_key=api_key)
 
     print("Reading image:", args.image_path)
     with open(args.image_path, "rb") as f:
         image_bytes = f.read()
 
-    print(f"Sending request to Gemini (prompt: {args.prompt[:50]}...)")
+    print(f"Sending request to OpenAI (prompt: {args.prompt[:50]}...)")
     try:
         result = await provider.reconstruct(image_bytes, args.prompt)
         if "error" in result:

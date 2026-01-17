@@ -6,7 +6,7 @@ Used for advanced document reconstruction and verification.
 import base64
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import httpx
 
@@ -42,7 +42,7 @@ class OpenAIVisionProvider(VisionProvider):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
         }
-        payload = {
+        request_payload = {
             "model": "gpt-4o",
             "messages": [
                 {
@@ -65,7 +65,7 @@ class OpenAIVisionProvider(VisionProvider):
                 response = await client.post(
                     "https://api.openai.com/v1/chat/completions",
                     headers=headers,
-                    json=payload,
+                    json=request_payload,
                     timeout=60.0,
                 )
                 response.raise_for_status()
@@ -75,8 +75,27 @@ class OpenAIVisionProvider(VisionProvider):
                     "model": "gpt-4o",
                 }
             except httpx.HTTPError as e:
-                logger.error("OpenAI Vision HTTP error: %s", e)
-                return {"error": f"OpenAI HTTP error: {e}"}
+                # Try to extract any response body for better diagnostics
+                response_body: Optional[object] = None
+                resp = getattr(e, "response", None)
+                if resp is not None:
+                    try:
+                        response_body = resp.json()
+                    except Exception:
+                        try:
+                            response_body = resp.text
+                        except Exception:
+                            response_body = None
+                logger.error(
+                    "OpenAI Vision HTTP error: %s | body: %s",
+                    e,
+                    response_body,
+                )
+                return {
+                    "error": "OpenAI HTTP error",
+                    "detail": str(e),
+                    "body": response_body,
+                }
             except (KeyError, IndexError) as e:
                 logger.error("OpenAI Vision response parsing failed: %s", e)
                 return {"error": "Unexpected response format from OpenAI"}
@@ -138,7 +157,7 @@ class HuggingFaceVisionProvider(VisionProvider):
             "Authorization": f"Bearer {self.token}",
         }
         url = f"https://router.huggingface.co/models/{self.model}"
-        payload = {
+        request_payload = {
             "inputs": {
                 "image": f"data:image/jpeg;base64,{base64_image}",
                 "prompt": prompt,
@@ -151,7 +170,7 @@ class HuggingFaceVisionProvider(VisionProvider):
             async with httpx.AsyncClient() as client:
                 try:
                     response = await client.post(
-                        url, headers=headers, json=payload, timeout=60.0
+                        url, headers=headers, json=request_payload, timeout=60.0
                     )
                 except httpx.HTTPError as e:
                     logger.error(
@@ -196,11 +215,27 @@ class HuggingFaceVisionProvider(VisionProvider):
                     text = data
                 return {"text": text, "model": self.model}
             except httpx.HTTPError as e:
-                logger.error("HuggingFace response parsing failed: %s", e)
-                return {"error": f"HuggingFace HTTP error: {e}"}
-            except Exception as e:
-                logger.error("HuggingFace unexpected error: %s", e)
-                return {"error": str(e)}
+                # Attempt to extract response body for diagnostics
+                response_body: Optional[object] = None
+                resp = getattr(e, "response", None)
+                if resp is not None:
+                    try:
+                        response_body = resp.json()
+                    except Exception:
+                        try:
+                            response_body = resp.text
+                        except Exception:
+                            response_body = None
+                logger.error(
+                    "HuggingFace response parsing failed: %s | body: %s",
+                    e,
+                    response_body,
+                )
+                return {
+                    "error": "HuggingFace HTTP error",
+                    "detail": str(e),
+                    "body": response_body,
+                }
 
         # If we've exhausted attempts without success, return an error
         return {"error": "Exceeded maximum retry attempts due to rate limiting"}
