@@ -35,8 +35,8 @@ sys.modules["botocore.exceptions"] = MagicMock()
 sys.modules["botocore.config"] = MagicMock()
 
 # Inject fake boto3 BEFORE importing services
-from services.storage import StorageService  # noqa: E402
-from services.textract import TextractService  # noqa: E402
+# Service imports are performed inside `run_tests` after the fake boto3 module
+# is registered to avoid top-level import-time side effects and E402 lint warnings.
 
 
 def run_tests():
@@ -45,6 +45,10 @@ def run_tests():
     """
     # Now run tests with the fake boto3
     mock_tex = sys.modules["boto3"].client("textract")
+
+    # Import services here after faking boto3 to avoid import-time side effects
+    from services.storage import StorageService
+    from services.textract import TextractService
 
     # Test StorageService
     storage = StorageService(bucket_name="test-bucket")
