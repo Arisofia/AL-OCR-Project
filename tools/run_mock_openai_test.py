@@ -20,6 +20,20 @@ logger.addHandler(handler)
 
 
 class _MockResponse:
+    """
+    Mock HTTP response for testing OpenAI API client logic.
+
+    Args:
+        status_code (int, optional): The HTTP status code of the response.
+            Defaults to 403.
+        body (dict | None, optional): The response body. Defaults to None.
+        method (str, optional): HTTP method for error context. Defaults to POST.
+        url (str, optional): URL for error context.
+            Defaults to OpenAI completions endpoint.
+
+    If body is None, it will be set to a default quota exceeded response.
+    """
+
     def __init__(
         self,
         status_code: int = 403,
@@ -27,19 +41,6 @@ class _MockResponse:
         method: str = "POST",
         url: str = "https://api.openai.com/v1/chat/completions",
     ):
-        """
-        Initialize a mock response object.
-
-        Args:
-            status_code (int, optional): The HTTP status code of the response.
-                Defaults to 403.
-            body (dict | None, optional): The response body. Defaults to None.
-            method (str, optional): HTTP method for error context. Defaults to POST.
-            url (str, optional): URL for error context.
-                Defaults to OpenAI completions endpoint.
-
-        If body is None, it will be set to a default quota exceeded response.
-        """
         self.status_code = status_code
         self._body = body or {
             "error": "quota_exceeded",
@@ -49,7 +50,8 @@ class _MockResponse:
         self._url = url
 
     def raise_for_status(self):
-        """Raise an HTTPStatusError if the mock response indicates an error.
+        """
+        Raise an HTTPStatusError if the mock response indicates an error.
 
         This emulates httpx.Response.raise_for_status by turning error-like
         status codes into exceptions for test scenarios.
@@ -65,6 +67,7 @@ class _MockResponse:
             )
 
     def json(self):
+        """Return the response body as a JSON object."""
         return self._body
 
 
