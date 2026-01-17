@@ -9,17 +9,31 @@ import argparse
 import sys
 import os
 
-# Add project root to path to allow importing ocr_service
-sys.path.append(
-    os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-)  # noqa: E402
-from ocr_service.config import get_settings  # noqa: E402
-from ocr_service.modules.ai_providers import HuggingFaceVisionProvider  # noqa: E402
+from ocr_service.config import get_settings
+from ocr_service.modules.ai_providers import HuggingFaceVisionProvider
 
 
+# ...existing code...
 async def main():
+    """
+    Main entrypoint for the Hugging Face Vision CLI tool.
+
+    This tool reads an image file and sends it to the Hugging Face Vision
+    Provider for reconstruction. It then prints the reconstructed text and
+    any metadata returned by the provider.
+
+    Args:
+        image_path (str): Path to the image file to process
+        prompt (str): Prompt to send to the model
+        token (str): Hugging Face Token (overrides HUGGING_FACE_HUB_TOKEN env var)
+        model (str): Model ID to use (default: runwayml/stable-diffusion-v1-5)
+    """
     parser = argparse.ArgumentParser(description="Hugging Face Vision CLI")
-    parser.add_argument("image_path", help="Path to the image file to process")
+    parser.add_argument(
+        "image_path",
+        help="Path to the image file to process",
+        type=str,
+    )
     parser.add_argument(
         "--prompt",
         default=(
@@ -27,18 +41,22 @@ async def main():
             "layered parts. Reconstruct the underlying text."
         ),
         help="Prompt to send to the model",
+        type=str,
     )
     parser.add_argument(
         "--token",
         help="Hugging Face Token (overrides HUGGING_FACE_HUB_TOKEN env var)",
+        type=str,
     )
     parser.add_argument(
         "--model",
         default="runwayml/stable-diffusion-v1-5",
         help="Model ID to use (default: runwayml/stable-diffusion-v1-5)",
+        type=str,
     )
     args = parser.parse_args()
 
+    # Get Hugging Face Token from env var or CLI arg
     settings = get_settings()
     token = args.token or settings.hugging_face_hub_token
 
@@ -49,17 +67,21 @@ async def main():
         )
         sys.exit(1)
 
+    # Check if image file exists
     if not os.path.exists(args.image_path):
         print(f"Error: Image file not found at {args.image_path}")
         sys.exit(1)
 
+    # Initialize Hugging Face Vision Provider
     print(f"Initializing HuggingFaceVisionProvider with model {args.model}...")
     provider = HuggingFaceVisionProvider(token=token, model=args.model)
 
+    # Read image file
     print(f"Reading image: {args.image_path}")
     with open(args.image_path, "rb") as f:
         image_bytes = f.read()
 
+    # Send request to Hugging Face
     print(f"Sending request to Hugging Face (prompt: '{args.prompt[:50]}...')...")
     try:
         result = await provider.reconstruct(image_bytes, args.prompt)
@@ -72,6 +94,7 @@ async def main():
             print(f"Model: {result.get('model')}")
     except Exception as e:
         print(f"Exception occurred: {e}")
+    # ...existing code...
 
 
 if __name__ == "__main__":
