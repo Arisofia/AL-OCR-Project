@@ -29,7 +29,9 @@ class _MockClient:
     async def __aexit__(self, exc_type, exc, tb):
         return False
 
-    async def post(self, url, headers=None, json=None, _timeout=None):
+    async def post(self, url, headers=None, json=None, timeout=None):
+        # Keep the timeout parameter to match httpx.AsyncClient.post signature
+        _ = timeout
         self.calls.append({"url": url, "headers": headers, "json": json})
         resp = self._responses.pop(0)
         return resp

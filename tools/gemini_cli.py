@@ -29,11 +29,20 @@ async def main():
         ),
         help="Prompt to send to the model",
     )
+    parser.add_argument(
+        "--api-key",
+        help="Gemini API Key (overrides GEMINI_API_KEY env var)",
+    )
     args = parser.parse_args()
 
     settings = get_settings()
-    if not settings.gemini_api_key:
-        print("Error: GEMINI_API_KEY is not set in your environment or .env file.")
+    api_key = args.api_key or settings.gemini_api_key
+
+    if not api_key:
+        print(
+            "Error: GEMINI_API_KEY is not set in your environment or .env file, "
+            "and --api-key was not provided."
+        )
         sys.exit(1)
 
     if not os.path.exists(args.image_path):
@@ -41,7 +50,7 @@ async def main():
         sys.exit(1)
 
     print("Initializing GeminiVisionProvider...")
-    provider = GeminiVisionProvider(api_key=settings.gemini_api_key)
+    provider = GeminiVisionProvider(api_key=api_key)
 
     print("Reading image:", args.image_path)
     with open(args.image_path, "rb") as f:
