@@ -32,7 +32,8 @@ jobs:
           # pulls heavy packages like label-studio and dvc that conflict on
           # certain Python versions).
           python -m pip install -r requirements-dev.txt
-          python -m pip install fastapi==0.128.0 pydantic==2.9.2 httpx==0.27.2 redis==5.0.1 pytest==8.3.3 pytest-cov
+          python -m pip install fastapi==0.128.0 pydantic==2.9.2 httpx==0.27.2 redis==5.0.1 pytest==8.3.3 pytest-cov \
+            pydantic-settings boto3 opencv-python-headless slowapi sentry-sdk python-json-logger
 
       - name: Run ocr_service tests (skip integration)
         run: |
