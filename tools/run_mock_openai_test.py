@@ -6,34 +6,46 @@ import httpx
 
 from ocr_service.modules.ai_providers import OpenAIVisionProvider
 
-# Create a tiny dummy image (PNG) using builtins to avoid extra deps
-img_path = Path("test_image.png")
+# Use a stable, minimal binary file for image bytes (no external deps)
+img_path = Path("test_image.bin")
 if not img_path.exists():
-    from PIL import Image
+    img_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 64)
 
-    Image.new("RGB", (10, 10), color=(255, 255, 255)).save(img_path)
-
-# Setup logging to capture provider logs
 logger = logging.getLogger("ocr-service.ai-providers")
 logger.setLevel(logging.DEBUG)
 handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+logger.handlers.clear()
 logger.addHandler(handler)
 
 
-# Mock httpx.AsyncClient to simulate a 403 response
 class _MockResponse:
-    def __init__(self):
-        self.status_code = 403
+    def __init__(self, status_code: int = 403, body: dict | None = None):
+        self.status_code = status_code
+        self._body = body or {
+            "error": "quota_exceeded",
+            "message": "You have exceeded your quota.",
+        }
 
     def raise_for_status(self):
-        raise httpx.HTTPStatusError("403 Forbidden", request=None, response=self)
+        if self.status_code >= 400:
+            raise httpx.HTTPStatusError(
+                f"{self.status_code} error",
+                request=httpx.Request(
+                    "POST", "https://api.openai.com/v1/chat/completions"
+                ),
+                response=httpx.Response(self.status_code),
+            )
 
     def json(self):
-        return {"error": "quota_exceeded", "message": "You have exceeded your quota."}
+        return self._body
 
 
-class _MockClient:
+class _MockAsyncClient:
+    def __init__(self, status_code: int = 403, body: dict | None = None):
+        self._status_code = status_code
+        self._body = body
+
     async def __aenter__(self):
         return self
 
@@ -41,25 +53,49 @@ class _MockClient:
         return False
 
     async def post(self, url, headers=None, json=None, timeout=None):
-        # Log the URL for clarity and return a mock response object
-        logger.debug("MockClient.post called for URL: %s", url)
-        return _MockResponse()
+        logger.debug("MockAsyncClient.post called for URL: %s", url)
+        logger.debug("Request payload keys: %s", list((json or {}).keys()))
+        # Use the timeout parameter if provided to simulate delay
+        if timeout:
+            await asyncio.sleep(timeout)
+        return _MockResponse(status_code=self._status_code, body=self._body)
+
+
+async def run_scenario(name: str, status_code: int, body: dict | None = None):
+    original_client = httpx.AsyncClient
+    httpx.AsyncClient = lambda *a, **k: _MockAsyncClient(
+        status_code=status_code, body=body
+    )
+
+    try:
+        logger.info("=== Running scenario: %s (HTTP %s) ===", name, status_code)
+        provider = OpenAIVisionProvider(api_key="fake-api-key")
+        image_bytes = img_path.read_bytes()
+        result = await provider.reconstruct(image_bytes, "Test prompt")
+        print(f"[{name}] Provider result:", result)
+    except Exception as exc:
+        logger.exception("[%s] Provider raised exception", name)
+        print(f"[{name}] Exception:", repr(exc))
+    finally:
+        httpx.AsyncClient = original_client
 
 
 async def main():
-    # Patch httpx.AsyncClient to our mock class (direct replacement)
-    original = httpx.AsyncClient
-    httpx.AsyncClient = _MockClient
-
-    try:
-        provider = OpenAIVisionProvider(api_key="fake-api-key")
-        with open(img_path, "rb") as f:
-            image_bytes = f.read()
-
-        res = await provider.reconstruct(image_bytes, "Test prompt")
-        print("Provider result:", res)
-    finally:
-        httpx.AsyncClient = original
+    await run_scenario(
+        name="QuotaExceeded403",
+        status_code=403,
+        body={
+            "error": {
+                "type": "insufficient_quota",
+                "message": "You have exceeded your quota.",
+            }
+        },
+    )
+    await run_scenario(
+        name="ServerError500",
+        status_code=500,
+        body={"error": {"type": "server_error", "message": "Internal error"}},
+    )
 
 
 if __name__ == "__main__":

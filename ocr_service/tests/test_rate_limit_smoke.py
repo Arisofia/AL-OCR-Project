@@ -33,7 +33,8 @@ def test_rate_limit_smoke_triggers_handler():
     settings.s3_bucket_name = "test-bucket"
 
     # Reset limiter storage to ensure a clean state for this test
-    getattr(limiter, "reset", lambda: None)()
+    if hasattr(limiter, "storage") and hasattr(limiter.storage, "clear"):
+        limiter.storage.clear()
 
     client = TestClient(app)
     headers = {str(settings.api_key_header_name): str(settings.ocr_api_key)}
