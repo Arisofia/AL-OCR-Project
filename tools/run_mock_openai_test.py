@@ -21,6 +21,16 @@ logger.addHandler(handler)
 
 class _MockResponse:
     def __init__(self, status_code: int = 403, body: dict | None = None):
+        """
+        Initialize a mock response object.
+
+        Args:
+            status_code (int, optional): The HTTP status code of the response.
+                Defaults to 403.
+            body (dict | None, optional): The response body. Defaults to None.
+
+        If body is None, it will be set to a default quota exceeded response.
+        """
         self.status_code = status_code
         self._body = body or {
             "error": "quota_exceeded",
