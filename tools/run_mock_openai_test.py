@@ -49,6 +49,14 @@ class _MockResponse:
         self._url = url
 
     def raise_for_status(self):
+        """Raise an HTTPStatusError if the mock response indicates an error.
+
+        This emulates httpx.Response.raise_for_status by turning error-like
+        status codes into exceptions for test scenarios.
+
+        Raises:
+            httpx.HTTPStatusError: If the status code is 400 or higher.
+        """
         if self.status_code >= 400:
             raise httpx.HTTPStatusError(
                 f"{self.status_code} error",
