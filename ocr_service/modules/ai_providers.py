@@ -6,7 +6,7 @@ Used for advanced document reconstruction and verification.
 import base64
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import httpx
 
@@ -19,7 +19,7 @@ class VisionProvider(ABC):
     """
 
     @abstractmethod
-    async def reconstruct(self, image_bytes: bytes, prompt: str) -> Dict[str, Any]:
+    async def reconstruct(self, image_bytes: bytes, prompt: str) -> dict[str, Any]:
         """
         Processes an image with a prompt to reconstruct or analyze content.
         """
@@ -33,7 +33,7 @@ class OpenAIVisionProvider(VisionProvider):
     def __init__(self, api_key: str):
         self.api_key = api_key
 
-    async def reconstruct(self, image_bytes: bytes, prompt: str) -> Dict[str, Any]:
+    async def reconstruct(self, image_bytes: bytes, prompt: str) -> dict[str, Any]:
         """
         Sends an image to OpenAI for reconstruction.
         """
@@ -112,7 +112,7 @@ class GeminiVisionProvider(VisionProvider):
     def __init__(self, api_key: str):
         self.api_key = api_key
 
-    async def reconstruct(self, image_bytes: bytes, prompt: str) -> Dict[str, Any]:
+    async def reconstruct(self, image_bytes: bytes, prompt: str) -> dict[str, Any]:
         """
         Sends an image to Gemini for reconstruction.
         """
@@ -148,7 +148,7 @@ class HuggingFaceVisionProvider(VisionProvider):
         self.token = token
         self.model = model
 
-    async def reconstruct(self, image_bytes: bytes, prompt: str) -> Dict[str, Any]:
+    async def reconstruct(self, image_bytes: bytes, prompt: str) -> dict[str, Any]:
         import asyncio
 
         base64_image = base64.b64encode(image_bytes).decode("utf-8")

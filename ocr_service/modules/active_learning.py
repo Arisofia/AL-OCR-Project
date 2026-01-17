@@ -3,7 +3,7 @@ Active Learning strategies for document intelligence.
 Implements hybrid query strategies to mitigate sampling bias.
 """
 
-from typing import List, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 import numpy as np
 from sklearn.cluster import KMeans
@@ -25,7 +25,7 @@ class QueryStrategy:
 
     def select_indices(
         self, model: OCRModel, unlabeled_data: np.ndarray, n_samples: int
-    ) -> List[int]:
+    ) -> list[int]:
         raise NotImplementedError
 
 
@@ -44,7 +44,7 @@ class HybridSampling(QueryStrategy):
 
     def select_indices(
         self, model: OCRModel, unlabeled_data: np.ndarray, n_samples: int
-    ) -> List[int]:
+    ) -> list[int]:
         # 1. Get Embeddings (Feature Vectors) from the model backbone
         embeddings = model.get_embeddings(unlabeled_data)
 
@@ -60,7 +60,7 @@ class HybridSampling(QueryStrategy):
         kmeans = KMeans(n_clusters=actual_n_clusters, random_state=42, n_init="auto")
         cluster_labels = kmeans.fit_predict(embeddings)
 
-        selected_indices: List[int] = []
+        selected_indices: list[int] = []
         samples_per_cluster = max(1, n_samples // actual_n_clusters)
 
         # Select samples from each cluster to ensure coverage

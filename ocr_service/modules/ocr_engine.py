@@ -3,9 +3,9 @@ Core OCR Orchestration Engine for high-fidelity document intelligence.
 Manages iterative cycles, layout analysis, and pixel reconstruction.
 """
 
-import logging
 import asyncio
-from typing import Any, Dict, List, Optional, Tuple
+import logging
+from typing import Any, Optional
 
 import cv2
 import numpy as np
@@ -57,10 +57,11 @@ class IterativeOCREngine:
         self.learning_engine = learning_engine or LearningEngine()
         self.confidence_scorer = confidence_scorer or ConfidenceScorer()
         self.ocr_config = ocr_config or TesseractConfig()
+        self._background_tasks: set[asyncio.Task] = set()
 
     def _run_reconstruction(
         self, image_bytes: bytes
-    ) -> Tuple[Optional[Dict[str, Any]], Optional[np.ndarray]]:
+    ) -> tuple[Optional[dict[str, Any]], Optional[np.ndarray]]:
         """
         Executes the pixel reconstruction preprocessor to eliminate visual noise.
         """
@@ -102,7 +103,7 @@ class IterativeOCREngine:
 
     def _perform_ocr_iteration(
         self, img: np.ndarray, iteration: int, use_reconstruction: bool
-    ) -> Tuple[str, np.ndarray]:
+    ) -> tuple[str, np.ndarray]:
         """
         Single-cycle OCR execution: Enhancement -> Thresholding -> Extraction.
         """
@@ -121,7 +122,7 @@ class IterativeOCREngine:
 
         return text, thresh
 
-    def _ocr_regions(self, thresh: np.ndarray, regions: List[Dict[str, Any]]) -> str:
+    def _ocr_regions(self, thresh: np.ndarray, regions: list[dict[str, Any]]) -> str:
         """
         Region-of-Interest (ROI) targeted extraction for complex document layouts.
         """
@@ -154,7 +155,7 @@ class IterativeOCREngine:
 
     def _get_ocr_input_image(
         self, image_bytes: bytes, use_reconstruction: bool
-    ) -> Tuple[Optional[np.ndarray], Optional[Dict[str, Any]]]:
+    ) -> tuple[Optional[np.ndarray], Optional[dict[str, Any]]]:
         """Determines the best source image for OCR iterations."""
         img = ImageToolkit.decode_image(image_bytes)
         if img is None:
@@ -174,7 +175,7 @@ class IterativeOCREngine:
 
         return current_img, reconstruction_info
 
-    def _validate_image_input(self, image_bytes: bytes) -> Optional[Dict[str, str]]:
+    def _validate_image_input(self, image_bytes: bytes) -> Optional[dict[str, str]]:
         """Common validation for OCR input."""
         validation_error = ImageToolkit.validate_image(
             image_bytes, max_size_mb=self.config.max_image_size_mb
@@ -242,8 +243,8 @@ class IterativeOCREngine:
         iteration: int,
         use_reconstruction: bool,
         best_confidence: float,
-        layout_regions: List[Dict[str, Any]],
-    ) -> Tuple[Optional[str], float, str, np.ndarray]:
+        layout_regions: list[dict[str, Any]],
+    ) -> tuple[Optional[str], float, str, np.ndarray]:
         """Runs a single OCR iteration with adaptive strategies."""
         logger.info(
             "Iteration loop | Progress: %s/%s",
@@ -276,8 +277,8 @@ class IterativeOCREngine:
         self,
         best_text: str,
         best_confidence: float,
-        iteration_history: List[Dict[str, Any]],
-        recon_info: Optional[Dict[str, Any]],
+        iteration_history: list[dict[str, Any]],
+        recon_info: Optional[dict[str, Any]],
     ) -> dict:
         """Constructs the final response dictionary."""
         resp = {
@@ -336,7 +337,7 @@ class IterativeOCREngine:
         confidence = self.confidence_scorer.calculate(extracted_text)
 
         # Step 5: Autonomous Feedback Loop
-        asyncio.create_task(
+        task = asyncio.create_task(
             self.learning_engine.learn_from_result(
                 doc_type=doc_type,
                 font_meta={
@@ -347,6 +348,8 @@ class IterativeOCREngine:
                 accuracy_score=confidence,
             )
         )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
 
         return {
             "text": extracted_text,

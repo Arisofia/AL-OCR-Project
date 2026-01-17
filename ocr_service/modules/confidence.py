@@ -3,7 +3,7 @@ Logic for calculating OCR confidence scores based on text analysis.
 """
 
 import re
-from typing import List, Optional
+from typing import Optional
 
 
 class ConfidenceScorer:
@@ -12,7 +12,7 @@ class ConfidenceScorer:
     character density, and document markers.
     """
 
-    def __init__(self, markers: Optional[List[str]] = None):
+    def __init__(self, markers: Optional[list[str]] = None):
         """
         Initializes the scorer with a set of document markers.
         """

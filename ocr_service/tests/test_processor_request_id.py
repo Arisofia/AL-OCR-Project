@@ -1,8 +1,9 @@
 import asyncio
-from unittest.mock import MagicMock
 from typing import cast
+from unittest.mock import MagicMock
 
 from fastapi import UploadFile
+
 from ocr_service.modules.processor import OCRProcessor
 
 

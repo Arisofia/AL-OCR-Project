@@ -2,20 +2,18 @@
 """
 CLI tool to interact with the Gemini Vision Provider for testing and reconstruction.
 """
+
 import argparse
 import asyncio
 import os
 import sys
+from pathlib import Path
 
-try:
-    # Try normal imports first (works when package is installed)
-    from ocr_service.config import get_settings
-    from ocr_service.modules.ai_providers import GeminiVisionProvider
-except Exception:  # pragma: no cover - fallback for local dev
-    # Fall back to adding project root to sys.path for local development
-    sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-    from ocr_service.config import get_settings
-    from ocr_service.modules.ai_providers import GeminiVisionProvider
+# Add project root to sys.path for local development
+sys.path.append(str(Path(__file__).parent.parent))
+
+from ocr_service.config import get_settings
+from ocr_service.modules.ai_providers import GeminiVisionProvider
 
 
 async def main():

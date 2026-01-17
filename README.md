@@ -45,6 +45,7 @@ For a fully containerized development environment including a simulated AWS envi
 
 ### Development Standards
 
+- **Unified Toolchain**: We use [Ruff](https://github.com/astral-sh/ruff) for linting and formatting, [MyPy](https://mypy-lang.org/) for type checking, and [Pytest](https://pytest.org/) for testing. Configuration is centralized in `pyproject.toml`.
 - **Pre-commit Hooks**: We use `pre-commit` to ensure code quality. Install it via `pip install pre-commit && pre-commit install`.
 - **Contributing**: Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on our development process.
 - **License**: This project is licensed under the [MIT License](LICENSE).

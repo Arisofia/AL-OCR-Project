@@ -1,30 +1,30 @@
 from abc import ABC, abstractmethod
+
 import numpy as np
-from typing import List
 
 
 class OCRModel(ABC):
     @abstractmethod
-    def predict_proba(self, images: List[np.ndarray]) -> np.ndarray:
+    def predict_proba(self, images: list[np.ndarray]) -> np.ndarray:
         pass
 
     @abstractmethod
-    def train(self, labeled_data: List):
+    def train(self, labeled_data: list):
         pass
 
 
 class QueryStrategy(ABC):
     @abstractmethod
     def select_indices(
-        self, model: OCRModel, unlabeled_pool: List[np.ndarray], n_samples: int
-    ) -> List[int]:
+        self, model: OCRModel, unlabeled_pool: list[np.ndarray], n_samples: int
+    ) -> list[int]:
         pass
 
 
 class UncertaintySampling(QueryStrategy):
     def select_indices(
-        self, model: OCRModel, unlabeled_pool: List[np.ndarray], n_samples: int
-    ) -> List[int]:
+        self, model: OCRModel, unlabeled_pool: list[np.ndarray], n_samples: int
+    ) -> list[int]:
         probs = model.predict_proba(unlabeled_pool)
         max_probs = np.max(probs, axis=2)
         sequence_confidence = np.min(max_probs, axis=1)
@@ -39,5 +39,4 @@ class ActiveLearningLoop:
         self.strategy = strategy
 
     def run_cycle(self, unlabeled_pool, n_samples):
-        indices = self.strategy.select_indices(self.model, unlabeled_pool, n_samples)
-        print(f"Selected {len(indices)} samples for human annotation.")
+        self.strategy.select_indices(self.model, unlabeled_pool, n_samples)

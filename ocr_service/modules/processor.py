@@ -6,9 +6,10 @@ Coordinates OCR pipelines with automated S3 storage integration.
 import asyncio
 import logging
 import time
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import HTTPException, UploadFile
+
 from ocr_service.services.storage import StorageService
 
 from .ocr_engine import IterativeOCREngine
@@ -33,7 +34,7 @@ class OCRProcessor:
         doc_type: str = "generic",
         enable_reconstruction_config: bool = False,
         request_id: str = "N/A",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Executes the full OCR pipeline: Validation, Extraction, and Cloud Persistence.
         """
@@ -91,7 +92,7 @@ class OCRProcessor:
 
     async def _execute_ocr_strategy(
         self, contents: bytes, advanced: bool, use_recon: bool, doc_type: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Selects and executes the appropriate OCR pipeline."""
         if advanced:
             return await self.ocr_engine.process_image_advanced(
@@ -105,7 +106,7 @@ class OCRProcessor:
         )
 
     async def _persist_results(
-        self, contents: bytes, filename: str, content_type: str, result: Dict[str, Any]
+        self, contents: bytes, filename: str, content_type: str, result: dict[str, Any]
     ) -> str:
         """Uploads files and metadata to cloud storage."""
         upload_tasks = [

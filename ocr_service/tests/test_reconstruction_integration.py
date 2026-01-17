@@ -2,6 +2,7 @@ import os
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+
 from ocr_service.main import app
 
 

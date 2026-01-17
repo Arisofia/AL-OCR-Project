@@ -6,16 +6,16 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import boto3  # type: ignore
 from botocore.config import Config  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
 from tenacity import (
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
 )
 
 logger = logging.getLogger("ocr-service.storage")
@@ -108,7 +108,7 @@ class StorageService:
         key: str,
         content_type: str,
         expires_in: int = 3600,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generates a presigned POST URL for S3 upload.
         """
@@ -189,7 +189,8 @@ class StorageService:
                 reraise=True,
             )
             def _do_put() -> bool:
-                assert self.s3_client is not None
+                if self.s3_client is None:
+                    raise RuntimeError("S3 client is not initialized")
                 logger.debug(
                     "Attempting to put object to S3: bucket=%s, key=%s",
                     self.bucket_name,

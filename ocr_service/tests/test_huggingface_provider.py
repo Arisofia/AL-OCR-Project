@@ -15,7 +15,11 @@ class _MockResponse:
 
     def raise_for_status(self):
         if self.status_code >= 400:
-            raise httpx.HTTPStatusError("status", request=None, response=self)
+            raise httpx.HTTPStatusError(
+                "status",
+                request=httpx.Request("POST", "https://example.com"),
+                response=httpx.Response(self.status_code),
+            )
 
 
 class _MockClient:
@@ -33,8 +37,7 @@ class _MockClient:
         # Keep the timeout parameter to match httpx.AsyncClient.post signature
         _ = timeout
         self.calls.append({"url": url, "headers": headers, "json": json})
-        resp = self._responses.pop(0)
-        return resp
+        return self._responses.pop(0)
 
 
 def test_huggingface_provider_uses_router_and_auth_and_retries(monkeypatch):

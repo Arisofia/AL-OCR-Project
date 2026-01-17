@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+
 from ocr_service.modules.layout import DocumentLayoutAnalyzer
 
 

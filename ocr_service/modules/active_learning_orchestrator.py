@@ -5,15 +5,15 @@ Automates the end-to-end flow: Ingestion -> Sampling -> Validation -> Drift Dete
 
 import asyncio
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
 from ocr_service.modules.active_learning import HybridSampling
 from ocr_service.modules.learning_engine import LearningEngine
-from ocr_service.utils.validation import validate_ocr_batch
 from ocr_service.utils.drift_detection import check_for_drift
+from ocr_service.utils.validation import validate_ocr_batch
 
 logger = logging.getLogger("ocr-service.al-orchestrator")
 
@@ -27,7 +27,7 @@ class ALOrchestrator:
         self.learning_engine = learning_engine
         self.sampling_strategy = HybridSampling(n_clusters=5, diversity_ratio=0.3)
 
-    async def run_cycle(self, n_samples: int = 50) -> Dict[str, Any]:
+    async def run_cycle(self, n_samples: int = 50) -> dict[str, Any]:
         """
         Executes one full Active Learning cycle.
         """
@@ -86,13 +86,14 @@ class ALOrchestrator:
             ],  # Return top 5 for preview
         }
 
-    async def _fetch_recent_results(self, limit: int = 100) -> List[Dict[str, Any]]:
+    async def _fetch_recent_results(self, limit: int = 100) -> list[dict[str, Any]]:
         """Retrieves data from Supabase."""
         if not self.learning_engine.client:
             return []
 
         def _fetch() -> Any:
-            assert self.learning_engine.client is not None
+            if self.learning_engine.client is None:
+                raise RuntimeError("LearningEngine client is not initialized")
             return (
                 self.learning_engine.client.table("learning_patterns")
                 .select("*")
@@ -106,7 +107,7 @@ class ALOrchestrator:
             return []
         from typing import cast
 
-        return cast(List[Dict[str, Any]], result.data or [])
+        return cast(list[dict[str, Any]], result.data or [])
 
     def _prepare_for_validation(self, df: pd.DataFrame) -> pd.DataFrame:
         """Maps Supabase schema to Validation Gate schema."""

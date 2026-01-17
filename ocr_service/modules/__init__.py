@@ -44,10 +44,10 @@ from .learning_engine import LearningEngine
 from .processor import OCRProcessor
 
 __all__ = [
-    "IterativeOCREngine",
     "AdvancedPixelReconstructor",
     "ImageEnhancer",
-    "PixelReconstructor",
+    "IterativeOCREngine",
     "LearningEngine",
     "OCRProcessor",
+    "PixelReconstructor",
 ]

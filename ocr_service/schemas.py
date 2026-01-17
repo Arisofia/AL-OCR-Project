@@ -2,7 +2,7 @@
 Pydantic schemas for the OCR service API.
 """
 
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -27,7 +27,7 @@ class OCRResponse(BaseModel):
     filename: str
     text: str
     confidence: Optional[float] = None
-    iterations: Optional[List[OCRIteration]] = None
+    iterations: Optional[list[OCRIteration]] = None
     processing_time: float
     s3_key: Optional[str] = None
     reconstruction: Optional[dict] = None

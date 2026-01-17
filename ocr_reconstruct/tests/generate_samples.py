@@ -55,10 +55,8 @@ def generate_all():
     """Generates all test samples."""
     base = make_base()
     pixelate(base)
-    # blur(base)  # optional
     return OUT_DIR
 
 
 if __name__ == "__main__":
     out = generate_all()
-    print("Generated samples in:", out)

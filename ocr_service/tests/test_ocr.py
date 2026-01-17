@@ -4,6 +4,7 @@ Unit tests for the OCR engine and image processing modules.
 
 import cv2
 import numpy as np
+
 from ocr_service.modules import ImageEnhancer
 
 

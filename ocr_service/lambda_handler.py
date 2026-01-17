@@ -7,9 +7,10 @@ persistence.
 import logging
 import os
 import urllib.parse
-from typing import Any, Dict, Tuple
+from typing import Any
 
 from botocore.exceptions import ClientError
+
 from ocr_service.config import get_settings
 from ocr_service.services.storage import StorageService
 from ocr_service.services.textract import TextractService
@@ -20,14 +21,14 @@ logger.setLevel(logging.INFO)
 settings = get_settings()
 
 
-def get_services(bucket_name: str) -> Tuple[TextractService, StorageService]:
+def get_services(bucket_name: str) -> tuple[TextractService, StorageService]:
     """
     Dependency factory for AWS integration services.
     """
     return TextractService(), StorageService(bucket_name=bucket_name)
 
 
-def process_record(record: Dict[str, Any], request_id: str = "N/A") -> None:
+def process_record(record: dict[str, Any], request_id: str = "N/A") -> None:
     """
     Processes an individual S3 document record with error isolation and traceability.
     """
@@ -45,7 +46,7 @@ def process_record(record: Dict[str, Any], request_id: str = "N/A") -> None:
     textract_service, storage_service = get_services(bucket)
 
     # Standardize output naming convention for deterministic downstream consumption
-    out_key = f"{settings.output_prefix.rstrip('/')}/" f"{os.path.basename(key)}.json"
+    out_key = f"{settings.output_prefix.rstrip('/')}/{os.path.basename(key)}.json"
 
     try:
         # Route documents based on format requirements (Async for PDFs, Sync for images)
@@ -105,7 +106,7 @@ def process_record(record: Dict[str, Any], request_id: str = "N/A") -> None:
         raise
 
 
-def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """
     Main Lambda handler for orchestrating S3 document triggers.
     Ensures full traceability and partial failure reporting.

@@ -4,16 +4,16 @@ Amazon Textract integration service for high-throughput financial document intel
 
 import logging
 import time
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Optional, cast
 
 import boto3  # type: ignore
 from botocore.config import Config  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
 from tenacity import (  # type: ignore
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
 )
 
 logger = logging.getLogger("ocr-service.textract")
@@ -54,7 +54,6 @@ class TextractService:
                 reraise=True,
             )
             def _do_start() -> Optional[str]:
-
                 resp = self.client.start_document_text_detection(
                     DocumentLocation={"S3Object": {"Bucket": bucket, "Name": key}}
                 )
@@ -70,8 +69,8 @@ class TextractService:
             return None
 
     def analyze_document(
-        self, bucket: str, key: str, features: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+        self, bucket: str, key: str, features: Optional[list[str]] = None
+    ) -> dict[str, Any]:
         """Performs synchronous document analysis for real-time processing pipelines."""
         if features is None:
             features = ["TABLES", "FORMS"]
@@ -84,17 +83,16 @@ class TextractService:
                 retry=retry_if_exception_type(ClientError),
                 reraise=True,
             )
-            def _do_analyze() -> Dict[str, Any]:
-
+            def _do_analyze() -> dict[str, Any]:
                 return cast(
-                    Dict[str, Any],
+                    dict[str, Any],
                     self.client.analyze_document(
                         Document={"S3Object": {"Bucket": bucket, "Name": key}},
                         FeatureTypes=features,
                     ),
                 )
 
-            return cast(Dict[str, Any], _do_analyze())
+            return cast(dict[str, Any], _do_analyze())
         except ClientError as e:
             request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
             logger.error("Analyze document failed after retries | RID: %s", request_id)
@@ -103,7 +101,7 @@ class TextractService:
             logger.exception("Unexpected error in analyze_document: %s", e)
             raise RuntimeError("Max retry threshold reached") from e
 
-    def get_job_results(self, job_id: str) -> Dict[str, Any]:
+    def get_job_results(self, job_id: str) -> dict[str, Any]:
         """Polls for asynchronous job completion and aggregates paginated results."""
         attempt = 0
         while attempt < self.MAX_POLL_ATTEMPTS:
@@ -128,8 +126,8 @@ class TextractService:
     def _collect_all_pages(
         self,
         job_id: str,
-        first_response: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        first_response: dict[str, Any],
+    ) -> dict[str, Any]:
         """Aggregates all paginated blocks using native SDK paginators."""
         blocks = first_response.get("Blocks", [])
         next_token = first_response.get("NextToken")

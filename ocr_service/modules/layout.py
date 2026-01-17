@@ -5,6 +5,7 @@ Used to identify regions of interest and classify document structure.
 
 import logging
 from typing import Any, cast
+
 import cv2
 import numpy as np
 

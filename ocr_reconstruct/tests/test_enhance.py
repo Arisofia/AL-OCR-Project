@@ -13,5 +13,5 @@ def test_sharpen_and_threshold():
     th = adaptive_threshold(s)
     assert th is not None
     # Ensure threshold yields binary image
-    unique_vals = set(list(th.flatten()))
+    unique_vals = set(th.flatten())
     assert unique_vals.issubset({0, 255})

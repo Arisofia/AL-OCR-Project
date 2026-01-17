@@ -34,4 +34,3 @@ def test_health_check():
     actual_services = set(data["services"].keys())
     missing = expected_services - actual_services
     assert not missing, f"Missing services: {missing}. Found: {actual_services}"
-    print("Health check passed:", data)

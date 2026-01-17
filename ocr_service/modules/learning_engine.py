@@ -8,7 +8,7 @@ using Supabase, enabling the service to learn from historical data.
 import asyncio
 import logging
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from supabase import Client, create_client
 
@@ -29,7 +29,7 @@ class LearningEngine:
         """
         self.settings = get_settings()
         self.client: Optional[Client] = None
-        self._knowledge_cache: Dict[str, Any] = {}
+        self._knowledge_cache: dict[str, Any] = {}
         self._last_check_time = 0.0
         self._last_check_result = False
 
@@ -65,7 +65,7 @@ class LearningEngine:
         return self._last_check_result
 
     async def learn_from_result(
-        self, doc_type: str, font_meta: Dict[str, Any], accuracy_score: float
+        self, doc_type: str, font_meta: dict[str, Any], accuracy_score: float
     ) -> None:
         """
         Records document characteristics for future reference and pattern matching.
@@ -94,7 +94,7 @@ class LearningEngine:
         except Exception as e:
             logger.warning("Failed to record learning data: %s", e)
 
-    async def get_pattern_knowledge(self, doc_type: str) -> Optional[Dict[str, Any]]:
+    async def get_pattern_knowledge(self, doc_type: str) -> Optional[dict[str, Any]]:
         """
         Retrieves previously learned patterns for a specific document type.
         """
@@ -106,7 +106,7 @@ class LearningEngine:
             logger.debug("Knowledge cache hit for %s", doc_type)
             from typing import cast
 
-            return cast(Optional[Dict[str, Any]], self._knowledge_cache[doc_type])
+            return cast(Optional[dict[str, Any]], self._knowledge_cache[doc_type])
 
         try:
 
@@ -130,7 +130,7 @@ class LearningEngine:
                 self._knowledge_cache[doc_type] = knowledge
             from typing import cast
 
-            return cast(Optional[Dict[str, Any]], knowledge)
+            return cast(Optional[dict[str, Any]], knowledge)
         except Exception as e:
             logger.error("Failed to fetch pattern knowledge: %s", e)
             return None

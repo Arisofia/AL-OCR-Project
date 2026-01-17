@@ -4,9 +4,10 @@ Uses evidently to compare production data against training reference.
 """
 
 import logging
+
 import pandas as pd
-from evidently.report import Report
 from evidently.metric_preset import DataDriftPreset
+from evidently.report import Report
 from evidently.test_suite import TestSuite
 from evidently.tests import TestNumberOfDriftedColumns
 

@@ -1,4 +1,5 @@
 from unittest.mock import MagicMock, patch
+
 from fastapi.testclient import TestClient
 
 from ocr_service.config import get_settings
@@ -44,9 +45,10 @@ def test_rate_limit_smoke_triggers_handler():
     }
 
     # Patch S3 client so presign succeeds during the first calls
-    with patch("boto3.client") as mock_boto, patch(
-        "ocr_service.utils.limiter.logger"
-    ) as mock_logger:
+    with (
+        patch("boto3.client") as mock_boto,
+        patch("ocr_service.utils.limiter.logger") as mock_logger,
+    ):
         mock_s3 = MagicMock()
         mock_s3.generate_presigned_post.return_value = {
             "url": "https://s3.example.com/bucket",

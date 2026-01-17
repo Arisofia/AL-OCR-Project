@@ -1,4 +1,5 @@
 import contextlib
+
 from ocr_service.config import get_settings
 
 
@@ -14,10 +15,8 @@ def test_hugging_face_token_from_env(monkeypatch):
 
 
 def test_hf_token_absent_returns_none(monkeypatch):
-    try:
+    with contextlib.suppress(AttributeError):
         get_settings.cache_clear()
-    except AttributeError:
-        pass
 
     monkeypatch.delenv("HUGGING_FACE_HUB_TOKEN", raising=False)
     settings = get_settings()

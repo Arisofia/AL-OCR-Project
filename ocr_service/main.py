@@ -19,9 +19,6 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-# First-party (ocr_service) imports
-from ocr_service.utils.monitoring import init_monitoring
-from ocr_service.utils.custom_logging import setup_logging
 from ocr_service.config import Settings, get_settings
 from ocr_service.modules.ocr_config import EngineConfig
 from ocr_service.modules.ocr_engine import IterativeOCREngine
@@ -34,7 +31,11 @@ from ocr_service.schemas import (
     ReconStatusResponse,
 )
 from ocr_service.services.storage import StorageService
+from ocr_service.utils.custom_logging import setup_logging
 from ocr_service.utils.limiter import _rate_limit_exceeded_handler_with_logging
+
+# First-party (ocr_service) imports
+from ocr_service.utils.monitoring import init_monitoring
 
 # Runtime package detection for optional reconstruction capability
 try:
@@ -64,7 +65,10 @@ app = FastAPI(
     redoc_url="/redoc" if settings.environment != "production" else None,
 )
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler_with_logging)
+app.add_exception_handler(
+    RateLimitExceeded,
+    _rate_limit_exceeded_handler_with_logging,  # type: ignore
+)
 
 
 @app.middleware("http")

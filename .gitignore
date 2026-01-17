@@ -58,3 +58,11 @@ terraform/tfplan
 
 # Audit
 pip_audit_results.json
+
+# Coverage & Quality
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/

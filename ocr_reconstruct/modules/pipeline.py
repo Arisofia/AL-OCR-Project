@@ -5,7 +5,7 @@ Coordinates image enhancement, pixel reconstruction, and Tesseract-based OCR loo
 
 import logging
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import cv2
 import numpy as np
@@ -52,7 +52,7 @@ class IterativeOCR:
         current: np.ndarray,
         thresholded: np.ndarray,
         iteration: int,
-    ) -> Tuple[str, np.ndarray, List[Dict[str, Any]]]:
+    ) -> tuple[str, np.ndarray, list[dict[str, Any]]]:
         """
         Applies heuristic strategies (Depixelation, Inpainting) for low confidence.
         """
@@ -89,13 +89,13 @@ class IterativeOCR:
 
         return best_local_text, best_local_img, strategies_meta
 
-    def process_image(self, img: np.ndarray) -> Tuple[str, np.ndarray, Dict[str, Any]]:
+    def process_image(self, img: np.ndarray) -> tuple[str, np.ndarray, dict[str, Any]]:
         """
         Internal orchestration logic for executing the iterative extraction loop.
         """
         current = self.enhancer.to_gray(img)
         best_overall_text = ""
-        meta: Dict[str, Any] = {"iterations": []}
+        meta: dict[str, Any] = {"iterations": []}
 
         for i in range(self.iterations):
             # Step 1: Sequential Enhancement and Extraction
@@ -132,7 +132,7 @@ class IterativeOCR:
 
         return best_overall_text.strip(), current, meta
 
-    def process_file(self, image_path: str) -> Tuple[str, Dict[str, Any]]:
+    def process_file(self, image_path: str) -> tuple[str, dict[str, Any]]:
         """Orchestrates extraction from a local file path with full traceability."""
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Source file not found: {image_path}")
@@ -147,10 +147,10 @@ class IterativeOCR:
     def process_bytes(
         self,
         image_bytes: bytes,
-    ) -> Tuple[
+    ) -> tuple[
         str,
         Optional[bytes],
-        Dict[str, Any],
+        dict[str, Any],
     ]:
         """Synchronous byte-stream processing for integration in real-time APIs."""
         nparr = np.frombuffer(image_bytes, np.uint8)
@@ -173,7 +173,7 @@ class IterativeOCR:
 
 def process_bytes(
     image_bytes: bytes, iterations: int = 3, save_iterations: bool = False
-) -> Tuple[str, Optional[bytes], Dict[str, Any]]:
+) -> tuple[str, Optional[bytes], dict[str, Any]]:
     """Stateless entry point for ephemeral image byte processing."""
     pipeline = IterativeOCR(iterations=iterations, save_iterations=save_iterations)
     return pipeline.process_bytes(image_bytes)

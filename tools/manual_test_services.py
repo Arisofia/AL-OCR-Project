@@ -3,8 +3,8 @@ Manual test script for verifying AWS services integration.
 Uses mocking to simulate AWS interactions without requiring real credentials.
 """
 
-import sys
 import os
+import sys
 import typing
 from unittest.mock import MagicMock
 

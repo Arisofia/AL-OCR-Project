@@ -1,6 +1,7 @@
 from slowapi.errors import RateLimitExceeded
-from ocr_service.utils import limiter as limiter_mod
+
 from ocr_service.main import app
+from ocr_service.utils import limiter as limiter_mod
 
 
 def test_rate_limit_handler_registered():
@@ -11,8 +12,9 @@ def test_rate_limit_handler_registered():
 
 def test_rate_limit_handler_response_and_logging(monkeypatch):
     """Directly call the handler to verify response payload and structured logging."""
-    from fastapi import Request
     import json
+
+    from fastapi import Request
 
     handler = limiter_mod._rate_limit_exceeded_handler_with_logging
 
@@ -77,7 +79,7 @@ def test_rate_limit_handler_response_shape(monkeypatch):
 
     # Original exception message that should be logged but not echoed back
     message = "Too many OCR requests"
-    exc = type("_DummyRL", (), {"__str__": lambda self: message})()
+    exc = type("_DummyRL", (), {"__str__": lambda _: message})()
 
     handler = limiter_mod._rate_limit_exceeded_handler_with_logging
 

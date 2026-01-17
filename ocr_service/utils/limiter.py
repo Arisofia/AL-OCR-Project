@@ -5,6 +5,7 @@ Provides fallback mechanisms when slowapi is not available.
 
 import logging
 from typing import Optional
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
@@ -26,7 +27,7 @@ except ImportError:  # pragma: no cover - fallback if opentelemetry missing
         def start_as_current_span(self, _name: str):
             return _NoopSpan()
 
-    tracer = _NoopTracer()
+    tracer = _NoopTracer()  # type: ignore
 
 # SlowAPI imports placed near other third-party imports
 from slowapi import Limiter  # type: ignore
@@ -38,9 +39,9 @@ logger = logging.getLogger("ocr-service.limiter")
 __all__ = [
     "Limiter",
     "RateLimitExceeded",
+    "_rate_limit_exceeded_handler_with_logging",
     "get_remote_address",
     "init_limiter",
-    "_rate_limit_exceeded_handler_with_logging",
 ]
 
 

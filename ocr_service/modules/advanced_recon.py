@@ -6,7 +6,7 @@ for obscured documents using multiple AI providers.
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from ocr_service.config import get_settings
 
@@ -21,7 +21,7 @@ class AdvancedPixelReconstructor:
     and layer elimination for obscured documents.
     """
 
-    def __init__(self, providers: Optional[Dict[str, VisionProvider]] = None):
+    def __init__(self, providers: Optional[dict[str, VisionProvider]] = None):
         """
         Initializes the reconstructor with available AI providers.
         """
@@ -44,9 +44,9 @@ class AdvancedPixelReconstructor:
         self,
         image_bytes: bytes,
         provider: str = "openai",
-        context: Optional[Dict[str, Any]] = None,
+        context: Optional[dict[str, Any]] = None,
         fallback: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Uses advanced AI models to 'see' through layers and reconstruct content.
         """
@@ -55,7 +55,7 @@ class AdvancedPixelReconstructor:
             # Try to find any available provider if the requested one is missing
             if not self.providers:
                 return {"error": "No AI providers configured"}
-            primary = list(self.providers.keys())[0]
+            primary = next(iter(self.providers.keys()))
             logger.info(
                 "Requested provider %s unavailable, using %s", provider, primary
             )
@@ -88,7 +88,7 @@ class AdvancedPixelReconstructor:
 
     async def _try_fallback(
         self, image_bytes: bytes, prompt: str, exclude: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Attempts to use an alternative provider when the primary fails.
         """

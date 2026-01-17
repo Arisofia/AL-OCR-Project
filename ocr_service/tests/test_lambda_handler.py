@@ -5,6 +5,7 @@ Test suite for the OCR Lambda handler.
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from ocr_service.lambda_handler import handler
 
 
@@ -64,9 +65,9 @@ def test_handler_textract_failure(s3_event):
 
 def test_handler_missing_info():
     """Test handler with missing bucket or key."""
-    from typing import Any, Dict
+    from typing import Any
 
-    bad_event: Dict[str, Any] = {"Records": [{"s3": {}}]}
+    bad_event: dict[str, Any] = {"Records": [{"s3": {}}]}
     with patch("ocr_service.lambda_handler.logger") as mock_logger:
         response = handler(bad_event, None)
         assert response == {"status": "ok"}

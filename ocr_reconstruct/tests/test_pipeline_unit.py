@@ -1,6 +1,8 @@
 from unittest import mock
-import numpy as np
+
 import cv2
+import numpy as np
+
 from ocr_reconstruct.modules.pipeline import IterativeOCR
 
 

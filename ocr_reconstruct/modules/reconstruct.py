@@ -145,8 +145,9 @@ def deblur_wiener(img: np.ndarray, kernel: Optional[np.ndarray] = None) -> np.nd
 
     img_f = img.astype("float32") / 255.0
     try:
-        from scipy import signal  # type: ignore
         from typing import cast
+
+        from scipy import signal  # type: ignore
 
         wiener_filtered = signal.wiener(img_f)
         return cast(np.ndarray, np.clip(wiener_filtered * 255.0, 0, 255)).astype(

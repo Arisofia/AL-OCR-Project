@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import time
+
 import redis  # type: ignore
 
 redis_host = os.getenv("REDIS_HOST", "localhost")

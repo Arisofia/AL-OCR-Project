@@ -4,10 +4,15 @@
 CLI tool to interact with the Hugging Face Vision Provider for testing and
 reconstruction.
 """
-import asyncio
+
 import argparse
-import sys
+import asyncio
 import os
+import sys
+from pathlib import Path
+
+# Add project root to sys.path for local development
+sys.path.append(str(Path(__file__).parent.parent))
 
 from ocr_service.config import get_settings
 from ocr_service.modules.ai_providers import HuggingFaceVisionProvider

@@ -4,8 +4,9 @@ Uses Great Expectations to validate data integrity before training or labeling.
 """
 
 import logging
-import pandas as pd
+
 import great_expectations as gx
+import pandas as pd
 
 logger = logging.getLogger("ocr-service.validation")
 

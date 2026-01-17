@@ -1,10 +1,12 @@
-from typing import Optional, List, Any
 import logging
+from typing import Any, Optional
+
 import sentry_sdk
+
 from .custom_logging import setup_logging
 
 
-def init_monitoring(settings: Any, integrations: Optional[List[Any]] = None, **kwargs):
+def init_monitoring(settings: Any, integrations: Optional[list[Any]] = None, **kwargs):
     """
     Unified initialization for logging and Sentry monitoring.
 

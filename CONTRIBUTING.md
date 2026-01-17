@@ -7,8 +7,8 @@
 - Ensure your code passes all tests and pre-commit hooks before submitting a PR.
 
 ## Code Style & Quality
-- Use `black` for Python formatting and `flake8`/`pylint` for linting.
-- Type annotations are required for all new Python code.
+- Use `ruff` for Python formatting and linting.
+- Type annotations are required for all new Python code (enforced via `mypy`).
 - Write docstrings for all public functions and classes.
 - Use descriptive commit messages (imperative mood, e.g., "Add OCR post-processing module").
 

@@ -1,0 +1,46 @@
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "I", "N", "UP", "S", "A", "C4", "T20", "RET", "SIM", "ARG", "PTH", "ERA", "PL", "RUF"]
+ignore = [
+    "PLR0913", "PLR0912", "PLR0915", "PLR0911", "PLR2004", "PTH",
+    "PLC0415", "B008", "S104", "SIM108"
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S105", "S106"]
+"ocr_service/tests/*" = ["S101", "S105", "S106"]
+"ocr_reconstruct/tests/*" = ["S101", "S105", "S106"]
+"tools/*" = ["T201", "T203", "S101", "ARG002", "ARG005"]
+"main.py" = ["T201"]
+"ocr_reconstruct/main.py" = ["T201"]
+"ocr_service/main.py" = ["T201"]
+"scripts/*" = ["T201"]
+"ocr_service/config.py" = ["ERA001"]
+"ocr_service/modules/active_learning_orchestrator.py" = ["ERA001"]
+
+[tool.mypy]
+python_version = "3.9"
+ignore_missing_imports = true
+check_untyped_defs = true
+disallow_untyped_defs = false
+warn_return_any = true
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = "ocr_service.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "ocr_reconstruct.*"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["ocr_service/tests", "ocr_reconstruct/tests"]
+python_files = ["test_*.py"]
+addopts = "-v --cov=ocr_service --cov=ocr_reconstruct --cov-report=xml"
+markers = [
+    "integration: marks tests as integration tests (slow, requires Tesseract)"
+]

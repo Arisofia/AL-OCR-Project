@@ -3,16 +3,12 @@ import os
 
 
 def train():
-    print("Starting training placeholder...")
-
     # Simulate training by checking if data exists
     data_path = "data/raw"
     if os.path.exists(data_path):
-        print(
-            f"Data found at {data_path}. Number of files: {len(os.listdir(data_path))}"
-        )
+        pass
     else:
-        print(f"Warning: {data_path} not found.")
+        pass
 
     # Generate dummy metrics
     metrics = {"accuracy": 0.92, "f1_score": 0.89, "precision": 0.91, "recall": 0.88}
@@ -34,8 +30,6 @@ def train():
         # Write a valid PNG header as a fallback if matplotlib is missing
         with open("confusion_matrix.png", "wb") as f:
             f.write(b"\x89PNG\r\n\x1a\n")  # PNG file signature
-
-    print("Training placeholder completed.")
 
 
 if __name__ == "__main__":

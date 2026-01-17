@@ -3,8 +3,9 @@ This file was renamed from logging.py to custom_logging.py to avoid shadowing
 the standard library logging module.
 """
 
-import logging  # pylint: disable=E1101
+import logging
 import sys
+
 from pythonjsonlogger import jsonlogger
 
 

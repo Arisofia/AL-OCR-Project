@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import pytest
 from botocore.exceptions import ClientError  # type: ignore
+
 from ocr_service.services.storage import StorageService
 from ocr_service.services.textract import TextractService
 
@@ -76,8 +77,10 @@ def test_textract_analyze_persistent_failure(mock_textract_client):
         {"Error": {"Code": "InternalServerError", "Message": "Oops"}}, "AnalyzeDocument"
     )
 
-    with patch("time.sleep", return_value=None):
-        with pytest.raises(RuntimeError, match="Max retry threshold reached"):
-            service.analyze_document("bucket", "key")
+    with (
+        patch("time.sleep", return_value=None),
+        pytest.raises(RuntimeError, match="Max retry threshold reached"),
+    ):
+        service.analyze_document("bucket", "key")
 
     assert mock_textract_client.analyze_document.call_count == 2

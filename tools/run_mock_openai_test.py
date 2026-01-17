@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from pathlib import Path
+from typing import Optional
 
 import httpx
 
@@ -37,7 +38,7 @@ class _MockResponse:
     def __init__(
         self,
         status_code: int = 403,
-        body: dict | None = None,
+        body: Optional[dict] = None,
         method: str = "POST",
         url: str = "https://api.openai.com/v1/chat/completions",
     ):
@@ -72,7 +73,7 @@ class _MockResponse:
 
 
 class _MockAsyncClient:
-    def __init__(self, status_code: int = 403, body: dict | None = None):
+    def __init__(self, status_code: int = 403, body: Optional[dict] = None):
         self._status_code = status_code
         self._body = body
 
@@ -92,9 +93,9 @@ class _MockAsyncClient:
         return _MockResponse(status_code=self._status_code, body=self._body)
 
 
-async def run_scenario(name: str, status_code: int, body: dict | None = None):
+async def run_scenario(name: str, status_code: int, body: Optional[dict] = None):
     original_client = httpx.AsyncClient
-    httpx.AsyncClient = lambda *a, **k: _MockAsyncClient(
+    httpx.AsyncClient = lambda *a, **k: _MockAsyncClient(  # type: ignore
         status_code=status_code, body=body
     )
 
@@ -108,7 +109,7 @@ async def run_scenario(name: str, status_code: int, body: dict | None = None):
         logger.exception("[%s] Provider raised exception", name)
         print(f"[{name}] Exception:", repr(exc))
     finally:
-        httpx.AsyncClient = original_client
+        httpx.AsyncClient = original_client  # type: ignore
 
 
 async def main():
