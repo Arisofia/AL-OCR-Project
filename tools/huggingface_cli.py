@@ -13,28 +13,9 @@ from ocr_service.config import get_settings
 from ocr_service.modules.ai_providers import HuggingFaceVisionProvider
 
 
-# ...existing code...
-
-
 async def main():
     """
     Main entrypoint for the Hugging Face Vision CLI tool.
-
-    This tool reads an image file and sends it to the Hugging Face Vision
-    Provider for reconstruction. It then prints the reconstructed text and
-    any metadata returned by the provider.
-
-    Args:
-        image_path (str): Path to the image file to process
-        prompt (str): Prompt to send to the model (default: see above)
-        token (Optional[str]): Hugging Face Token (overrides
-            HUGGING_FACE_HUB_TOKEN env var)
-        token (str): Hugging Face Token (overrides
-            HUGGING_FACE_HUB_TOKEN env var)
-        model (str): Model ID to use (default: runwayml/stable-diffusion-v1-5)
-
-    Returns:
-        Dict[str, str]: Reconstructed text and metadata
     """
     parser = argparse.ArgumentParser(description="Hugging Face Vision CLI")
     parser.add_argument(

@@ -24,9 +24,17 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-2. Ensure Tesseract is installed and available on PATH. On macOS: `brew install tesseract`.
+2. (Optional) Install as an editable package:
 
-3. Run CLI:
+```bash
+python -m pip install -e .
+```
+
+This makes `import ocr_reconstruct` available to your Python environment.
+
+3. Ensure Tesseract is installed and available on PATH. On macOS: `brew install tesseract`.
+
+4. Run CLI:
 
 ```bash
 python main.py --image tests/data/sample_clean.png --iterations 3 --output out.txt

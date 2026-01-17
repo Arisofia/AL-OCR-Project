@@ -3,7 +3,7 @@ This file was renamed from logging.py to custom_logging.py to avoid shadowing
 the standard library logging module.
 """
 
-import logging  # noqa: E1101  # pylint: disable=E1101
+import logging  # pylint: disable=E1101
 import sys
 from pythonjsonlogger import jsonlogger
 
@@ -12,7 +12,7 @@ def setup_logging(level=logging.INFO):
     """
     Configures structured JSON logging for the application.
     """
-    handler = logging.StreamHandler(sys.stdout)  # noqa: E1101
+    handler = logging.StreamHandler(sys.stdout)
 
     # Define the fields to be included in the JSON output
     fmt = (
@@ -23,7 +23,7 @@ def setup_logging(level=logging.INFO):
 
     handler.setFormatter(formatter)
 
-    root_logger = logging.getLogger()  # noqa: E1101
+    root_logger = logging.getLogger()
     # Remove existing handlers to avoid duplicate logs
     for h in root_logger.handlers[:]:
         root_logger.removeHandler(h)
@@ -33,4 +33,4 @@ def setup_logging(level=logging.INFO):
 
     # Set some specific loggers to higher levels to reduce noise
     for name in ("boto3", "botocore", "uvicorn.access"):
-        logging.getLogger(name).setLevel(logging.WARNING)  # noqa: E1101
+        logging.getLogger(name).setLevel(logging.WARNING)

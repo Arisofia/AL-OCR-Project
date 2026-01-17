@@ -6,5 +6,14 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Arisofia/AL-OCR-Project.git"
+  },
+  "scripts": {
+    "frontend:dev": "cd frontend && npm run dev",
+    "frontend:build": "cd frontend && npm run build",
+    "frontend:lint": "cd frontend && npm run lint",
+    "api:dev": "python serve_api.py",
+    "test:all": "pytest ocr_service/tests/ ocr_reconstruct/tests/",
+    "lint:python": "ruff check .",
+    "format:python": "ruff format ."
   }
 }

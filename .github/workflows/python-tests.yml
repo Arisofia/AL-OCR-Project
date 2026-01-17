@@ -1,3 +1,4 @@
+---
 name: Python Tests
 
 on:
@@ -12,7 +13,7 @@ on:
     paths:
       - 'ocr_service/**'
       - 'ocr_reconstruct/**'
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -32,7 +33,7 @@ jobs:
     steps:
       # actions/checkout v4.2.2
       # ---- Setup & Validation ----
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@v4
 
       - name: Validate Secrets
         env:
@@ -40,31 +41,31 @@ jobs:
           OCR_API_KEY: ${{ secrets.OCR_API_KEY }}
         run: |
           missing_secrets=()
-          echo "### Secret Validation Results" >> $GITHUB_STEP_SUMMARY
+          echo "### Secret Validation Results" >> "$GITHUB_STEP_SUMMARY"
           for secret in CODECOV_TOKEN OCR_API_KEY; do
             if [ -z "${!secret}" ]; then
               echo "::error ::Secret $secret is not set!"
-              echo "❌ **$secret** is missing" >> $GITHUB_STEP_SUMMARY
+              echo "❌ **$secret** is missing" >> "$GITHUB_STEP_SUMMARY"
               missing_secrets+=("$secret")
             else
               echo "✅ $secret is set."
-              echo "✅ $secret is set" >> $GITHUB_STEP_SUMMARY
+              echo "✅ $secret is set" >> "$GITHUB_STEP_SUMMARY"
             fi
           done
           if [ ${#missing_secrets[@]} -ne 0 ]; then
-            echo "::error ::One or more required secrets are missing: ${missing_secrets[*]}"
-            # If running from a forked PR, secrets are unavailable and this is expected
-            if [ "${{ github.event_name }}" == "pull_request" ] && [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
-              echo "::warning ::Running from fork - secrets unavailable. Some steps will be skipped."
+            echo "::error ::Missing secrets: ${missing_secrets[*]}"
+            # If running from a forked PR, secrets are unavailable
+            if [ "${{ github.event_name }}" == "pull_request" ] && \
+               [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+              echo "::warning ::Forked PR - secrets unavailable. Continuing..."
             else
               exit 1
             fi
           fi
 
-
       # ---- Python & Dependencies ----
       - name: Setup Python
-        uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -77,7 +78,7 @@ jobs:
         run: python -m pip install --upgrade pip
 
       - name: Cache pip
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', 'requirements-dev.txt') }}
@@ -85,7 +86,7 @@ jobs:
             ${{ runner.os }}-pip-
 
       - name: Cache pre-commit hooks
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache@v4
         with:
           path: ~/.cache/pre-commit
           key: ${{ runner.os }}-pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
@@ -94,18 +95,9 @@ jobs:
 
       - name: Install dependencies (minimal for tests)
         run: |
-          # Install test/dev tools and a minimal set of runtime packages to avoid
-          # dependency-resolution conflicts in CI. Adjust as needed if tests require
-          # heavier packages (e.g., label-studio, dvc) - those are not needed for
-          # unit tests and slow down / complicate the job.
           python -m pip install -r requirements-dev.txt
-
-          # Minimal runtime packages for ocr_service unit tests
           python -m pip install fastapi==0.128.0 pydantic==2.9.2 httpx==0.27.2 redis==5.0.1 pytest==8.3.3 pytest-cov
-
-          # Install local packages
           python -m pip install -e ./ocr_reconstruct
-
 
       - name: Run Security Scan (bandit)
         run: |
@@ -119,16 +111,15 @@ jobs:
       - name: Run Type Checking (mypy)
         continue-on-error: true
         run: |
-          # Install missing stubs automatically and run non-interactively
-          mypy --install-types --non-interactive ocr_service ocr_reconstruct --ignore-missing-imports --no-strict-optional
+          mypy --install-types --non-interactive ocr_service ocr_reconstruct \
+            --ignore-missing-imports --no-strict-optional
 
       - name: Run Linting (flake8)
         continue-on-error: true
         run: |
-          # Use the root .flake8 config if it exists
-          flake8 . \
-            --count --select=E9,F63,F7,F82 --show-source --statistics
-          flake8 ocr_service ocr_reconstruct --count --max-complexity=10 --max-line-length=88 --statistics
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 ocr_service ocr_reconstruct --count --max-complexity=10 \
+            --max-line-length=88 --statistics
 
       - name: Run Formatting Check (black)
         continue-on-error: true
@@ -138,7 +129,6 @@ jobs:
       - name: Run Linting (pylint)
         continue-on-error: true
         run: |
-          # Only lint the core service folders
           pylint ocr_service ocr_reconstruct --fail-under=8.0
 
       - name: Run Pre-commit Hooks
@@ -146,19 +136,18 @@ jobs:
         run: |
           pre-commit run --all-files
 
-      - name: Save ocr_service pip environment (debug)
+      - name: Save debug environment
         if: ${{ always() }}
         run: |
-          mkdir -p artifacts || true
-          pip --version > artifacts/pip_version.txt || true
-          pip freeze > artifacts/pip_freeze.txt || true
-          python -V > artifacts/python_version.txt || true
-          env > artifacts/env.txt || true
+          mkdir -p artifacts
+          pip --version > artifacts/pip_version.txt
+          pip freeze > artifacts/pip_freeze.txt
+          python -V > artifacts/python_version.txt
+          env > artifacts/env.txt
 
-      # actions/upload-artifact v4.4.3
-      - name: Upload ocr_service pip debug artifact
+      - name: Upload debug artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+        uses: actions/upload-artifact@v4
         with:
           name: ocr_service-pip-debug-${{ matrix.python-version }}
           path: artifacts
@@ -167,10 +156,11 @@ jobs:
       - name: Generate sample images
         run: |
           python ocr_reconstruct/tests/generate_samples.py
+
       - name: Verify sample images
         run: |
           if [ ! -f ocr_reconstruct/tests/data/sample1.png ]; then
-            echo "::error ::Sample image sample1.png not found. Test setup failed."
+            echo "::error ::Sample images missing. Test setup failed."
             exit 1
           fi
 
@@ -195,10 +185,10 @@ jobs:
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false
-      # actions/upload-artifact v4.4.3
-      - name: Upload ocr_service debug artifact
+
+      - name: Upload debug artifact (tests)
         if: ${{ always() }}
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+        uses: actions/upload-artifact@v4
         with:
           name: ocr_service-debug-${{ matrix.python-version }}
           path: ./ocr_service/debug_imports.txt
