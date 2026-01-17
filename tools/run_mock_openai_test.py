@@ -54,6 +54,7 @@ class _MockAsyncClient:
 
     async def post(self, url, headers=None, json=None, timeout=None):
         logger.debug("MockAsyncClient.post called for URL: %s", url)
+        logger.debug("Request headers: %s", headers)
         logger.debug("Request payload keys: %s", list((json or {}).keys()))
         # Use the timeout parameter if provided to simulate delay
         if timeout:
