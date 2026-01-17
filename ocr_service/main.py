@@ -3,20 +3,26 @@ Core API Gateway for the AL Financial OCR Service.
 Provides endpoints for document intelligence and S3 lifecycle management.
 """
 
+# Standard library imports
 import logging
 import time
 from typing import Optional
 
-from ocr_service.utils.monitoring import init_monitoring
-from ocr_service.utils.custom_logging import setup_logging
-
+# Third-party imports
 import boto3
 from botocore.exceptions import ClientError
-from ocr_service.config import Settings, get_settings
 from fastapi import Depends, FastAPI, File, HTTPException, Request, Security, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
 from mangum import Mangum
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
+# First-party (ocr_service) imports
+from ocr_service.utils.monitoring import init_monitoring
+from ocr_service.utils.custom_logging import setup_logging
+from ocr_service.config import Settings, get_settings
 from ocr_service.modules.ocr_config import EngineConfig
 from ocr_service.modules.ocr_engine import IterativeOCREngine
 from ocr_service.modules.processor import OCRProcessor
@@ -28,6 +34,7 @@ from ocr_service.schemas import (
     ReconStatusResponse,
 )
 from ocr_service.services.storage import StorageService
+from ocr_service.utils.limiter import _rate_limit_exceeded_handler_with_logging
 
 # Runtime package detection for optional reconstruction capability
 try:
@@ -38,11 +45,6 @@ try:
 except Exception:
     RECON_PKG_AVAILABLE = False
     RECON_PKG_VERSION = "not-installed"
-
-from slowapi import Limiter
-from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
-from ocr_service.utils.limiter import _rate_limit_exceeded_handler_with_logging
 
 
 # Initialize enterprise-grade logging
