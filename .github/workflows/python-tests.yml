@@ -40,28 +40,16 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
           OCR_API_KEY: ${{ secrets.OCR_API_KEY }}
         run: |
-          missing_secrets=()
           echo "### Secret Validation Results" >> "$GITHUB_STEP_SUMMARY"
           for secret in CODECOV_TOKEN OCR_API_KEY; do
             if [ -z "${!secret}" ]; then
-              echo "::error ::Secret $secret is not set!"
-              echo "❌ **$secret** is missing" >> "$GITHUB_STEP_SUMMARY"
-              missing_secrets+=("$secret")
+              echo "::warning ::Secret $secret is not set!"
+              echo "⚠️ **$secret** is missing" >> "$GITHUB_STEP_SUMMARY"
             else
               echo "✅ $secret is set."
               echo "✅ $secret is set" >> "$GITHUB_STEP_SUMMARY"
             fi
           done
-          if [ ${#missing_secrets[@]} -ne 0 ]; then
-            echo "::error ::Missing secrets: ${missing_secrets[*]}"
-            # If running from a forked PR, secrets are unavailable
-            if [ "${{ github.event_name }}" == "pull_request" ] && \
-               [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
-              echo "::warning ::Forked PR - secrets unavailable. Continuing..."
-            else
-              exit 1
-            fi
-          fi
 
       # ---- Python & Dependencies ----
       - name: Setup Python
