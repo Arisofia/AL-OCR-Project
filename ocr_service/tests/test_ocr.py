@@ -2,6 +2,8 @@
 Unit tests for the OCR engine and image processing modules.
 """
 
+import asyncio
+
 import cv2
 import numpy as np
 
@@ -17,13 +19,13 @@ def test_ocr_engine_invalid_input():
     engine = IterativeOCREngine()
 
     # Test empty input
-    result = engine.process_image(b"")
+    result = asyncio.run(engine.process_image(b""))
     assert "error" in result
     assert result["error"] == "Empty image content"
 
     # Test large input
     large_input = b"0" * (11 * 1024 * 1024)
-    result = engine.process_image(large_input)
+    result = asyncio.run(engine.process_image(large_input))
     assert "error" in result
     assert "exceeds 10MB" in result["error"]
 

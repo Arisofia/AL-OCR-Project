@@ -61,14 +61,18 @@ def test_reconstruction_enabled(tmp_path, monkeypatch):
         }
         headers = {"X-API-KEY": test_key}
 
-        # Mock the engine's run_reconstruction to return something
+        # Mock the processor's run_reconstruction to return something
+        from unittest.mock import AsyncMock
+
         with patch(
-            "ocr_service.modules.ocr_engine.IterativeOCREngine._run_reconstruction"
+            "ocr_service.modules.ocr_engine.DocumentProcessor.run_reconstruction",
+            new_callable=AsyncMock,
         ) as mock_recon:
-            mock_recon.return_value = (
-                {"preview_text": "recon text", "meta": "data"},
-                None,
-            )
+
+            async def side_effect(ctx, _max_iterations):
+                ctx.reconstruction_info = {"preview_text": "recon text", "meta": "data"}
+
+            mock_recon.side_effect = side_effect
             resp = client.post("/ocr", files=files, headers=headers)
 
     assert resp.status_code == 200

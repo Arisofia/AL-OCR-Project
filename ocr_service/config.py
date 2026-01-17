@@ -58,14 +58,22 @@ class Settings(BaseSettings):
     hugging_face_hub_token: Optional[str] = None
     perplexity_api_key: Optional[str] = None
 
-    # Database & Storage (Supabase)
+    # Database & Storage
     supabase_url: Optional[str] = None
     supabase_anon_key: Optional[str] = None
     supabase_service_role: Optional[str] = None
+    use_local_fallback: bool = True
+    local_data_path: str = "data/learning_patterns.json"
 
     # Monitoring & Logging
     sentry_dsn: Optional[str] = None
     azure_application_insights_connection_string: Optional[str] = None
+
+    # Active Learning & Drift
+    drift_report_path: str = "reports/drift_report.html"
+    reference_baseline_path: str = "data/reference_baseline.csv"
+    al_cycle_samples: int = 50
+    al_n_clusters: int = 5
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"

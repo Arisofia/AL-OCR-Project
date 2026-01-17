@@ -5,12 +5,13 @@ Automates the end-to-end flow: Ingestion -> Sampling -> Validation -> Drift Dete
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Optional, cast
 
 import numpy as np
 import pandas as pd
 
-from ocr_service.modules.active_learning import HybridSampling
+from ocr_service.config import get_settings
+from ocr_service.modules.active_learning import HybridSampling, OCRModel
 from ocr_service.modules.learning_engine import LearningEngine
 from ocr_service.utils.drift_detection import check_for_drift
 from ocr_service.utils.validation import validate_ocr_batch
@@ -23,19 +24,30 @@ class ALOrchestrator:
     Automates the Active Learning lifecycle.
     """
 
-    def __init__(self, learning_engine: LearningEngine):
+    def __init__(
+        self, learning_engine: LearningEngine, model: Optional[OCRModel] = None
+    ):
         self.learning_engine = learning_engine
-        self.sampling_strategy = HybridSampling(n_clusters=5, diversity_ratio=0.3)
+        self.settings = get_settings()
+        self.model = model
+        self.sampling_strategy = HybridSampling(
+            n_clusters=self.settings.al_n_clusters, diversity_ratio=0.3
+        )
 
-    async def run_cycle(self, n_samples: int = 50) -> dict[str, Any]:
+    async def run_cycle(self, n_samples: Optional[int] = None) -> dict[str, Any]:
         """
         Executes one full Active Learning cycle.
         """
+        actual_n_samples = n_samples or self.settings.al_cycle_samples
         logger.info("Starting Active Learning cycle...")
+
+        if self.model is None:
+            logger.error("AL cycle aborted: No OCR model provided.")
+            return {"status": "error", "message": "No model provided"}
 
         # 1. Fetch recent results from LearningEngine (Supabase)
         recent_data = await self._fetch_recent_results(limit=200)
-        if not recent_data or len(recent_data) < n_samples:
+        if not recent_data or len(recent_data) < actual_n_samples:
             logger.warning(
                 "Insufficient data to run AL cycle. Found: %d", len(recent_data)
             )
@@ -53,13 +65,11 @@ class ALOrchestrator:
             return {"status": "validation_failed"}
 
         # 3. Hybrid Sampling: Select candidates for labeling
-        # For simplicity in this automation script, we'll mock the model component
         # In a real scenario, this would be a loaded PyTorch/TF model.
-        mock_model = MockOCRModel()
         selected_indices = self.sampling_strategy.select_indices(
-            mock_model,
-            np.random.rand(len(df), 128),  # Mock embeddings
-            n_samples,
+            self.model,
+            np.random.rand(len(df), 128),  # Mock embeddings for now
+            actual_n_samples,
         )
         candidates = df.iloc[selected_indices]
         logger.info(
@@ -67,9 +77,8 @@ class ALOrchestrator:
         )
 
         # 4. Drift Detection: Compare current batch vs historical baseline
-        # (Assuming we have a reference file)
         try:
-            reference_df = pd.read_csv("data/reference_baseline.csv")
+            reference_df = pd.read_csv(self.settings.reference_baseline_path)
             drift_detected = check_for_drift(reference_df, validation_df)
             if drift_detected:
                 logger.warning("AL cycle alert: Model drift detected!")
@@ -87,27 +96,33 @@ class ALOrchestrator:
         }
 
     async def _fetch_recent_results(self, limit: int = 100) -> list[dict[str, Any]]:
-        """Retrieves data from Supabase."""
-        if not self.learning_engine.client:
-            return []
+        """Retrieves data prioritizing Supabase with Local Fallback."""
+        # Try Cloud
+        if self.learning_engine.client:
+            try:
 
-        def _fetch() -> Any:
-            if self.learning_engine.client is None:
-                raise RuntimeError("LearningEngine client is not initialized")
-            return (
-                self.learning_engine.client.table("learning_patterns")
-                .select("*")
-                .order("created_at", desc=True)
-                .limit(limit)
-                .execute()
-            )
+                def _fetch():
+                    if self.learning_engine.client:
+                        return (
+                            self.learning_engine.client.table("learning_patterns")
+                            .select("*")
+                            .order("created_at", desc=True)
+                            .limit(limit)
+                            .execute()
+                        )
+                    return None
 
-        result = await asyncio.to_thread(_fetch)
-        if not result:
-            return []
-        from typing import cast
+                res = await asyncio.to_thread(_fetch)
+                if res and res.data:
+                    return cast(list[dict[str, Any]], res.data)
+            except Exception:
+                logger.info("Cloud fetch failed in orchestrator, using local fallback")
 
-        return cast(list[dict[str, Any]], result.data or [])
+        # Fallback to Local Engine logic
+        def _local():
+            return self.learning_engine._load_patterns()[-limit:]
+
+        return await asyncio.to_thread(_local)
 
     def _prepare_for_validation(self, df: pd.DataFrame) -> pd.DataFrame:
         """Maps Supabase schema to Validation Gate schema."""
@@ -123,18 +138,3 @@ class ALOrchestrator:
         v_df["confidence"] = df.get("accuracy_score", 0.0)
         v_df["user_label"] = "pending"
         return v_df
-
-
-class MockOCRModel:
-    """Mock model to satisfy the Protocol during automation demo."""
-
-    def get_embeddings(self, data: np.ndarray) -> np.ndarray:
-        return np.random.rand(len(data), 128)
-
-    def predict_proba(self, data: np.ndarray) -> np.ndarray:
-        # Return mock high uncertainty for first half, low for second
-        n = len(data)
-        probs = np.zeros((n, 2))
-        probs[:, 0] = 0.5  # High uncertainty
-        probs[:, 1] = 0.5
-        return probs

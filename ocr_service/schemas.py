@@ -59,8 +59,8 @@ class PresignRequest(BaseModel):
     """Request to create a presigned S3 POST for direct uploads."""
 
     key: str
-    content_type: Optional[str] = "application/octet-stream"
-    expires_in: Optional[int] = 3600
+    content_type: str = "application/octet-stream"
+    expires_in: int = 3600
 
 
 class PresignResponse(BaseModel):

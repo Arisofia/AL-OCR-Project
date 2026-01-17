@@ -1,11 +1,12 @@
 """
 Core OCR Orchestration Engine for high-fidelity document intelligence.
-Manages iterative cycles, layout analysis, and pixel reconstruction.
+Refactored into modular components for better maintainability and performance.
 """
 
 import asyncio
 import logging
-from typing import Any, Optional
+from dataclasses import dataclass, field
+from typing import Any, Optional, cast
 
 import cv2
 import numpy as np
@@ -27,10 +28,132 @@ RECON_AVAILABLE = True
 logger = logging.getLogger("ocr-service.engine")
 
 
+@dataclass
+class DocumentContext:
+    """
+    Holds state and intermediate results for a single document
+    processing lifecycle.
+    """
+
+    image_bytes: bytes
+    use_reconstruction: bool
+    doc_type: str = "generic"
+    original_img: Optional[np.ndarray] = None
+    current_img: Optional[np.ndarray] = None
+    layout_regions: list[dict[str, Any]] = field(default_factory=list)
+    layout_type: str = "unknown"
+    reconstruction_info: Optional[dict[str, Any]] = None
+    best_text: str = ""
+    best_confidence: float = 0.0
+    iteration_history: list[dict[str, Any]] = field(default_factory=list)
+
+
+class DocumentProcessor:
+    """Handles low-level image processing and OCR extraction tasks."""
+
+    def __init__(
+        self,
+        enhancer: ImageEnhancer,
+        ocr_config: TesseractConfig,
+        reconstructor: Optional[PixelReconstructor] = None,
+    ):
+        self.enhancer = enhancer
+        self.ocr_config = ocr_config
+        self.reconstructor = reconstructor
+
+    async def decode_and_validate(self, ctx: DocumentContext) -> bool:
+        """Decodes image and performs initial validation."""
+        ctx.original_img = await ImageToolkit.decode_image_async(ctx.image_bytes)
+        if ctx.original_img is None:
+            return False
+        ctx.current_img = ctx.original_img.copy()
+        return True
+
+    async def run_reconstruction(self, ctx: DocumentContext, max_iterations: int):
+        """Executes reconstruction preprocessor if enabled."""
+        if (
+            not ctx.use_reconstruction
+            or not RECON_AVAILABLE
+            or recon_process_bytes is None
+        ):
+            return
+
+        try:
+            logger.info("Executing reconstruction preprocessor pipeline")
+            # process_bytes is likely CPU bound, run in thread
+            recon_text, recon_img_bytes, recon_meta = await asyncio.to_thread(
+                recon_process_bytes, ctx.image_bytes, iterations=max_iterations
+            )
+
+            if recon_img_bytes:
+                ctx.current_img = await ImageToolkit.decode_image_async(recon_img_bytes)
+                ctx.reconstruction_info = {
+                    "preview_text": recon_text,
+                    "meta": recon_meta,
+                }
+                logger.info("Using high-fidelity reconstructed source")
+        except Exception as e:
+            logger.warning("Reconstruction pipeline failed: %s", e)
+
+    def preprocess_frame(
+        self, img: np.ndarray, iteration: int, use_recon: bool
+    ) -> np.ndarray:
+        """Applies sharpening, layer elimination, and thresholding."""
+        enhanced = self.enhancer.sharpen(img)
+
+        if use_recon and iteration == 0 and self.reconstructor:
+            rectified = self.reconstructor.remove_redactions(enhanced)
+            enhanced = self.reconstructor.remove_color_overlay(rectified)
+
+        if len(enhanced.shape) == 3:
+            gray = cast(np.ndarray, cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY))
+        else:
+            gray = enhanced
+        return self.enhancer.apply_threshold(gray)
+
+    async def extract_text(
+        self, img: np.ndarray, regions: Optional[list[dict[str, Any]]] = None
+    ) -> str:
+        """Performs OCR on the whole image or specific regions."""
+        if regions:
+            return await self._extract_from_regions(img, regions)
+
+        try:
+            return await asyncio.to_thread(
+                pytesseract.image_to_string, img, config=self.ocr_config.flags
+            )
+        except Exception as e:
+            logger.error("OCR whole image extraction failed: %s", e)
+            return ""
+
+    async def _extract_from_regions(
+        self, img: np.ndarray, regions: list[dict[str, Any]]
+    ) -> str:
+        """Performs targeted extraction on ROIs."""
+        combined_text = []
+        for region in regions:
+            x, y, w, h = region["bbox"]
+            roi = img[y : y + h, x : x + w]
+            if roi.size == 0:
+                continue
+
+            roi = ImageToolkit.prepare_roi(roi)
+            try:
+                text = await asyncio.to_thread(
+                    pytesseract.image_to_string, roi, config=self.ocr_config.flags
+                )
+                if text.strip():
+                    combined_text.append(text.strip())
+            except Exception as e:
+                logger.warning("Region extraction failed: %s", e)
+
+        return "\n\n".join(combined_text)
+
+
 class IterativeOCREngine:
     """
-    Advanced OCR Engine utilizing iterative feedback loops
-    and layer elimination techniques.
+    Advanced OCR Engine utilizing iterative feedback loops.
+    Acts as a Facade for DocumentProcessor and OCRPipeline logic.
     """
 
     def __init__(
@@ -43,284 +166,77 @@ class IterativeOCREngine:
         confidence_scorer: Optional[ConfidenceScorer] = None,
         ocr_config: Optional[TesseractConfig] = None,
     ):
-        """
-        Dependency-injected initializer for the core orchestration engine.
-        """
         self.config = config or EngineConfig()
-        self.enhancer = enhancer or ImageEnhancer()
-        self.reconstructor = reconstructor or (
-            PixelReconstructor() if PixelReconstructor is not None else None
+        self.processor = DocumentProcessor(
+            enhancer=enhancer or ImageEnhancer(),
+            ocr_config=ocr_config or TesseractConfig(),
+            reconstructor=reconstructor
+            or (PixelReconstructor() if RECON_AVAILABLE else None),
         )
         self.advanced_reconstructor = (
             advanced_reconstructor or AdvancedPixelReconstructor()
         )
         self.learning_engine = learning_engine or LearningEngine()
         self.confidence_scorer = confidence_scorer or ConfidenceScorer()
-        self.ocr_config = ocr_config or TesseractConfig()
         self._background_tasks: set[asyncio.Task] = set()
 
-    def _run_reconstruction(
-        self, image_bytes: bytes
-    ) -> tuple[Optional[dict[str, Any]], Optional[np.ndarray]]:
-        """
-        Executes the pixel reconstruction preprocessor to eliminate visual noise.
-        """
-        if not RECON_AVAILABLE or recon_process_bytes is None:
-            return None, None
-
-        try:
-            logger.info("Executing reconstruction preprocessor pipeline")
-            recon_text, recon_img_bytes, recon_meta = recon_process_bytes(
-                image_bytes, iterations=self.config.max_iterations
-            )
-
-            rec_img = None
-            if recon_img_bytes:
-                rec_img = ImageToolkit.decode_image(recon_img_bytes)
-
-            return {"preview_text": recon_text, "meta": recon_meta}, rec_img
-        except Exception as e:
-            logger.warning("Reconstruction pipeline failed: %s", e)
-            return None, None
-
-    def _preprocess_for_ocr(
-        self, img: np.ndarray, iteration: int, use_reconstruction: bool
-    ) -> np.ndarray:
-        """Encapsulates image enhancement and layer management logic."""
-        enhanced = self.enhancer.sharpen(img) if self.enhancer else img
-
-        if use_reconstruction and iteration == 0 and self.reconstructor:
-            # Apply advanced overlay elimination for initial high-signal pass
-            rectified = self.reconstructor.remove_redactions(enhanced)
-            enhanced = self.reconstructor.remove_color_overlay(rectified)
-
-        gray = (
-            cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY)
-            if len(enhanced.shape) == 3
-            else enhanced
-        )
-        return self.enhancer.apply_threshold(gray) if self.enhancer else gray
-
-    def _perform_ocr_iteration(
-        self, img: np.ndarray, iteration: int, use_reconstruction: bool
-    ) -> tuple[str, np.ndarray]:
-        """
-        Single-cycle OCR execution: Enhancement -> Thresholding -> Extraction.
-        """
-        thresh = self._preprocess_for_ocr(img, iteration, use_reconstruction)
-
-        # Phase 2: Whole-document text extraction
-        try:
-            text = pytesseract.image_to_string(thresh, config=self.ocr_config.flags)
-            text = text.strip()
-        except (pytesseract.TesseractError, RuntimeError):
-            logger.error("Extraction failed at iteration %s", iteration)
-            text = ""
-        except Exception:
-            logger.exception("Unexpected error during iteration %s", iteration)
-            text = ""
-
-        return text, thresh
-
-    def _ocr_regions(self, thresh: np.ndarray, regions: list[dict[str, Any]]) -> str:
-        """
-        Region-of-Interest (ROI) targeted extraction for complex document layouts.
-        """
-        combined_text = []
-
-        for region in regions:
-            x, y, w, h = region["bbox"]
-            roi = thresh[y : y + h, x : x + w]
-            if roi.size == 0:
-                continue
-
-            # Standardize ROI padding for optimal Tesseract alignment
-            roi = ImageToolkit.prepare_roi(roi)
-
-            try:
-                text = pytesseract.image_to_string(
-                    roi, config=self.ocr_config.flags
-                ).strip()
-                if text:
-                    combined_text.append(text)
-            except (pytesseract.TesseractError, RuntimeError):
-                logger.warning(
-                    "Targeted extraction failed | RegionId: %s",
-                    region.get("id"),
-                )
-            except Exception:
-                logger.exception("Critical failure in region-based extraction")
-
-        return "\n\n".join(combined_text)
-
-    def _get_ocr_input_image(
-        self, image_bytes: bytes, use_reconstruction: bool
-    ) -> tuple[Optional[np.ndarray], Optional[dict[str, Any]]]:
-        """Determines the best source image for OCR iterations."""
-        img = ImageToolkit.decode_image(image_bytes)
-        if img is None:
-            return None, None
-
-        reconstruction_info = None
-        current_img = img.copy()
-
-        if use_reconstruction:
-            logger.info("Initiating pixel reconstruction sequence")
-            recon_info, recon_img = self._run_reconstruction(image_bytes)
-            if recon_info:
-                reconstruction_info = recon_info
-            if recon_img is not None:
-                current_img = recon_img
-                logger.info("Using high-fidelity reconstructed source")
-
-        return current_img, reconstruction_info
-
-    def _validate_image_input(self, image_bytes: bytes) -> Optional[dict[str, str]]:
-        """Common validation for OCR input."""
+    async def process_image(
+        self, image_bytes: bytes, use_reconstruction: bool = False
+    ) -> dict[str, Any]:
+        """Entry point for standard iterative OCR pipeline."""
         validation_error = ImageToolkit.validate_image(
-            image_bytes, max_size_mb=self.config.max_image_size_mb
+            image_bytes, self.config.max_image_size_mb
         )
-        return {"error": validation_error} if validation_error else {}
+        if validation_error:
+            return {"error": validation_error}
 
-    def _should_use_region_ocr(
-        self, iteration: int, confidence: float, region_count: int
-    ) -> bool:
-        """Determines if adaptive region-based extraction should be triggered."""
-        return (
-            iteration == 1
-            and confidence < self.config.confidence_threshold
-            and region_count > 1
+        ctx = DocumentContext(
+            image_bytes=image_bytes, use_reconstruction=use_reconstruction
         )
 
-    def process_image(
-        self,
-        image_bytes: bytes,
-        use_reconstruction: bool = False,
-    ) -> dict:
-        """
-        Executes iterative OCR pipeline with confidence-based feedback.
-        """
-        if error_resp := self._validate_image_input(image_bytes):
-            return error_resp
-
-        current_img, recon_info = self._get_ocr_input_image(
-            image_bytes, use_reconstruction
-        )
-        if current_img is None:
+        if not await self.processor.decode_and_validate(ctx):
             return {"error": "Corrupted or unsupported image format"}
 
-        best_text, best_confidence = "", 0.0
-        iteration_history = []
-        layout_regions = DocumentLayoutAnalyzer.detect_regions(image_bytes)
+        # Initial Setup
+        await asyncio.gather(
+            self.processor.run_reconstruction(ctx, self.config.max_iterations),
+            self._analyze_layout(ctx),
+        )
 
+        # Iteration Loop
         for i in range(self.config.max_iterations):
-            text, confidence, method, current_img = self._run_single_iteration(
-                current_img, i, use_reconstruction, best_confidence, layout_regions
-            )
+            await self._run_iteration(ctx, i)
 
-            iteration_history.append(
-                {
-                    "iteration": i + 1,
-                    "text_length": len(text),
-                    "confidence": confidence,
-                    "method": method,
-                    "preview_text": f"{text[:50]}..." if len(text) > 50 else text,
-                }
-                if text is not None
-                else {"iteration": i + 1, "error": "failed"}
-            )
-
-            if text and confidence > best_confidence:
-                best_text, best_confidence = text, confidence
-
-        return self._build_process_response(
-            best_text, best_confidence, iteration_history, recon_info
-        )
-
-    def _run_single_iteration(
-        self,
-        current_img: np.ndarray,
-        iteration: int,
-        use_reconstruction: bool,
-        best_confidence: float,
-        layout_regions: list[dict[str, Any]],
-    ) -> tuple[Optional[str], float, str, np.ndarray]:
-        """Runs a single OCR iteration with adaptive strategies."""
-        logger.info(
-            "Iteration loop | Progress: %s/%s",
-            iteration + 1,
-            self.config.max_iterations,
-        )
-        try:
-            text, thresh = self._perform_ocr_iteration(
-                current_img, iteration, use_reconstruction
-            )
-
-            # Adaptive Strategy: Fallback to region-based if confidence is low
-            is_region_pass = self._should_use_region_ocr(
-                iteration, best_confidence, len(layout_regions)
-            )
-            if is_region_pass:
-                logger.info("Engaging targeted region extraction")
-                text = self._ocr_regions(thresh, layout_regions)
-
-            confidence = self.confidence_scorer.calculate(text)
-            method = "region-based" if is_region_pass else "full-page"
-            next_img = ImageToolkit.enhance_iteration(current_img)
-
-            return text, confidence, method, next_img
-        except Exception:
-            logger.error("Failure in iteration %s", iteration + 1)
-            return None, 0.0, "failed", current_img
-
-    def _build_process_response(
-        self,
-        best_text: str,
-        best_confidence: float,
-        iteration_history: list[dict[str, Any]],
-        recon_info: Optional[dict[str, Any]],
-    ) -> dict:
-        """Constructs the final response dictionary."""
-        resp = {
-            "text": best_text,
-            "confidence": best_confidence,
-            "iterations": iteration_history,
-            "success": len(best_text) > 0,
-        }
-        if recon_info:
-            resp["reconstruction"] = recon_info
-        return resp
+        return self._build_response(ctx)
 
     async def process_image_advanced(
         self, image_bytes: bytes, doc_type: Optional[str] = None
-    ) -> dict:
-        """
-        AI pipeline with reconstruction and continuous learning.
-        """
-        if error_resp := self._validate_image_input(image_bytes):
-            return error_resp
-
-        doc_type = doc_type or self.config.default_doc_type
-
-        # Step 1: Structural Layout Analysis
-        def _analyze_layout():
-            regions = DocumentLayoutAnalyzer.detect_regions(image_bytes)
-            l_type = DocumentLayoutAnalyzer.classify_layout(regions)
-            return regions, l_type
-
-        layout_regions, layout_type = await asyncio.to_thread(_analyze_layout)
-        logger.info("Structural analysis complete | Regions: %s", len(layout_regions))
-
-        # Step 2: Contextual Knowledge Retrieval
-        pattern = await self.learning_engine.get_pattern_knowledge(doc_type)
-        if pattern:
-            logger.info("Applying domain-specific patterns for %s", doc_type)
-
-        # Step 3: AI-Driven Layer Elimination
-        context = pattern or {}
-        context.update(
-            {"layout_type": layout_type, "region_count": len(layout_regions)}
+    ) -> dict[str, Any]:
+        """AI-driven pipeline with contextual learning."""
+        validation_error = ImageToolkit.validate_image(
+            image_bytes, self.config.max_image_size_mb
         )
+        if validation_error:
+            return {"error": validation_error}
+
+        ctx = DocumentContext(
+            image_bytes=image_bytes,
+            use_reconstruction=True,
+            doc_type=doc_type or self.config.default_doc_type,
+        )
+
+        # Parallel initialization: Layout + Learning Retrieval
+        layout_task = self._analyze_layout(ctx)
+        learning_task = self.learning_engine.get_pattern_knowledge(ctx.doc_type)
+
+        await layout_task
+        pattern = await learning_task
+
+        # AI Reconstruction Pass
+        context = (pattern or {}) | {
+            "layout_type": ctx.layout_type,
+            "region_count": len(ctx.layout_regions),
+        }
 
         ai_result = await self.advanced_reconstructor.reconstruct_with_ai(
             image_bytes, context=context
@@ -328,33 +244,106 @@ class IterativeOCREngine:
 
         if "error" in ai_result:
             logger.warning("AI reconstruction failed | Triggering iterative fallback")
-            return await asyncio.to_thread(
-                self.process_image, image_bytes, use_reconstruction=True
-            )
+            return await self.process_image(image_bytes, use_reconstruction=True)
 
-        # Step 4: Verification and Intelligence Aggregation
         extracted_text = ai_result.get("text", "")
         confidence = self.confidence_scorer.calculate(extracted_text)
 
-        # Step 5: Autonomous Feedback Loop
-        task = asyncio.create_task(
-            self.learning_engine.learn_from_result(
-                doc_type=doc_type,
-                font_meta={
-                    "source": "ai_reconstruction",
-                    "model": ai_result.get("model", "unknown"),
-                    "layout": layout_type,
-                },
-                accuracy_score=confidence,
-            )
+        # Learning Update (Background)
+        self._schedule_learning(
+            ctx.doc_type,
+            ai_result.get("model", "unknown"),
+            ctx.layout_type,
+            confidence,
         )
-        self._background_tasks.add(task)
-        task.add_done_callback(self._background_tasks.discard)
 
         return {
             "text": extracted_text,
             "method": "advanced_ai_reconstruction",
             "confidence": confidence,
-            "layout_analysis": {"type": layout_type, "regions": len(layout_regions)},
+            "layout_analysis": {
+                "type": ctx.layout_type,
+                "regions": len(ctx.layout_regions),
+            },
             "success": True,
         }
+
+    async def _analyze_layout(self, ctx: DocumentContext):
+        """Analyzes document layout in a thread."""
+
+        def _run():
+            regions = DocumentLayoutAnalyzer.detect_regions(ctx.image_bytes)
+            l_type = DocumentLayoutAnalyzer.classify_layout(regions)
+            return regions, l_type
+
+        ctx.layout_regions, ctx.layout_type = await asyncio.to_thread(_run)
+
+    async def _run_iteration(self, ctx: DocumentContext, i: int):
+        """Executes a single iteration loop."""
+        try:
+            # Preprocess and Extract
+            if ctx.current_img is None:
+                raise ValueError("Context image is missing")
+
+            thresh = self.processor.preprocess_frame(
+                ctx.current_img, i, ctx.use_reconstruction
+            )
+
+            # Adaptive Strategy
+            use_regions = (
+                i == 1
+                and ctx.best_confidence < self.config.confidence_threshold
+                and len(ctx.layout_regions) > 1
+            )
+            text = await self.processor.extract_text(
+                thresh, ctx.layout_regions if use_regions else None
+            )
+
+            # Score and Record
+            confidence = self.confidence_scorer.calculate(text)
+            ctx.iteration_history.append(
+                {
+                    "iteration": i + 1,
+                    "text_length": len(text),
+                    "confidence": confidence,
+                    "method": "region-based" if use_regions else "full-page",
+                    "preview_text": f"{text[:50]}..." if len(text) > 50 else text,
+                }
+            )
+
+            if confidence > ctx.best_confidence:
+                ctx.best_text, ctx.best_confidence = text, confidence
+
+            # Prepare for next pass
+            ctx.current_img = await ImageToolkit.enhance_iteration(ctx.current_img)
+        except Exception as e:
+            logger.error("Iteration %d failed: %s", i + 1, e)
+            ctx.iteration_history.append({"iteration": i + 1, "error": "failed"})
+
+    def _build_response(self, ctx: DocumentContext) -> dict[str, Any]:
+        """Formats the final engine output."""
+        resp = {
+            "text": ctx.best_text,
+            "confidence": ctx.best_confidence,
+            "iterations": ctx.iteration_history,
+            "success": len(ctx.best_text) > 0,
+        }
+        if ctx.reconstruction_info:
+            resp["reconstruction"] = ctx.reconstruction_info
+        return resp
+
+    def _schedule_learning(self, doc_type: str, model: str, layout: str, score: float):
+        """Schedules background task for learning."""
+        task = asyncio.create_task(
+            self.learning_engine.learn_from_result(
+                doc_type=doc_type,
+                font_meta={
+                    "source": "ai_reconstruction",
+                    "model": model,
+                    "layout": layout,
+                },
+                accuracy_score=score,
+            )
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)

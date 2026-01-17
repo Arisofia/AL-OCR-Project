@@ -39,6 +39,14 @@ class _MockClient:
         self.calls.append({"url": url, "headers": headers, "json": json})
         return self._responses.pop(0)
 
+    async def request(self, method, url, **kwargs):
+        headers = kwargs.get("headers")
+        json_data = kwargs.get("json")
+        self.calls.append(
+            {"method": method, "url": url, "headers": headers, "json": json_data}
+        )
+        return self._responses.pop(0)
+
 
 def test_huggingface_provider_uses_router_and_auth_and_retries(monkeypatch):
     # First response is 429, second is 200

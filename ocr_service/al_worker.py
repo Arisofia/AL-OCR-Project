@@ -7,6 +7,7 @@ import asyncio
 import logging
 import sys
 
+from ocr_service.modules.active_learning_mocks import MockOCRModel
 from ocr_service.modules.active_learning_orchestrator import (
     ALOrchestrator,
 )
@@ -20,7 +21,8 @@ async def main():
 
     logger.info("Initializing Active Learning Worker...")
     engine = LearningEngine()
-    orchestrator = ALOrchestrator(engine)
+    mock_model = MockOCRModel()
+    orchestrator = ALOrchestrator(engine, model=mock_model)
 
     try:
         result = await orchestrator.run_cycle(n_samples=20)

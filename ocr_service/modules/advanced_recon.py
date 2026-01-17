@@ -10,7 +10,12 @@ from typing import Any, Optional
 
 from ocr_service.config import get_settings
 
-from .ai_providers import GeminiVisionProvider, OpenAIVisionProvider, VisionProvider
+from .ai_providers import (
+    AIProviderError,
+    GeminiVisionProvider,
+    OpenAIVisionProvider,
+    VisionProvider,
+)
 
 logger = logging.getLogger("ocr-service.advanced-recon")
 
@@ -76,15 +81,17 @@ class AdvancedPixelReconstructor:
             )
 
         try:
-            result = await self.providers[primary].reconstruct(image_bytes, prompt)
-            if "error" in result and fallback:
-                return await self._try_fallback(image_bytes, prompt, exclude=primary)
-            return result
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("Primary provider %s failed: %s", primary, e)
+            return await self.providers[primary].reconstruct(image_bytes, prompt)
+        except AIProviderError as e:
+            logger.warning("Primary provider %s failed: %s", primary, e)
             if fallback:
                 return await self._try_fallback(image_bytes, prompt, exclude=primary)
-            return {"error": str(e)}
+            return {"error": str(e), "details": e.details}
+        except Exception as e:
+            logger.error("Unexpected failure in %s: %s", primary, e)
+            if fallback:
+                return await self._try_fallback(image_bytes, prompt, exclude=primary)
+            return {"error": f"Internal error: {e}"}
 
     async def _try_fallback(
         self, image_bytes: bytes, prompt: str, exclude: str
@@ -96,10 +103,10 @@ class AdvancedPixelReconstructor:
             if name != exclude:
                 logger.info("Attempting fallback to %s", name)
                 try:
-                    result = await provider.reconstruct(image_bytes, prompt)
-                    if "error" not in result:
-                        return result
-                except Exception as e:  # pylint: disable=broad-exception-caught
+                    return await provider.reconstruct(image_bytes, prompt)
+                except AIProviderError as e:
                     logger.warning("Fallback to %s failed: %s", name, e)
+                except Exception as e:
+                    logger.error("Unexpected fallback failure in %s: %s", name, e)
 
         return {"error": "All AI providers failed"}

@@ -79,3 +79,7 @@ def init_limiter() -> Optional[Limiter]:
         except Exception as e:
             logger.error("Failed to initialize Limiter: %s", e)
             return None
+
+
+# Global limiter instance for use in routers
+limiter = Limiter(key_func=get_remote_address)

@@ -2,6 +2,7 @@
 Utility toolkit for image processing operations.
 """
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -17,6 +18,7 @@ class ImageToolkit:
     def decode_image(image_bytes: bytes) -> Optional[np.ndarray]:
         """
         Decodes raw image bytes into an OpenCV-compatible numpy array.
+        Synchronous helper for use within threads.
         """
         try:
             nparr = np.frombuffer(image_bytes, np.uint8)
@@ -27,6 +29,13 @@ class ImageToolkit:
         except Exception as e:
             logger.error("Error decoding image: %s", e)
             return None
+
+    @staticmethod
+    async def decode_image_async(image_bytes: bytes) -> Optional[np.ndarray]:
+        """
+        Asynchronously decodes image bytes.
+        """
+        return await asyncio.to_thread(ImageToolkit.decode_image, image_bytes)
 
     @staticmethod
     def validate_image(image_bytes: bytes, max_size_mb: int = 10) -> Optional[str]:
@@ -51,8 +60,12 @@ class ImageToolkit:
         )
 
     @staticmethod
-    def enhance_iteration(img: np.ndarray) -> np.ndarray:
+    async def enhance_iteration(img: np.ndarray) -> np.ndarray:
         """
-        Standard enhancement pass between iterations.
+        Asynchronous enhancement pass between iterations.
         """
-        return cv2.detailEnhance(img, sigma_s=10, sigma_r=0.15)
+
+        def _enhance():
+            return cv2.detailEnhance(img, sigma_s=10, sigma_r=0.15)
+
+        return await asyncio.to_thread(_enhance)

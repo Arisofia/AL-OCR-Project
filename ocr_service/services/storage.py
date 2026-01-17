@@ -112,13 +112,21 @@ class StorageService:
         """
         Generates a presigned POST URL for S3 upload.
         """
-        if not self.s3_client or not self.bucket_name:
-            raise RuntimeError("S3 Storage not properly configured for presigning")
+        client = self.s3_client
+        bucket = self.bucket_name
+
+        if not client or not bucket:
+            # Fallback to local client if not initialized (similar to main.py logic)
+            logger.debug(
+                "S3 client not initialized, creating a temporary one for presigning"
+            )
+            client = boto3.client("s3", region_name=self.region)
+            bucket = bucket or "unknown-bucket"
 
         try:
             return dict(
-                self.s3_client.generate_presigned_post(
-                    Bucket=self.bucket_name,
+                client.generate_presigned_post(
+                    Bucket=bucket,
                     Key=key,
                     Fields={"Content-Type": content_type},
                     Conditions=[["starts-with", "$Content-Type", content_type]],

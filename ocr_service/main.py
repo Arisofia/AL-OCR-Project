@@ -1,62 +1,29 @@
 """
 Core API Gateway for the AL Financial OCR Service.
-Provides endpoints for document intelligence and S3 lifecycle management.
+Simplified version using decoupled routers.
 """
 
-# Standard library imports
 import logging
 import time
-from typing import Optional
 
-# Third-party imports
-import boto3
-from botocore.exceptions import ClientError
-from fastapi import Depends, FastAPI, File, HTTPException, Request, Security, UploadFile
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security.api_key import APIKeyHeader
 from mangum import Mangum
-from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
-from ocr_service.config import Settings, get_settings
-from ocr_service.modules.ocr_config import EngineConfig
-from ocr_service.modules.ocr_engine import IterativeOCREngine
-from ocr_service.modules.processor import OCRProcessor
-from ocr_service.schemas import (
-    HealthResponse,
-    OCRResponse,
-    PresignRequest,
-    PresignResponse,
-    ReconStatusResponse,
-)
-from ocr_service.services.storage import StorageService
+from ocr_service.config import get_settings
+from ocr_service.routers import ocr, storage, system
 from ocr_service.utils.custom_logging import setup_logging
-from ocr_service.utils.limiter import _rate_limit_exceeded_handler_with_logging
-
-# First-party (ocr_service) imports
+from ocr_service.utils.limiter import _rate_limit_exceeded_handler_with_logging, limiter
 from ocr_service.utils.monitoring import init_monitoring
-
-# Runtime package detection for optional reconstruction capability
-try:
-    import ocr_reconstruct as _ocr_reconstruct_pkg  # type: ignore
-
-    RECON_PKG_AVAILABLE = True
-    RECON_PKG_VERSION = getattr(_ocr_reconstruct_pkg, "__version__", "unknown")
-except Exception:
-    RECON_PKG_AVAILABLE = False
-    RECON_PKG_VERSION = "not-installed"
-
 
 # Initialize enterprise-grade logging
 setup_logging(level=logging.INFO)
 logger = logging.getLogger("ocr-service")
 
-
 settings = get_settings()
 init_monitoring(settings, release=getattr(settings, "version", None))
 
-limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
     title=settings.app_name,
     description=settings.app_description,
@@ -76,8 +43,14 @@ async def add_process_time_and_logging(request: Request, call_next):
     """Logs request lifecycle and adds performance metadata to responses."""
     start_time = time.time()
 
-    # Extract request ID for traceability
-    request_id = get_request_id(request)
+    # Try to extract request ID from ocr router helper if needed,
+    # or just use a local one for middleware
+    request_id = "local-development"
+    scope = request.scope
+    if "aws.context" in scope:
+        request_id = str(
+            getattr(scope["aws.context"], "aws_request_id", "local-development")
+        )
 
     logger.info(
         "Request started | Path: %s | Method: %s | ID: %s",
@@ -112,203 +85,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# Dependency Injection Providers
-
-
-def get_storage_service(
-    curr_settings: Settings = Depends(get_settings),
-) -> StorageService:
-    """Provides an authenticated StorageService instance for S3 operations.
-
-    Args:
-        curr_settings: The application settings.
-
-    Returns:
-        StorageService: An instance of the storage service.
-    """
-    return StorageService(
-        bucket_name=curr_settings.s3_bucket_name, settings=curr_settings
-    )
-
-
-def get_ocr_engine(
-    curr_settings: Settings = Depends(get_settings),
-) -> IterativeOCREngine:
-    """Provides a configured IterativeOCREngine for document analysis.
-
-    Args:
-        curr_settings: The application settings.
-
-    Returns:
-        IterativeOCREngine: An instance of the OCR engine.
-    """
-    config = EngineConfig(
-        max_iterations=curr_settings.ocr_iterations,
-        enable_reconstruction=curr_settings.enable_reconstruction,
-    )
-    return IterativeOCREngine(config=config)
-
-
-def get_ocr_processor(
-    engine: IterativeOCREngine = Depends(get_ocr_engine),
-    storage: StorageService = Depends(get_storage_service),
-) -> OCRProcessor:
-    """Orchestrates the high-level OCR processing pipeline.
-
-    Args:
-        engine: The OCR engine instance.
-        storage: The storage service instance.
-
-    Returns:
-        OCRProcessor: An instance of the OCR processor.
-    """
-    return OCRProcessor(engine, storage)
-
-
-# Security and Identity Management
-api_key_header = APIKeyHeader(name=settings.api_key_header_name, auto_error=False)
-
-
-async def get_api_key(
-    header_value: Optional[str] = Security(api_key_header),
-    curr_settings: Settings = Depends(get_settings),
-) -> str:
-    """Enforces API Key authentication for protected resources.
-
-    Args:
-        header_value: The API key provided in the request header.
-        curr_settings: The application settings.
-
-    Returns:
-        str: The validated API key.
-
-    Raises:
-        HTTPException: If the API key is invalid or missing.
-    """
-    if header_value == curr_settings.ocr_api_key:
-        return header_value
-    raise HTTPException(
-        status_code=403, detail="Unauthorized: Invalid or missing API Key"
-    )
-
-
-def get_request_id(request: Request) -> str:
-    """Extracts AWS Request ID from Mangum scope or defaults to local trace.
-
-    Args:
-        request: The incoming HTTP request.
-
-    Returns:
-        str: The AWS Request ID if available, otherwise 'local-development'.
-    """
-    scope = request.scope
-    if "aws.context" in scope:
-        # Ensure we return a string even if the underlying context provides Any
-        return str(getattr(scope["aws.context"], "aws_request_id", "local-development"))
-    return "local-development"
-
-
-@app.get("/health", response_model=HealthResponse)
-async def health_check() -> HealthResponse:
-    """Service availability heartbeat."""
-    return HealthResponse(status="healthy", timestamp=time.time())
-
-
-@app.get("/recon/status", response_model=ReconStatusResponse)
-async def recon_status(
-    curr_settings: Settings = Depends(get_settings),
-) -> ReconStatusResponse:
-    """Retrieves pixel reconstruction capability and versioning metadata."""
-    return ReconStatusResponse(
-        reconstruction_enabled=curr_settings.enable_reconstruction,
-        package_installed=RECON_PKG_AVAILABLE,
-        package_version=RECON_PKG_VERSION,
-    )
-
-
-@app.post("/ocr", response_model=OCRResponse)
-@limiter.limit("10/minute")
-async def perform_ocr(
-    request: Request,
-    file: UploadFile = File(...),
-    reconstruct: bool = False,
-    advanced: bool = False,
-    doc_type: str = "generic",
-    _api_key: str = Depends(get_api_key),
-    request_id: str = Depends(get_request_id),
-    curr_settings: Settings = Depends(get_settings),
-    processor: OCRProcessor = Depends(get_ocr_processor),
-) -> OCRResponse:
-    """
-    Primary OCR entry point.
-    Processes uploaded documents with optional AI-driven pixel reconstruction.
-    """
-    # Used by SlowAPI decorator for rate limiting; intentionally not accessed
-    del request
-    result = await processor.process(
-        file=file,
-        reconstruct=reconstruct,
-        advanced=advanced,
-        doc_type=doc_type,
-        enable_reconstruction_config=curr_settings.enable_reconstruction,
-        request_id=request_id,
-    )
-
-    return OCRResponse(**result)
-
-
-@app.post("/presign", response_model=PresignResponse)
-@limiter.limit("5/minute")
-async def generate_presigned_post(
-    request: Request,
-    req: PresignRequest,
-    _api_key: str = Depends(get_api_key),
-    curr_settings: Settings = Depends(get_settings),
-) -> PresignResponse:
-    """
-    Generates a secure, time-limited S3 POST URL for client-side direct uploads.
-    Optimizes server bandwidth by offloading document transfer to AWS S3.
-
-    Args:
-        request: The incoming HTTP request.
-        req: The presign request details.
-        _api_key: The validated API key.
-        curr_settings: The application settings.
-
-    Returns:
-        PresignResponse: The presigned URL and fields.
-    """
-    # Used by SlowAPI decorator for rate limiting; intentionally not accessed
-    del request
-    bucket = curr_settings.s3_bucket_name
-    if not bucket:
-        raise HTTPException(status_code=500, detail="S3 bucket not configured")
-
-    s3 = boto3.client("s3", region_name=curr_settings.aws_region)
-
-    try:
-        post = s3.generate_presigned_post(
-            Bucket=bucket,
-            Key=req.key,
-            Fields={"Content-Type": req.content_type},
-            Conditions=[["starts-with", "$Content-Type", req.content_type]],
-            ExpiresIn=req.expires_in,
-        )
-    except ClientError as exc:
-        request_id = exc.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
-        logger.error("S3 Presign failed | RequestId: %s | Error: %s", request_id, exc)
-        raise HTTPException(
-            status_code=500, detail=f"S3 rejected request [{request_id}]"
-        ) from exc
-    except Exception as exc:
-        logger.exception("Unexpected failure during presign generation")
-        raise HTTPException(
-            status_code=500, detail="Could not generate presigned post"
-        ) from exc
-
-    return PresignResponse(url=post["url"], fields=post["fields"])
-
+# Include Routers
+app.include_router(system.router, tags=["System"])
+app.include_router(ocr.router, tags=["OCR"])
+app.include_router(storage.router, tags=["Storage"])
 
 # AWS Lambda Integration
 handler = Mangum(app)
@@ -316,4 +96,4 @@ handler = Mangum(app)
 if __name__ == "__main__":
     import uvicorn  # type: ignore
 
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("ocr_service.main:app", host="0.0.0.0", port=8000, reload=True)

@@ -1,6 +1,6 @@
 import asyncio
 from typing import cast
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from fastapi import UploadFile
 
@@ -8,13 +8,14 @@ from ocr_service.modules.processor import OCRProcessor
 
 
 def test_processor_returns_request_id():
-    # Arrange: fake engine (sync) and storage service (sync)
+    # Arrange: fake engine (async) and storage service (sync)
     engine = MagicMock()
-
-    def fake_process_image(*_args, **_kwargs):
-        return {"text": "dummy", "reconstruction": {}}
-
-    engine.process_image = fake_process_image
+    engine.process_image = AsyncMock(
+        return_value={"text": "dummy", "reconstruction": {}}
+    )
+    engine.process_image_advanced = AsyncMock(
+        return_value={"text": "dummy", "reconstruction": {}}
+    )
 
     storage = MagicMock()
 

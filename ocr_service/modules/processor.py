@@ -99,8 +99,7 @@ class OCRProcessor:
                 contents, doc_type=doc_type
             )
 
-        return await asyncio.to_thread(
-            self.ocr_engine.process_image,
+        return await self.ocr_engine.process_image(
             contents,
             use_reconstruction=use_recon,
         )

@@ -1,16 +1,28 @@
-"""
-Provides abstractions and implementations for various AI Vision providers.
-Used for advanced document reconstruction and verification.
-"""
-
+import asyncio
 import base64
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any, Optional, Union, cast
 
 import httpx
 
 logger = logging.getLogger("ocr-service.ai-providers")
+
+
+class AIProviderError(Exception):
+    """Base class for AI provider errors."""
+
+    def __init__(self, message: str, details: Optional[dict[str, Any]] = None):
+        super().__init__(message)
+        self.details = details or {}
+
+
+class ProviderConfigError(AIProviderError):
+    """Raised when a provider is misconfigured (e.g., missing API key)."""
+
+
+class ProviderRuntimeError(AIProviderError):
+    """Raised during API execution failures (e.g., HTTP errors, parsing)."""
 
 
 class VisionProvider(ABC):
@@ -22,15 +34,94 @@ class VisionProvider(ABC):
     async def reconstruct(self, image_bytes: bytes, prompt: str) -> dict[str, Any]:
         """
         Processes an image with a prompt to reconstruct or analyze content.
+        Raises AIProviderError on failure.
         """
 
 
-class OpenAIVisionProvider(VisionProvider):
+class BaseVisionProvider(VisionProvider, ABC):
+    """
+    Base class providing common utilities for VisionProviders, such as retries.
+    """
+
+    def __init__(self, max_retries: int = 3):
+        self.max_retries = max_retries
+
+    async def _request_with_retry(
+        self,
+        url: str,
+        headers: dict[str, str],
+        json_payload: dict[str, Any],
+        method: str = "POST",
+        timeout: float = 60.0,
+    ) -> Union[dict[str, Any], list[Any]]:
+        """
+        Internal helper to perform HTTP requests with exponential backoff on 429s.
+        """
+        attempt = 0
+        while attempt < self.max_retries:
+            async with httpx.AsyncClient() as client:
+                try:
+                    response = await client.request(
+                        method,
+                        url,
+                        headers=headers,
+                        json=json_payload,
+                        timeout=timeout,
+                    )
+                except httpx.HTTPError as e:
+                    logger.error("HTTP error on attempt %s: %s", attempt + 1, e)
+                    if attempt == self.max_retries - 1:
+                        raise ProviderRuntimeError(
+                            f"HTTP error after {self.max_retries} attempts: {e}"
+                        ) from e
+                    attempt += 1
+                    await asyncio.sleep(2**attempt)
+                    continue
+
+            if response.status_code == 429:
+                backoff = 2**attempt
+                logger.warning("Rate limited, retrying in %s seconds", backoff)
+                await asyncio.sleep(backoff)
+                attempt += 1
+                continue
+
+            try:
+                response.raise_for_status()
+                return cast(Union[dict[str, Any], list[Any]], response.json())
+            except httpx.HTTPStatusError as e:
+                response_body = self._get_response_body(e)
+                logger.error("HTTP status error: %s | body: %s", e, response_body)
+                raise ProviderRuntimeError(
+                    f"HTTP status error: {e.response.status_code}",
+                    details={
+                        "status_code": response.status_code,
+                        "body": response_body,
+                    },
+                ) from e
+
+        raise ProviderRuntimeError("Exceeded maximum retry attempts")
+
+    def _get_response_body(self, exc: httpx.HTTPStatusError) -> Optional[Any]:
+        """Extracts JSON or text from an HTTPStatusError response."""
+        resp = getattr(exc, "response", None)
+        if resp is not None:
+            try:
+                return resp.json()
+            except Exception:
+                try:
+                    return resp.text
+                except Exception:
+                    return None
+        return None
+
+
+class OpenAIVisionProvider(BaseVisionProvider):
     """
     Implementation of VisionProvider using OpenAI's GPT-4o model.
     """
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, max_retries: int = 3):
+        super().__init__(max_retries=max_retries)
         self.api_key = api_key
 
     async def reconstruct(self, image_bytes: bytes, prompt: str) -> dict[str, Any]:
@@ -60,48 +151,24 @@ class OpenAIVisionProvider(VisionProvider):
             ],
             "max_tokens": 2000,
         }
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(
-                    "https://api.openai.com/v1/chat/completions",
-                    headers=headers,
-                    json=request_payload,
-                    timeout=60.0,
-                )
-                response.raise_for_status()
-                data = response.json()
-                return {
-                    "text": data["choices"][0]["message"]["content"],
-                    "model": "gpt-4o",
-                }
-            except httpx.HTTPError as e:
-                # Try to extract any response body for better diagnostics
-                response_body: Optional[object] = None
-                resp = getattr(e, "response", None)
-                if resp is not None:
-                    try:
-                        response_body = resp.json()
-                    except Exception:
-                        try:
-                            response_body = resp.text
-                        except Exception:
-                            response_body = None
-                logger.error(
-                    "OpenAI Vision HTTP error: %s | body: %s",
-                    e,
-                    response_body,
-                )
-                return {
-                    "error": "OpenAI HTTP error",
-                    "detail": str(e),
-                    "body": response_body,
-                }
-            except (KeyError, IndexError) as e:
-                logger.error("OpenAI Vision response parsing failed: %s", e)
-                return {"error": "Unexpected response format from OpenAI"}
-            except Exception as e:
-                logger.error("OpenAI Vision unexpected error: %s", e)
-                return {"error": str(e)}
+
+        data = await self._request_with_retry(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            json_payload=request_payload,
+        )
+
+        if not isinstance(data, dict):
+            raise ProviderRuntimeError("Unexpected response format from OpenAI")
+
+        try:
+            return {
+                "text": data["choices"][0]["message"]["content"],
+                "model": "gpt-4o",
+            }
+        except (KeyError, IndexError) as e:
+            logger.error("OpenAI response parsing failed: %s", e)
+            raise ProviderRuntimeError("Failed to parse OpenAI response") from e
 
 
 class GeminiVisionProvider(VisionProvider):
@@ -124,33 +191,33 @@ class GeminiVisionProvider(VisionProvider):
             image_part = {"mime_type": "image/jpeg", "data": image_bytes}
             response = await model.generate_content_async([prompt, image_part])
             return {"text": response.text, "model": "gemini-1.5-flash"}
-        except ImportError:
+        except ImportError as e:
             logger.error("google-generativeai package not installed")
-            return {"error": "Gemini provider not available: package missing"}
+            raise ProviderConfigError("Gemini package missing") from e
         except AttributeError as e:
             logger.error("Gemini Vision response parsing failed: %s", e)
-            return {"error": "Invalid response structure from Gemini"}
+            raise ProviderRuntimeError("Invalid response structure from Gemini") from e
         except Exception as e:
             logger.error("Gemini Vision unexpected error: %s", e)
-            return {"error": str(e)}
+            raise ProviderRuntimeError(str(e)) from e
 
 
-class HuggingFaceVisionProvider(VisionProvider):
+class HuggingFaceVisionProvider(BaseVisionProvider):
     """
     Implementation of VisionProvider using Hugging Face Inference Router.
-
-    Uses the new router host (https://router.huggingface.co) and retries on
-    rate-limits (429) with exponential backoff. Falls back to a simple JSON
-    response extraction.
     """
 
-    def __init__(self, token: str, model: str = "runwayml/stable-diffusion-v1-5"):
+    def __init__(
+        self,
+        token: str,
+        model: str = "runwayml/stable-diffusion-v1-5",
+        max_retries: int = 3,
+    ):
+        super().__init__(max_retries=max_retries)
         self.token = token
         self.model = model
 
     async def reconstruct(self, image_bytes: bytes, prompt: str) -> dict[str, Any]:
-        import asyncio
-
         base64_image = base64.b64encode(image_bytes).decode("utf-8")
         headers = {
             "Content-Type": "application/json",
@@ -164,78 +231,32 @@ class HuggingFaceVisionProvider(VisionProvider):
             }
         }
 
-        max_attempts = 3
-        attempt = 0
-        while attempt < max_attempts:
-            async with httpx.AsyncClient() as client:
-                try:
-                    response = await client.post(
-                        url, headers=headers, json=request_payload, timeout=60.0
-                    )
-                except httpx.HTTPError as e:
-                    logger.error(
-                        "HuggingFace HTTP error on attempt %s: %s", attempt + 1, e
-                    )
-                    return {"error": f"HuggingFace HTTP error: {e}"}
+        data = await self._request_with_retry(
+            url, headers=headers, json_payload=request_payload
+        )
 
-            # Retry on 429 with exponential backoff
-            if response.status_code == 429:
-                backoff = 2**attempt
-                logger.warning(
-                    "HuggingFace rate limited, retrying in %s seconds (attempt %s)",
-                    backoff,
-                    attempt + 1,
+        try:
+            # Many HF vision/text models return different shapes; be permissive
+            text = None
+            if isinstance(data, dict):
+                text = (
+                    data.get("generated_text") or data.get("text") or data.get("result")
                 )
-                await asyncio.sleep(backoff)
-                attempt += 1
-                continue
-
-            try:
-                response.raise_for_status()
-                data = response.json()
-                # Many HF vision/text models return different shapes; be permissive
-                text = None
-                if isinstance(data, dict):
+            elif isinstance(data, list) and data:
+                first = data[0]
+                if isinstance(first, dict):
                     text = (
-                        data.get("generated_text")
-                        or data.get("text")
-                        or data.get("result")
+                        first.get("generated_text")
+                        or first.get("text")
+                        or first.get("result")
                     )
-                elif isinstance(data, list) and data:
-                    first = data[0]
-                    if isinstance(first, dict):
-                        text = (
-                            first.get("generated_text")
-                            or first.get("text")
-                            or first.get("result")
-                        )
-                    elif isinstance(first, str):
-                        text = first
-                if text is None:
-                    text = data
-                return {"text": text, "model": self.model}
-            except httpx.HTTPError as e:
-                # Attempt to extract response body for diagnostics
-                response_body: Optional[object] = None
-                resp = getattr(e, "response", None)
-                if resp is not None:
-                    try:
-                        response_body = resp.json()
-                    except Exception:
-                        try:
-                            response_body = resp.text
-                        except Exception:
-                            response_body = None
-                logger.error(
-                    "HuggingFace response parsing failed: %s | body: %s",
-                    e,
-                    response_body,
-                )
-                return {
-                    "error": "HuggingFace HTTP error",
-                    "detail": str(e),
-                    "body": response_body,
-                }
+                elif isinstance(first, str):
+                    text = first
 
-        # If we've exhausted attempts without success, return an error
-        return {"error": "Exceeded maximum retry attempts due to rate limiting"}
+            if text is None:
+                text = str(data)
+
+            return {"text": text, "model": self.model}
+        except Exception as e:
+            logger.error("HuggingFace response parsing failed: %s", e)
+            raise ProviderRuntimeError(f"Unexpected response format: {e}") from e
