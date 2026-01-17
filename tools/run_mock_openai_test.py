@@ -20,7 +20,13 @@ logger.addHandler(handler)
 
 
 class _MockResponse:
-    def __init__(self, status_code: int = 403, body: dict | None = None):
+    def __init__(
+        self,
+        status_code: int = 403,
+        body: dict | None = None,
+        method: str = "POST",
+        url: str = "https://api.openai.com/v1/chat/completions",
+    ):
         """
         Initialize a mock response object.
 
@@ -28,6 +34,9 @@ class _MockResponse:
             status_code (int, optional): The HTTP status code of the response.
                 Defaults to 403.
             body (dict | None, optional): The response body. Defaults to None.
+            method (str, optional): HTTP method for error context. Defaults to POST.
+            url (str, optional): URL for error context.
+                Defaults to OpenAI completions endpoint.
 
         If body is None, it will be set to a default quota exceeded response.
         """
@@ -36,14 +45,14 @@ class _MockResponse:
             "error": "quota_exceeded",
             "message": "You have exceeded your quota.",
         }
+        self._method = method
+        self._url = url
 
     def raise_for_status(self):
         if self.status_code >= 400:
             raise httpx.HTTPStatusError(
                 f"{self.status_code} error",
-                request=httpx.Request(
-                    "POST", "https://api.openai.com/v1/chat/completions"
-                ),
+                request=httpx.Request(self._method, self._url),
                 response=httpx.Response(self.status_code),
             )
 
