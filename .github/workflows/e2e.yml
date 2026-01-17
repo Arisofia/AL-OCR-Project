@@ -30,7 +30,8 @@ jobs:
       - name: Install system deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y tesseract-ocr libtesseract-dev libgl1-mesa-glx libglib2.0-0
+          # Use Playwright-friendly packages on Ubuntu 24.04; libgl1-mesa-glx may be unavailable
+          sudo apt-get install -y tesseract-ocr libtesseract-dev libglib2.0-0 libgbm1 libgtk-3-0 libasound2 libnss3 libxss1
 
       - name: Install Python deps
         run: |
