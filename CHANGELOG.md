@@ -1,3 +1,17 @@
+# [1.1.0](https://github.com/Arisofia/AL-OCR-Project/compare/v1.0.1...v1.1.0) (2026-01-17)
+
+
+### Bug Fixes
+
+* **lambda:** include request_id in payload error warning for better observability and test expectations ([1064003](https://github.com/Arisofia/AL-OCR-Project/commit/10640036cfe8d3a55988ceb8e69852c08987db90))
+* log headers in mock post to resolve unused argument warning ([de047ea](https://github.com/Arisofia/AL-OCR-Project/commit/de047ea0327b8ec68b0c69bb944767661220e1a9))
+* typing for response body diagnostics; add mock test helper ([bc897a4](https://github.com/Arisofia/AL-OCR-Project/commit/bc897a4b73e3e2c3b4bb9ba4def6e50a1298c88f))
+
+
+### Features
+
+* **hf:** add HuggingFaceVisionProvider using router.huggingface.co with retry/backoff; add unit tests ([f99672a](https://github.com/Arisofia/AL-OCR-Project/commit/f99672a07ae6996362888e6ad86a232ee1ee6df9))
+
 ## [1.0.1](https://github.com/Arisofia/AL-OCR-Project/compare/v1.0.0...v1.0.1) (2026-01-16)
 
 
