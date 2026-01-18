@@ -1,6 +1,6 @@
 """
 Active Learning Orchestrator for AL-OCR-Project.
-Automates the end-to-end flow: Ingestion -> Sampling -> Validation -> Drift Detection.
+Automates flow: Ingestion -> Sampling -> Validation -> Drift Detection.
 """
 
 import asyncio
@@ -115,8 +115,8 @@ class ALOrchestrator:
                 res = await asyncio.to_thread(_fetch)
                 if res and res.data:
                     return cast(list[dict[str, Any]], res.data)
-            except Exception:
-                logger.info("Cloud fetch failed in orchestrator, using local fallback")
+            except Exception as e:
+                logger.info("Cloud fetch failed in orchestrator: %s", e)
 
         # Fallback to Local Engine logic
         def _local():
@@ -126,7 +126,7 @@ class ALOrchestrator:
 
     def _prepare_for_validation(self, df: pd.DataFrame) -> pd.DataFrame:
         """Maps Supabase schema to Validation Gate schema."""
-        # Schema: [id, doc_type, font_metadata, accuracy_score, created_at, version]
+        # Schema: [id, doc_type, font_metadata, accuracy_score, created_at]
         v_df = pd.DataFrame()
         ids = df.get("id")
         if ids is not None and hasattr(ids, "apply"):
@@ -134,7 +134,7 @@ class ALOrchestrator:
         else:
             v_df["image_path"] = "unknown"
 
-        v_df["ocr_text"] = "mock_text"  # In real AL, we'd store the actual text
+        v_df["ocr_text"] = "mock_text"
         v_df["confidence"] = df.get("accuracy_score", 0.0)
         v_df["user_label"] = "pending"
         return v_df

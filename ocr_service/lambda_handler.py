@@ -1,5 +1,5 @@
 """
-Event-driven AWS Lambda entry point for automated document intelligence processing.
+Event-driven AWS Lambda entry point for automated document intelligence.
 """
 
 import logging
@@ -25,7 +25,11 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     for record in records:
         try:
             worker.process_s3_record(record, request_id=request_id)
-        except Exception:
+        except (ValueError, RuntimeError) as e:
+            logger.error("Record processing error: %s", e)
+            failures += 1
+        except Exception as e:
+            logger.error("Unexpected error during record processing: %s", e)
             failures += 1
 
     if failures:
