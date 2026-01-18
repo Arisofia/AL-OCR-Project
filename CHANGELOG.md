@@ -1,3 +1,10 @@
+## [1.1.2](https://github.com/Arisofia/AL-OCR-Project/compare/v1.1.1...v1.1.2) (2026-01-18)
+
+
+### Bug Fixes
+
+* resolve github workflow diagnostics and update actions versions ([f49487c](https://github.com/Arisofia/AL-OCR-Project/commit/f49487c404ccd5a15e5ee2cd64ab19b3f3e29b26))
+
 ## [1.1.1](https://github.com/Arisofia/AL-OCR-Project/compare/v1.1.0...v1.1.1) (2026-01-18)
 
 
