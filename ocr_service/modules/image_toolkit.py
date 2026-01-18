@@ -3,8 +3,9 @@ Utility toolkit for image processing operations.
 """
 
 import asyncio
+import base64
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 # pylint: disable=no-member
 import cv2
@@ -14,6 +15,30 @@ logger = logging.getLogger("ocr-service.image-toolkit")
 
 
 class ImageToolkit:
+    @staticmethod
+    def prepare_image_bytes(data: Any) -> Optional[bytes]:
+        """
+        Universal handler for various input formats.
+        Converts base64 strings or raw data into bytes.
+        """
+        if data is None:
+            return None
+
+        if isinstance(data, bytes):
+            return data
+
+        if isinstance(data, str):
+            try:
+                # Check for common base64 data URL prefixes
+                if data.startswith("data:image"):
+                    data = data.split(",")[-1]
+                return base64.b64decode(data)
+            except Exception as e:
+                logger.error("Failed to decode base64 image data: %s", e)
+                return None
+
+        return None
+
     @staticmethod
     def decode_image(image_bytes: bytes) -> Optional[np.ndarray]:
         """

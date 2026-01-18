@@ -66,3 +66,7 @@ htmlcov/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+frontend/playwright-report/
+frontend/test-results/
+.coverage*
+*.log

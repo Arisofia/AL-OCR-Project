@@ -8,7 +8,7 @@ supporting environment variable overrides and LRU caching for performance.
 from functools import lru_cache
 from typing import Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -74,6 +74,14 @@ class Settings(BaseSettings):
     reference_baseline_path: str = "data/reference_baseline.csv"
     al_cycle_samples: int = 50
     al_n_clusters: int = 5
+
+    @field_validator("allowed_origins")
+    @classmethod
+    def validate_origins(cls, v: list[str], info) -> list[str]:
+        """Ensures that wildcards are not used for CORS in production."""
+        if info.data.get("environment") == "production" and "*" in v:
+            raise ValueError("Wildcard CORS origins are not allowed in production.")
+        return v
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"

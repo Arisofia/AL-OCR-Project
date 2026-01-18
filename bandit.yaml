@@ -1,0 +1,10 @@
+# Bandit configuration
+exclude_dirs:
+  - .venv_test
+  - .venv
+  - tests
+  - ocr_service/tests
+  - ocr_reconstruct/tests
+  - node_modules
+skips:
+  - B101 # assert_used

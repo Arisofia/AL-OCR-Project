@@ -18,5 +18,6 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY certs/ /etc/nginx/certs/
 
 EXPOSE 80 443
-
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD pgrep nginx || exit 1
 CMD ["nginx", "-g", "daemon off;"]

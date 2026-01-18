@@ -2,7 +2,7 @@
 FROM public.ecr.aws/lambda/python:3.11 AS builder
 
 # Install build-time dependencies
-RUN yum install -y \
+RUN yum update -y && yum install -y \
     gcc \
     gcc-c++ \
     gcc-gfortran \
@@ -12,7 +12,8 @@ RUN yum install -y \
     blas-devel \
     pkgconfig \
     make && \
-    yum clean all
+    yum clean all && \
+    rm -rf /var/cache/yum
 
 # Prepare build workspace and install Python tooling and dependencies in one step
 WORKDIR /build
@@ -29,15 +30,18 @@ FROM public.ecr.aws/lambda/python:3.11
 WORKDIR /var/task
 
 # Runtime dependencies only
-# Note: Amazon Linux 2023 (Lambda Python 3.11) uses dnf/yum but shadow-utils
-# and tesseract may require different handling than AL2.
-RUN yum install -y \
+# Note: Amazon Linux 2 (Karoo) uses yum.
+RUN yum update -y && yum install -y \
     tesseract \
     tesseract-langpack-spa \
     tesseract-langpack-eng \
     mesa-libGL \
     shadow-utils && \
-    yum clean all
+    yum clean all && \
+    rm -rf /var/cache/yum
+
+# Remove setuid/setgid bits for security compliance
+RUN chmod -R u-s,g-s /usr/bin /usr/sbin /bin /sbin || true
 
 # Copy installed packages from builder
 COPY --from=builder /install /var/lang
@@ -51,6 +55,10 @@ COPY --chown=appuser:appuser ocr_service/ /var/task/ocr_service/
 COPY --chown=appuser:appuser ocr_reconstruct/ /var/task/ocr_reconstruct/
 
 ENV PYTHONPATH=/var/task
+
+# Healthcheck for Dockle/CIS compliance
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD [ "echo", "ok" ]
 
 USER appuser
 

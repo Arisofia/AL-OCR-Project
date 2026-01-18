@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import os
 import time
 from typing import Any, Optional
 
@@ -11,6 +10,7 @@ from ocr_service.config import Settings, get_settings
 from ocr_service.modules.ocr_config import EngineConfig
 from ocr_service.modules.ocr_engine import IterativeOCREngine
 from ocr_service.utils.custom_logging import setup_logging
+from ocr_service.utils.redis_factory import get_redis_client
 
 logger = logging.getLogger("ocr-service.redis-worker")
 
@@ -20,14 +20,13 @@ class RedisWorker:
     Production-grade Redis queue worker for asynchronous OCR tasks.
     """
 
-    def __init__(self, settings: Optional[Settings] = None):
+    def __init__(
+        self,
+        settings: Optional[Settings] = None,
+        redis_client: Optional[redis.Redis] = None,
+    ):
         self.settings = settings or get_settings()
-        self.redis_client = redis.Redis(
-            host=os.getenv("REDIS_HOST", "localhost"),
-            port=int(os.getenv("REDIS_PORT", "6379")),
-            db=int(os.getenv("REDIS_DB", "0")),
-            decode_responses=False,
-        )
+        self.redis_client = redis_client or get_redis_client(self.settings)
 
         # Initialize OCR engine with configuration from settings
         engine_config = EngineConfig(
@@ -100,22 +99,44 @@ class RedisWorker:
 
     async def _execute_ocr(self, job_data: dict[str, Any]) -> dict[str, Any]:
         """Runs the actual OCR engine on the provided data."""
-        # Placeholder for actual image retrieval logic
-        # In a real scenario, this would load from S3, local disk, or base64
+        image_bytes: Optional[bytes] = None
 
-        # If no image data is provided, return a mock/error for now
-        # until we define a standard for Redis tasks
-        if "image_path" not in job_data and "image_bytes" not in job_data:
-            logger.warning(
-                "No image data found in job %s | Using mock result", job_data.get("id")
-            )
+        if "image_bytes" in job_data:
+            import base64
+
+            try:
+                # Handle potential base64 string
+                raw_data = job_data["image_bytes"]
+                if isinstance(raw_data, str):
+                    image_bytes = base64.b64decode(raw_data)
+                else:
+                    image_bytes = raw_data
+            except Exception as e:
+                logger.error("Failed to decode image_bytes: %s", e)
+                return {"error": "invalid_image_encoding"}
+
+        elif "image_path" in job_data:
+            try:
+                with open(job_data["image_path"], "rb") as f:
+                    image_bytes = f.read()
+            except Exception as e:
+                logger.error(
+                    "Failed to read image_path %s: %s", job_data["image_path"], e
+                )
+                return {"error": "file_not_found"}
+
+        if not image_bytes:
+            logger.warning("No valid image data found in job %s", job_data.get("id"))
             return {
                 "text": "No image data provided",
                 "confidence": 0.0,
                 "error": "missing_input",
             }
 
-        return {"text": "Processed via IterativeOCREngine", "confidence": 0.98}
+        # Use the IterativeOCREngine for high-fidelity processing
+        return await self.engine.process_image(
+            image_bytes, use_reconstruction=self.settings.enable_reconstruction
+        )
 
     async def _handle_job_failure(self, job_key: str, job_id: str, error: Exception):
         """Handles job failure by updating status in Redis."""

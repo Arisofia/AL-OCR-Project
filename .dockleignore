@@ -1,0 +1,3 @@
+# Ignore false positives in Python packages for CIS-DI-0010
+# These are found in var/lang/lib/python3.11/site-packages/...
+settings.py
