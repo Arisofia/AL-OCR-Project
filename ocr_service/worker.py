@@ -5,7 +5,7 @@ import os
 import time
 from typing import Any, Optional
 
-import redis
+import redis.asyncio as redis
 
 from ocr_service.config import Settings, get_settings
 from ocr_service.modules.ocr_config import EngineConfig
@@ -44,7 +44,7 @@ class RedisWorker:
         while True:
             try:
                 # Blocking pop from the queue
-                task = self.redis_client.blpop(self.queue_name, timeout=5)
+                task = await self.redis_client.blpop([self.queue_name], timeout=5)  # type: ignore[misc]
                 if not task:
                     continue
 
@@ -63,7 +63,7 @@ class RedisWorker:
     async def process_job(self, job_id: str):
         """Processes a single OCR job from Redis."""
         job_key = f"job:{job_id}"
-        job_data_raw = self.redis_client.get(job_key)
+        job_data_raw = await self.redis_client.get(job_key)
 
         if not job_data_raw:
             logger.warning("Job data not found | ID: %s", job_id)
@@ -75,7 +75,7 @@ class RedisWorker:
             # Update status to PROCESSING
             job_data["status"] = "PROCESSING"
             job_data["updated_at"] = time.time()
-            self.redis_client.set(job_key, json.dumps(job_data))
+            await self.redis_client.set(job_key, json.dumps(job_data))
 
             logger.info("Processing job | ID: %s", job_id)
 
@@ -90,13 +90,13 @@ class RedisWorker:
             job_data["status"] = "COMPLETED"
             job_data["result"] = result
             job_data["completed_at"] = time.time()
-            self.redis_client.set(job_key, json.dumps(job_data))
+            await self.redis_client.set(job_key, json.dumps(job_data))
 
             logger.info("Job completed | ID: %s", job_id)
 
         except Exception as e:
             logger.exception("Job failed | ID: %s | Error: %s", job_id, e)
-            self._handle_job_failure(job_key, job_id, e)
+            await self._handle_job_failure(job_key, job_id, e)
 
     async def _execute_ocr(self, job_data: dict[str, Any]) -> dict[str, Any]:
         """Runs the actual OCR engine on the provided data."""
@@ -115,20 +115,18 @@ class RedisWorker:
                 "error": "missing_input",
             }
 
-        # Example: if we had bytes
-
         return {"text": "Processed via IterativeOCREngine", "confidence": 0.98}
 
-    def _handle_job_failure(self, job_key: str, job_id: str, error: Exception):
+    async def _handle_job_failure(self, job_key: str, job_id: str, error: Exception):
         """Handles job failure by updating status in Redis."""
         try:
-            job_data_raw = self.redis_client.get(job_key)
+            job_data_raw = await self.redis_client.get(job_key)
             if job_data_raw:
                 job_data = json.loads(job_data_raw.decode("utf-8"))
                 job_data["status"] = "FAILED"
                 job_data["error"] = str(error)
                 job_data["failed_at"] = time.time()
-                self.redis_client.set(job_key, json.dumps(job_data))
+                await self.redis_client.set(job_key, json.dumps(job_data))
         except Exception as e:
             logger.error(
                 "Failed to record job failure in Redis | ID: %s | Error: %s", job_id, e

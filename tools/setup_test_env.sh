@@ -6,7 +6,7 @@ set -euo pipefail
 # - Prefer local Python 3.11 if available
 # - Fallback to Docker if Python 3.11 isn't available
 # - Auto-export AWS_ACCOUNT_ID if not set (for AWS integration tests)
-if [ -z "$AWS_ACCOUNT_ID" ]; then
+if [ -z "${AWS_ACCOUNT_ID:-}" ]; then
   export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "")
 fi
 

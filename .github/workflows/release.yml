@@ -24,15 +24,15 @@ jobs:
           node-version: '20'
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+            python-version: '3.11'
 
-      - name: Run Black (auto-format)
+      - name: Run Ruff (check & format)
         run: |
-          pip install black
-          black ocr_service ocr_reconstruct src || true
-          black --check ocr_service ocr_reconstruct src
+          pip install ruff
+          ruff check ocr_service ocr_reconstruct src
+          ruff format --check ocr_service ocr_reconstruct src
 
       - name: Install semantic-release and plugins
         run: |
