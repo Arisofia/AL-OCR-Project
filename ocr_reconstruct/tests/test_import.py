@@ -14,9 +14,9 @@ def test_import_and_process_sample():
         "data",
         "sample_pixelated.png",
     )
-    assert os.path.exists(
-        sample
-    ), "Sample image missing; ensure generate_samples.py was run"
+    assert os.path.exists(sample), (
+        "Sample image missing; ensure generate_samples.py was run"
+    )
 
     with open(sample, "rb") as fh:
         img_bytes = fh.read()

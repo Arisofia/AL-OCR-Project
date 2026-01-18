@@ -28,9 +28,9 @@ def test_health_check():
     ), f"Unexpected status: {data['status']}"
     assert "services" in data, f"Missing 'services' in health response: {data}"
     expected_services = {"s3", "supabase", "openai", "gemini"}
-    assert isinstance(
-        data["services"], dict
-    ), f"'services' should be a dict, got {type(data['services'])}"
+    assert isinstance(data["services"], dict), (
+        f"'services' should be a dict, got {type(data['services'])}"
+    )
     actual_services = set(data["services"].keys())
     missing = expected_services - actual_services
     assert not missing, f"Missing services: {missing}. Found: {actual_services}"

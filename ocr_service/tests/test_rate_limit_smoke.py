@@ -59,9 +59,9 @@ def test_rate_limit_smoke_triggers_handler():
 
         rate_limited_response = _exhaust_rate_limit(client, "/presign", body, headers)
 
-        assert (
-            rate_limited_response is not None
-        ), "Expected at least one 429 response from rate limiter"
+        assert rate_limited_response is not None, (
+            "Expected at least one 429 response from rate limiter"
+        )
         assert "detail" in rate_limited_response.json()
         # Validate the handler-specific payload (adjust if message changes)
         assert rate_limited_response.json().get("detail") == "Rate limit exceeded"

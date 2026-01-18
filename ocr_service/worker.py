@@ -107,8 +107,7 @@ class RedisWorker:
         # until we define a standard for Redis tasks
         if "image_path" not in job_data and "image_bytes" not in job_data:
             logger.warning(
-                "No image data found in job %s | Using mock result",
-                job_data.get("id"),
+                "No image data found in job %s | Using mock result", job_data.get("id")
             )
             return {
                 "text": "No image data provided",
