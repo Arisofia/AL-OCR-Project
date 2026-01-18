@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/Arisofia/AL-OCR-Project/compare/v1.1.0...v1.1.1) (2026-01-18)
+
+
+### Bug Fixes
+
+* resolve CI/CD failures and harden container security logic ([6edbaec](https://github.com/Arisofia/AL-OCR-Project/commit/6edbaec15f5d25e5819aa22dbfa235ca4fd577bc))
+
 # [1.1.0](https://github.com/Arisofia/AL-OCR-Project/compare/v1.0.1...v1.1.0) (2026-01-17)
 
 
