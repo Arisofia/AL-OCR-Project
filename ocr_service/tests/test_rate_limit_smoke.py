@@ -3,7 +3,8 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
 from ocr_service.config import get_settings
-from ocr_service.main import app, limiter
+from ocr_service.main import app
+from ocr_service.utils.limiter import limiter
 
 
 def _exhaust_rate_limit(client, url, body, headers, max_attempts=50):

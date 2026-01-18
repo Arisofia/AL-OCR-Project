@@ -1,115 +1,21 @@
 """
 Event-driven AWS Lambda entry point for automated document intelligence processing.
-Orchestrates S3 lifecycle events to trigger multi-page Textract analysis and
-persistence.
 """
 
 import logging
-import os
-import urllib.parse
 from typing import Any
 
-from botocore.exceptions import ClientError
-
-from ocr_service.config import get_settings
-from ocr_service.services.storage import StorageService
-from ocr_service.services.textract import TextractService
+from ocr_service.services.worker import WorkerService
 
 logger = logging.getLogger("ocr-service.lambda")
 logger.setLevel(logging.INFO)
 
-settings = get_settings()
-
-
-def get_services(bucket_name: str) -> tuple[TextractService, StorageService]:
-    """
-    Dependency factory for AWS integration services.
-    """
-    return TextractService(), StorageService(bucket_name=bucket_name)
-
-
-def process_record(record: dict[str, Any], request_id: str = "N/A") -> None:
-    """
-    Processes an individual S3 document record with error isolation and traceability.
-    """
-    s3_info = record.get("s3", {})
-    bucket = s3_info.get("bucket", {}).get("name")
-    key = urllib.parse.unquote_plus(s3_info.get("object", {}).get("key", ""))
-
-    if not bucket or not key:
-        logger.warning(
-            "Payload error: Missing S3 bucket or key reference",
-            extra={"request_id": request_id},
-        )
-        return
-
-    textract_service, storage_service = get_services(bucket)
-
-    # Standardize output naming convention for deterministic downstream consumption
-    out_key = f"{settings.output_prefix.rstrip('/')}/{os.path.basename(key)}.json"
-
-    try:
-        # Route documents based on format requirements (Async for PDFs, Sync for images)
-        if key.lower().endswith(".pdf"):
-            job_id = textract_service.start_detection(bucket, key)
-            if not job_id:
-                raise RuntimeError(f"Textract job initiation failure for {key}")
-
-            output = {
-                "jobId": job_id,
-                "status": "STARTED",
-                "requestId": request_id,
-                "input": {"bucket": bucket, "key": key},
-            }
-            logger.info("Async processing initiated | JobId: %s | Key: %s", job_id, key)
-        else:
-            output = textract_service.analyze_document(bucket, key)
-            output["requestId"] = request_id
-            logger.info("Sync analysis completed | Key: %s", key)
-
-        # Persist extracted intelligence to enterprise storage
-        if not storage_service.save_json(output, out_key):
-            logger.error("Storage failure: Could not persist extraction for %s", key)
-        else:
-            logger.info("Result persisted | Path: s3://%s/%s", bucket, out_key)
-
-    except ClientError as e:
-        request_id = e.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
-        logger.error(
-            "AWS Service Failure | Key: %s | RequestId: %s | Error: %s",
-            key,
-            request_id,
-            e,
-        )
-        err_obj = {
-            "error": "aws_service_failure",
-            "message": str(e),
-            "requestId": request_id,
-            "input": {"bucket": bucket, "key": key},
-        }
-        storage_service.save_json(err_obj, out_key)
-        raise
-    except Exception as e:
-        logger.exception("Operational failure: Object %s in bucket %s", key, bucket)
-        err_obj = {
-            "error": "internal_pipeline_failure",
-            "message": str(e),
-            "requestId": request_id,  # From process_record argument
-            "input": {"bucket": bucket, "key": key},
-        }
-        try:
-            storage_service.save_json(err_obj, out_key)
-        except Exception as se:
-            logger.error("Critical storage failure during error logging: %s", se)
-
-        # Propagate exception for Lambda retry visibility
-        raise
+worker = WorkerService()
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """
     Main Lambda handler for orchestrating S3 document triggers.
-    Ensures full traceability and partial failure reporting.
     """
     request_id = getattr(context, "aws_request_id", "local-test")
     records = event.get("Records", [])
@@ -118,7 +24,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     failures = 0
     for record in records:
         try:
-            process_record(record, request_id=request_id)
+            worker.process_s3_record(record, request_id=request_id)
         except Exception:
             failures += 1
 

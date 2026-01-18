@@ -8,10 +8,10 @@ from ocr_service.modules.ocr_config import EngineConfig
 from ocr_service.modules.ocr_engine import IterativeOCREngine
 from ocr_service.modules.processor import OCRProcessor
 from ocr_service.services.storage import StorageService
+from ocr_service.utils.context import get_request_id_from_scope
 
 # Security and Identity Management
-_settings_init = get_settings()
-api_key_header = APIKeyHeader(name=_settings_init.api_key_header_name, auto_error=False)
+api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
 
 
 async def get_api_key(
@@ -19,6 +19,7 @@ async def get_api_key(
     curr_settings: Settings = Depends(get_settings),
 ) -> str:
     """Enforces API Key authentication for protected resources."""
+    # Ensure api_key_header name matches settings if dynamic name is needed
     if header_value == curr_settings.ocr_api_key:
         return header_value
     raise HTTPException(
@@ -28,10 +29,7 @@ async def get_api_key(
 
 def get_request_id(request: Request) -> str:
     """Extracts AWS Request ID from Mangum scope or defaults to local trace."""
-    scope = request.scope
-    if "aws.context" in scope:
-        return str(getattr(scope["aws.context"], "aws_request_id", "local-development"))
-    return "local-development"
+    return get_request_id_from_scope(request.scope)
 
 
 def get_storage_service(

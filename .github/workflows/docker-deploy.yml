@@ -28,8 +28,7 @@ jobs:
     env:
       LAMBDA_FUNCTION_NAME: al-ocr-processor
     steps:
-      # actions/checkout v4.2.2
-      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98
+      - uses: actions/checkout@v6
 
       - name: Validate Secrets
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -58,15 +57,15 @@ jobs:
           dockerfile: ocr_service/Dockerfile
           ignore: DL3033,DL3032,DL3059
 
-      - name: Run Black (auto-format)
+      - name: Run Ruff (check & format)
         run: |
-          pip install black
-          black ocr_service ocr_reconstruct src || true
-          black --check ocr_service ocr_reconstruct src
+          pip install ruff
+          ruff check ocr_service ocr_reconstruct src
+          ruff format --check ocr_service ocr_reconstruct src
+
       - name: Configure AWS Credentials
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-        # aws-actions/configure-aws-credentials v4.0.2
-        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: us-east-1
@@ -74,17 +73,14 @@ jobs:
       - name: Confirm AWS identity (debug)
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         run: |
-          echo "Confirming AWS identity (debug)"
           aws sts get-caller-identity || true
 
       - name: Login to Amazon ECR
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-        # aws-actions/amazon-ecr-login v2.0.1
-        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Set up Docker Buildx
-        # docker/setup-buildx-action v3.0.0
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+        uses: docker/setup-buildx-action@v3
 
       - name: Build image
         run: |
@@ -96,7 +92,7 @@ jobs:
 
       # aquasecurity/trivy-action v0.28.0
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: al-ocr_service:${{ github.sha }}
           format: 'table'

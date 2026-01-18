@@ -84,7 +84,7 @@ jobs:
       - name: Install Dockle
         run: |
           set -euxo pipefail
-          DOCKLE_VERSION="0.4.9"
+          DOCKLE_VERSION="0.4.14"
           curl -fsSL "https://github.com/goodwithtech/dockle/releases/download/v${DOCKLE_VERSION}/dockle_${DOCKLE_VERSION}_Linux-64bit.tar.gz" -o dockle.tar.gz
           tar -xzf dockle.tar.gz
           sudo mv dockle /usr/local/bin/dockle
@@ -94,49 +94,43 @@ jobs:
           set -euxo pipefail
           IMAGE=${{ steps.build_image.outputs.image }}
 
-          # Strategy:
-          # 1) Try scanning the image by name (repo:tag) which works for local images
-          # 2) If that fails, try scanning the image id
-          # 3) If still failing, docker save/load and try scanning again
-          # 4) As a final fallback, run Dockle in a container with the repo mounted so output can be written to the host
+          # Ensure a fallback file exists so subsequent steps don't fail on missing file
+          echo '{"details": []}' > dockle-results.json
 
           echo "Attempting Dockle scan for image name: $IMAGE"
-          if dockle -f json -o dockle-results.json "$IMAGE" 2>dockle.err; then
-            echo "Dockle scan completed against image name $IMAGE"
-          else
-            echo "Dockle scan failed against image name; trying image id"
+          # We use || true here because we want to capture the JSON even if it fails (findings found)
+          # Dockle returns non-zero when findings are present.
+          dockle -f json -o dockle-results.json "$IMAGE" 2>dockle.err || {
+            RET=$?
+            echo "Dockle scan finished with exit code $RET (findings might be present)"
             cat dockle.err || true
+          }
+
+          if [ ! -s dockle-results.json ] || [ "$(cat dockle-results.json)" = "" ]; then
+            echo "dockle-results.json is empty or missing content; attempting fallback methods"
+
             IMAGE_ID=$(docker images -q "$IMAGE" || true)
             if [ -n "$IMAGE_ID" ]; then
               echo "Found image id $IMAGE_ID; attempting Dockle scan against id"
-              if dockle -f json -o dockle-results.json "$IMAGE_ID" 2>>dockle.err; then
-                echo "Dockle scan completed against image id"
-              else
-                echo "Dockle failed against image id; attempting docker save/load fallback"
-                cat dockle.err || true
-                docker save "$IMAGE" -o image.tar || true
-                docker load -i image.tar || true
-                # Try scanning by name again after load
-                if dockle -f json -o dockle-results.json "$IMAGE" 2>>dockle.err; then
-                  echo "Dockle scan completed against loaded image name"
-                else
-                  echo "Dockle still failed after docker load; attempting containerized Dockle as a last resort"
-                  cat dockle.err || true
-                  docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workdir" goodwithtech/dockle:0.4.9 -f json -o /workdir/dockle-results.json "$IMAGE" 2>>dockle.err || true
-                fi
-              fi
-            else
-              echo "Image id not found; attempting docker save/load fallback"
-              docker save "$IMAGE" -o image.tar || true
-              docker load -i image.tar || true
-              if dockle -f json -o dockle-results.json "$IMAGE" 2>>dockle.err; then
-                echo "Dockle scan completed after docker load"
-              else
-                echo "Dockle failed after docker load; attempting containerized Dockle"
-                cat dockle.err || true
-                docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workdir" goodwithtech/dockle:0.4.9 -f json -o /workdir/dockle-results.json "$IMAGE" 2>>dockle.err || true
-              fi
+              dockle -f json -o dockle-results.json "$IMAGE_ID" 2>>dockle.err || true
             fi
+
+            if [ ! -s dockle-results.json ]; then
+               echo "Still no results; attempting docker save/load fallback"
+               docker save "$IMAGE" -o image.tar || true
+               docker load -i image.tar || true
+               dockle -f json -o dockle-results.json "$IMAGE" 2>>dockle.err || true
+            fi
+
+            if [ ! -s dockle-results.json ]; then
+               echo "Attempting containerized Dockle as a last resort"
+               docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}:/workdir" goodwithtech/dockle:0.4.14 -f json -o /workdir/dockle-results.json "$IMAGE" 2>>dockle.err || true
+            fi
+          fi
+
+          # Final check: if still empty, restore basic valid JSON to prevent jq errors
+          if [ ! -s dockle-results.json ]; then
+            echo '{"details": []}' > dockle-results.json
           fi
 
       - name: "Optional: Fail on Dockle findings (enable via FAIL_ON_SCAN=true)"

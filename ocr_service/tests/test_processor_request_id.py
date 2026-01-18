@@ -39,7 +39,7 @@ def test_processor_returns_request_id():
 
     # Act
     res = asyncio.run(
-        processor.process(
+        processor.process_file(
             cast(UploadFile, DummyFile()),
             reconstruct=False,
             advanced=False,

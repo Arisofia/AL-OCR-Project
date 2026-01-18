@@ -26,7 +26,7 @@ class OCRProcessor:
         self.ocr_engine = ocr_engine
         self.storage_service = storage_service
 
-    async def process(
+    async def process_file(
         self,
         file: UploadFile,
         reconstruct: bool = False,
@@ -36,12 +36,37 @@ class OCRProcessor:
         request_id: str = "N/A",
     ) -> dict[str, Any]:
         """
-        Executes the full OCR pipeline: Validation, Extraction, and Cloud Persistence.
+        Handles UploadFile objects from FastAPI and routes to core process_bytes.
         """
         self._validate_file_type(file.content_type or "")
-
-        start_time = time.time()
         contents = await file.read()
+
+        return await self.process_bytes(
+            contents=contents,
+            filename=file.filename or "unknown",
+            content_type=file.content_type or "image/png",
+            reconstruct=reconstruct,
+            advanced=advanced,
+            doc_type=doc_type,
+            enable_reconstruction_config=enable_reconstruction_config,
+            request_id=request_id,
+        )
+
+    async def process_bytes(
+        self,
+        contents: bytes,
+        filename: str,
+        content_type: str,
+        reconstruct: bool = False,
+        advanced: bool = False,
+        doc_type: str = "generic",
+        enable_reconstruction_config: bool = False,
+        request_id: str = "N/A",
+    ) -> dict[str, Any]:
+        """
+        Executes the full OCR pipeline on raw bytes: Extraction and Cloud Persistence.
+        """
+        start_time = time.time()
 
         try:
             # Execute targeted OCR strategy
@@ -58,15 +83,15 @@ class OCRProcessor:
             # Synchronize raw document and extracted intelligence to S3
             s3_key = await self._persist_results(
                 contents,
-                file.filename or "unknown",
-                file.content_type or "image/png",
+                filename,
+                content_type,
                 result,
             )
 
             # Enrich response with traceability metadata
             result.update(
                 {
-                    "filename": file.filename or "unknown",
+                    "filename": filename,
                     "processing_time": round(time.time() - start_time, 3),
                     "s3_key": s3_key,
                     "request_id": request_id,
@@ -77,7 +102,7 @@ class OCRProcessor:
         except HTTPException:
             raise
         except Exception as e:
-            self._handle_pipeline_failure(file.filename or "unknown", request_id, e)
+            self._handle_pipeline_failure(filename, request_id, e)
             raise HTTPException(
                 status_code=500,
                 detail="Internal processing failure in OCR orchestrator",

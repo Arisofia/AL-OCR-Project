@@ -79,7 +79,9 @@ class LearningEngine:
 
                 def _upsert() -> None:
                     if self.client:
-                        self.client.table("learning_patterns").upsert(data).execute()
+                        # Use type ignore as Supabase's JSON type is slightly
+                        # incompatible with inferred dict[str, object]
+                        self.client.table("learning_patterns").upsert(data).execute()  # type: ignore[arg-type]
 
                 await asyncio.to_thread(_upsert)
                 logger.debug("Cloud sync successful")

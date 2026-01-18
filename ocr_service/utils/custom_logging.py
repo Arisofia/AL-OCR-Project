@@ -6,7 +6,7 @@ the standard library logging module.
 import logging
 import sys
 
-from pythonjsonlogger import jsonlogger
+from pythonjsonlogger.json import JsonFormatter
 
 
 def setup_logging(level=logging.INFO):
@@ -20,7 +20,7 @@ def setup_logging(level=logging.INFO):
         "%(asctime)s %(name)s %(levelname)s %(message)s "
         "%(request_id)s %(method)s %(path)s"
     )
-    formatter = jsonlogger.JsonFormatter(fmt=fmt, datefmt="%Y-%m-%dT%H:%M:%S")
+    formatter = JsonFormatter(fmt=fmt, datefmt="%Y-%m-%dT%H:%M:%S")
 
     handler.setFormatter(formatter)
 

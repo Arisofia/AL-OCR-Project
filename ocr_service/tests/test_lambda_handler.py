@@ -2,7 +2,7 @@
 Test suite for the OCR Lambda handler.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -26,77 +26,31 @@ def s3_event():
 
 def test_handler_success(s3_event):
     """Test successful handler execution."""
-    with patch("ocr_service.lambda_handler.get_services") as mock_get_services:
-        mock_textract = MagicMock()
-        mock_storage = MagicMock()
-        mock_get_services.return_value = (mock_textract, mock_storage)
-
-        mock_textract.analyze_document.return_value = {"text": "some text"}
-        mock_storage.save_json.return_value = True
-
+    with patch("ocr_service.lambda_handler.worker") as mock_worker:
         response = handler(s3_event, None)
-
         assert response == {"status": "ok"}
-        mock_textract.analyze_document.assert_called_once()
-        mock_storage.save_json.assert_called_once()
+        mock_worker.process_s3_record.assert_called_once()
 
 
-def test_handler_textract_failure(s3_event):
-    """Test handler behavior when Textract fails."""
-    with patch("ocr_service.lambda_handler.get_services") as mock_get_services:
-        mock_textract = MagicMock()
-        mock_storage = MagicMock()
-        mock_get_services.return_value = (mock_textract, mock_storage)
-
-        mock_textract.analyze_document.side_effect = Exception("Textract boom")
-        mock_storage.save_json.return_value = True
-
+def test_handler_failure(s3_event):
+    """Test handler behavior when processing fails."""
+    with patch("ocr_service.lambda_handler.worker") as mock_worker:
+        mock_worker.process_s3_record.side_effect = Exception("Boom")
         response = handler(s3_event, None)
 
-        # Handler should report the partial failure and count it
         assert response == {"status": "partial_failure", "failed": 1}
-        mock_storage.save_json.assert_called_once()
-        args, _ = mock_storage.save_json.call_args
-        assert args[0]["error"] == "internal_pipeline_failure"
-        assert "Textract boom" in args[0]["message"]
-        assert "requestId" in args[0]
-        assert args[0]["requestId"] == "local-test"
-
-
-def test_handler_missing_info():
-    """Test handler with missing bucket or key."""
-    from typing import Any
-
-    bad_event: dict[str, Any] = {"Records": [{"s3": {}}]}
-    with patch("ocr_service.lambda_handler.logger") as mock_logger:
-        response = handler(bad_event, None)
-        assert response == {"status": "ok"}
-        mock_logger.warning.assert_called_with(
-            "Payload error: Missing S3 bucket or key reference",
-            extra={"request_id": "local-test"},
-        )
+        mock_worker.process_s3_record.assert_called_once()
 
 
 def test_handler_with_aws_request_id(s3_event):
-    """Test that handler extracts RequestId from AWS ClientErrors."""
-    from botocore.exceptions import ClientError  # type: ignore
+    """Test that handler passes RequestId to worker."""
 
-    with patch("ocr_service.lambda_handler.get_services") as mock_get_services:
-        mock_textract = MagicMock()
-        mock_storage = MagicMock()
-        mock_get_services.return_value = (mock_textract, mock_storage)
+    class MockContext:
+        aws_request_id = "RID-456"
 
-        error_response = {
-            "Error": {"Code": "AccessDenied", "Message": "No access"},
-            "ResponseMetadata": {"RequestId": "123-456-789"},
-        }
-        mock_textract.analyze_document.side_effect = ClientError(
-            error_response, "AnalyzeDocument"
+    with patch("ocr_service.lambda_handler.worker") as mock_worker:
+        response = handler(s3_event, MockContext())
+        assert response == {"status": "ok"}
+        mock_worker.process_s3_record.assert_called_once_with(
+            s3_event["Records"][0], request_id="RID-456"
         )
-
-        response = handler(s3_event, None)
-        assert response == {"status": "partial_failure", "failed": 1}
-
-        mock_storage.save_json.assert_called_once()
-        args, _ = mock_storage.save_json.call_args
-        assert args[0]["requestId"] == "123-456-789"

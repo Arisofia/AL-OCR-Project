@@ -15,6 +15,7 @@ import pytesseract  # type: ignore
 from ocr_reconstruct import process_bytes as recon_process_bytes
 from ocr_reconstruct.modules.enhance import ImageEnhancer
 from ocr_reconstruct.modules.reconstruct import PixelReconstructor
+from ocr_service.utils.capabilities import CapabilityProvider
 
 from .advanced_recon import AdvancedPixelReconstructor
 from .confidence import ConfidenceScorer
@@ -22,8 +23,6 @@ from .image_toolkit import ImageToolkit
 from .layout import DocumentLayoutAnalyzer
 from .learning_engine import LearningEngine
 from .ocr_config import EngineConfig, TesseractConfig
-
-RECON_AVAILABLE = True
 
 logger = logging.getLogger("ocr-service.engine")
 
@@ -73,7 +72,7 @@ class DocumentProcessor:
         """Executes reconstruction preprocessor if enabled."""
         if (
             not ctx.use_reconstruction
-            or not RECON_AVAILABLE
+            or not CapabilityProvider.is_reconstruction_available()
             or recon_process_bytes is None
         ):
             return
@@ -171,7 +170,11 @@ class IterativeOCREngine:
             enhancer=enhancer or ImageEnhancer(),
             ocr_config=ocr_config or TesseractConfig(),
             reconstructor=reconstructor
-            or (PixelReconstructor() if RECON_AVAILABLE else None),
+            or (
+                PixelReconstructor()
+                if CapabilityProvider.is_reconstruction_available()
+                else None
+            ),
         )
         self.advanced_reconstructor = (
             advanced_reconstructor or AdvancedPixelReconstructor()

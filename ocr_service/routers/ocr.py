@@ -27,7 +27,7 @@ async def perform_ocr(
     Processes uploaded documents with optional AI-driven pixel reconstruction.
     """
     # SlowAPI uses 'request' via decorator internally
-    result = await processor.process(
+    result = await processor.process_file(
         file=file,
         reconstruct=reconstruct,
         advanced=advanced,
