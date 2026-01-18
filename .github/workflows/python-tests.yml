@@ -161,7 +161,7 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          file: ./ocr_service/coverage.xml
+          files: ./ocr_service/coverage.xml
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false

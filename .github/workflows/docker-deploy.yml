@@ -28,7 +28,7 @@ jobs:
     env:
       LAMBDA_FUNCTION_NAME: al-ocr-processor
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Validate Secrets
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -90,9 +90,9 @@ jobs:
             -t $TAG --load -f ./ocr_service/Dockerfile \
             --cache-from type=gha --cache-to type=gha,mode=max .
 
-      # aquasecurity/trivy-action v0.28.0
+      # aquasecurity/trivy-action v0.29.0
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.28.0
+        uses: aquasecurity/trivy-action@v0.29.0
         with:
           image-ref: al-ocr_service:${{ github.sha }}
           format: 'table'
