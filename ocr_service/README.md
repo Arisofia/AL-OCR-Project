@@ -35,6 +35,7 @@ cd ocr_service
 ```
 
 Notes:
+
 - The Dockerfile uses the AWS Lambda base image and includes Tesseract and language packs.
 - The Lambda container's entrypoint is `lambda_handler.handler` and supports S3 event triggers: PDF files use Textract async jobs, images use synchronous analyze_document.
 - Reconstruction preprocessor: You can enable the optional reconstruction preprocessor (integrates the `ocr_reconstruct` pipeline) by setting the environment variable `ENABLE_RECONSTRUCTION=true`. Control reconstruction iterations with `RECON_ITERATIONS`.
