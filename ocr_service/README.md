@@ -20,14 +20,14 @@ terraform init
 terraform apply -auto-approve
 ```
 
-2. Alternatively, run the helper script (idempotent):
+1. Alternatively, run the helper script (idempotent):
 
 ```bash
 cd ocr_service
 ./infra_setup.sh
 ```
 
-3. Build and push the container image, and update Lambda:
+1. Build and push the container image, and update Lambda:
 
 ```bash
 cd ocr_service
@@ -48,6 +48,7 @@ This project includes a `HuggingFaceVisionProvider` that talks to the **Hugging 
 
 - **Environment variable**: set `HUGGING_FACE_HUB_TOKEN` (or `hugging_face_hub_token` via `Settings`) in your environment or CI secrets to authenticate requests.
   - Example (local):
+
     ```bash
     export HUGGING_FACE_HUB_TOKEN="your-token-here"
     ```
