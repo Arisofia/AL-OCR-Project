@@ -7,16 +7,15 @@ import time
 from typing import Any, Optional, cast
 
 import boto3
-from mypy_boto3_textract import TextractClient
 from botocore.config import Config  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
+from mypy_boto3_textract import TextractClient
 from tenacity import (  # type: ignore
     retry,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
 )
-
 logger = logging.getLogger("ocr-service.textract")
 
 
