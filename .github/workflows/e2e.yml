@@ -49,13 +49,16 @@ jobs:
           if [ -f ocr_reconstruct/requirements.txt ]; then
             pip install -r ocr_reconstruct/requirements.txt
           fi
+          pip install pip-audit
+
+      - name: Run pip-audit
+        run: pip-audit || true
 
       - name: Cache npm
         uses: actions/cache@v4
         with:
           path: ~/.npm
-          key:
-            ${{ runner.os }}-npm-${{ hashFiles('frontend/package-lock.json') }}
+          key: ${{ runner.os }}-npm-${{ hashFiles('frontend/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-npm-
 
@@ -63,6 +66,10 @@ jobs:
         working-directory: ./frontend
         run: |
           npm ci
+
+      - name: Run npm audit
+        working-directory: ./frontend
+        run: npm audit --audit-level=high || true
 
       - name: Run Frontend Lint
         working-directory: ./frontend
@@ -82,9 +89,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key:
-            ${{ runner.os }}-playwright-${{
-            hashFiles('frontend/package-lock.json') }}
+          key: ${{ runner.os }}-playwright-${{ hashFiles('frontend/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-playwright-
 
@@ -103,8 +108,7 @@ jobs:
       - name: Start backend
         working-directory: ./ocr_service
         env:
-          PYTHONPATH:
-            ${{ github.workspace }}:${{ github.workspace }}/ocr_service
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/ocr_service
           OCR_API_KEY: ${{ secrets.OCR_API_KEY || 'test-key' }}
         run: |
           nohup python -m uvicorn main:app --host 0.0.0.0 --port 8000 > ../backend.log 2>&1 &
