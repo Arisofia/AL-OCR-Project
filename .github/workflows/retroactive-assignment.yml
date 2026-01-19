@@ -1,0 +1,24 @@
+name: Retroactive PR Assignment
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Pull request number to assign reviewers to"
+        required: true
+        type: string
+jobs:
+  assign-reviewers:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign reviewers
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = parseInt(core.getInput('pr_number'));
+            const reviewers = ['Arisofia', 'jenineferderas'];
+            await github.rest.pulls.requestReviewers({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              reviewers
+            });
