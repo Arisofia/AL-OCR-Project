@@ -14,7 +14,6 @@ google-generativeai==0.8.6
 label-studio-sdk>=2.0.1
 httpx==0.28.1
 jaraco.context>=6.1.0
-label-studio-sdk>=2.0.1
 mangum==0.19.0
 matplotlib==3.9.4
 mypy==1.19.1
@@ -49,8 +48,4 @@ tqdm==4.67.1
 urllib3>=2.0.0
 types-redis
 types-requests
-<<<<<<< HEAD
-=======
-urllib3>=2.0.0
- (chore: update requirements and workflow before merge)
 uvicorn==0.39.0
