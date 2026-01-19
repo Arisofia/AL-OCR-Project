@@ -1,3 +1,4 @@
+---
 name: Model-Training-Workflow
 on: [push]
 jobs:

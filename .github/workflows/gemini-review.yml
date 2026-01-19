@@ -1,3 +1,4 @@
+---
 name: Gemini AI Review
 on:
   pull_request:
@@ -12,4 +13,5 @@ jobs:
         uses: google-github-actions/gemini-review@v1
         with:
           prompt: |
-            Please review this pull request for code quality, security, and best practices. Summarize findings and suggest improvements.
+            Please review this pull request for code quality, security,
+            and best practices. Summarize findings and suggest improvements.

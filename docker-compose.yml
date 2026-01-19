@@ -1,3 +1,4 @@
+---
 services:
   api:
     build:
@@ -34,8 +35,10 @@ services:
     command: redis-server --requirepass ${REDIS_PASSWORD:-dev_password}
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_password}
-    # Security: Do not expose Redis port to host. Only internal containers can access.
-    # WARNING: Exposing Redis to the host or public network is a security risk. Use a strong password and restrict access if exposure is required.
+    # Security: Do not expose Redis port to host.
+    # Only internal containers can access.
+    # WARNING: Exposing Redis to the host or public network is a security risk.
+    # Use a strong password and restrict access if exposure is required.
     # expose:
     #   - "6379"
 

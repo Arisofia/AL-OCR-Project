@@ -1,3 +1,4 @@
+---
 name: E2E Tests
 
 on:
@@ -31,6 +32,12 @@ jobs:
         run: |
           cd frontend
           npm ci
+
+      - name: Run npm audit
+        run: |
+          cd frontend
+          npm audit --audit-level=moderate || echo "⚠️ npm audit found vulnerabilities"
+        continue-on-error: true
 
       - name: Install Playwright Browsers
         run: |

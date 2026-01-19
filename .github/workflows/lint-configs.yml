@@ -1,3 +1,4 @@
+---
 name: Lint & Validate Configs
 
 on:
@@ -43,7 +44,8 @@ jobs:
 
       - name: Validate JSON files
         run: |
-          for file in $(find . -name "*.json" -not -path "*/node_modules/*" -not -path "*/.venv/*" -not -path "*/dist/*"); do
+          for file in $(find . -name "*.json" -not -path "*/node_modules/*" \
+                        -not -path "*/.venv/*" -not -path "*/dist/*"); do
             echo "Validating $file"
             if ! python3 -m json.tool "$file" > /dev/null; then
               echo "❌ Invalid JSON: $file"
