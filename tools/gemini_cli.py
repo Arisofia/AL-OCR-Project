@@ -10,7 +10,10 @@ import sys
 from pathlib import Path
 
 # Add project root to sys.path for local development
-sys.path.append(str(Path(__file__).parent.parent))
+try:
+    sys.path.append(str(Path(__file__).parent.parent))
+except Exception:
+    pass
 
 from ocr_service.config import get_settings
 from ocr_service.modules.ai_providers import GeminiVisionProvider

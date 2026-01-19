@@ -9,7 +9,10 @@ import typing
 from unittest.mock import MagicMock
 
 # Add ocr_service to path
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "ocr_service"))
+try:
+    sys.path.append(os.path.join(os.path.dirname(__file__), "..", "ocr_service"))
+except Exception:
+    pass
 
 
 class FakeBoto3Module:

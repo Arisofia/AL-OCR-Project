@@ -23,7 +23,8 @@ def test_rate_limit_handler_response_and_logging(monkeypatch):
     req = Request(scope)
 
     # Use a tiny dummy instead of constructing a full Limit-backed exception
-    def _dummy_str(_self):
+
+    def _dummy_str(_unused):
         return "429: 5 per 1 minute"
 
     exc = type(
@@ -94,7 +95,9 @@ def test_rate_limit_handler_response_shape(monkeypatch):
     import json
 
     assert response.status_code == 429
-    assert json.loads(response.body) == {"detail": "Rate limit exceeded. Please try again later."}
+    assert json.loads(response.body) == {
+        "detail": "Rate limit exceeded. Please try again later."
+    }
 
     # Confirm the original message was logged in the structured extra
     mock_logger.warning.assert_called()
