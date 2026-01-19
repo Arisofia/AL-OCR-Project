@@ -1,8 +1,8 @@
 bandit==1.8.6
-boto3==1.34.162
-mypy-boto3-textract==1.34.0
-mypy-boto3-s3==1.34.162
-boto3-stubs[textract,s3]==1.34.162
+boto3>=1.35.0
+mypy-boto3-textract>=1.35.0
+mypy-boto3-s3>=1.35.0
+boto3-stubs[textract,s3]>=1.35.0
 dvc[s3]==3.59.0
 evidently==0.7.20
 fastapi==0.128.0
@@ -47,6 +47,5 @@ tqdm==4.67.1
 types-python-dateutil
 types-redis
 types-requests
-urllib3>=2.6.3; python_version >= "3.10"
-urllib3>=1.26.20; python_version < "3.10"
+urllib3>=2.0.0
 uvicorn==0.39.0

@@ -16,6 +16,7 @@ from tenacity import (  # type: ignore
     stop_after_attempt,
     wait_exponential,
 )
+
 logger = logging.getLogger("ocr-service.textract")
 
 
