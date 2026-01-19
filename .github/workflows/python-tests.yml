@@ -15,6 +15,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -43,7 +50,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install opencv-python-headless
+          pip install pip-audit yamllint
           pip install -e ./ocr_reconstruct
+
+      - name: Run Security Audit
+        run: pip-audit
+
+      - name: Run YAML Lint
+        run: yamllint .
 
       - name: Generate synthetic images
         run: |
@@ -54,3 +68,9 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
           OCR_API_KEY: "test-key"
         run: pytest
+
+      - name: Upload Coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ matrix.python-version }}
+          path: coverage.xml
