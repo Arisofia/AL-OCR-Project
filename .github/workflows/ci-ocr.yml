@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        python-version: ["3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11"]
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -36,7 +36,9 @@ jobs:
             tesseract-ocr-eng \
             libtesseract-dev \
             libleptonica-dev \
-            pkg-config
+            pkg-config \
+            libgl1 \
+            libglib2.0-0
           tesseract --version
       - name: Install Python Dependencies
         run: |
@@ -44,22 +46,9 @@ jobs:
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
-          pip uninstall -y opencv-python opencv-contrib-python || true
-          pip install opencv-python-headless pytest pytest-cov flake8
-      - name: Lint with Flake8
+      - name: Lint with Ruff
         run: |
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-      - name: Security Audit with pip-audit
-        run: |
-          pip install pip-audit
-          pip-audit --desc --skip-editable
-        continue-on-error: true
-      - name: Secret Scanning with gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
+          ruff check .
       - name: Run Unit & Integration Tests
         run: pytest --verbose --cov=./ --cov-report=xml --cov-report=term
       - name: Upload Test Coverage

@@ -47,3 +47,4 @@ urllib3==2.2.1
 types-redis==4.6.0.20240417
 types-requests==2.31.0.20240406
 uvicorn==0.39.0
+yamllint==1.35.1
