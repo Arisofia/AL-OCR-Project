@@ -44,5 +44,5 @@ tqdm
 types-python-dateutil
 types-redis
 types-requests
-urllib3>=1.26.20
+urllib3>=2.6.3
 uvicorn
