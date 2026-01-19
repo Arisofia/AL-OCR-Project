@@ -1,72 +1,147 @@
----
-name: E2E Tests
+name: Playwright E2E
 
 on:
   push:
     branches: ["main", "master", "develop"]
   pull_request:
-    branches: ["main", "master", "develop"]
-
-permissions:
-  contents: read
+    paths:
+      - "frontend/**"
+      - "ocr_service/**"
+      - ".github/workflows/e2e.yml"
+  workflow_dispatch: {}
 
 jobs:
-  e2e-tests:
+  e2e:
     name: End-to-End Tests
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-      - name: Set up Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
 
-      - name: Install Frontend Dependencies
+      - name: Install system deps
         run: |
-          cd frontend
+          sudo apt-get update
+          sudo apt-get install -y \
+            tesseract-ocr \
+            libtesseract-dev \
+            libglib2.0-0 \
+            libgbm1 \
+            libgtk-3-0 \
+            libasound2 \
+            libnss3 \
+            libxss1
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f ocr_service/requirements.txt ]; then
+            pip install -r ocr_service/requirements.txt
+          fi
+          if [ -f ocr_reconstruct/requirements.txt ]; then
+            pip install -r ocr_reconstruct/requirements.txt
+          fi
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key:
+            ${{ runner.os }}-npm-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: Install Node deps
+        working-directory: ./frontend
+        run: |
           npm ci
 
-      - name: Run npm audit
-        run: |
-          cd frontend
-          npm audit --audit-level=moderate || echo "⚠️ npm audit found vulnerabilities"
-        continue-on-error: true
+      - name: Run Frontend Lint
+        working-directory: ./frontend
+        run: npm run lint || true
 
-      - name: Install Playwright Browsers
-        run: |
-          cd frontend
-          npx playwright install --with-deps chromium
+      - name: Frontend Dependency Scan (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: "frontend"
+          format: "table"
+          exit-code: "0"
+          ignore-unfixed: true
+          severity: "CRITICAL,HIGH"
 
-      - name: Start Services with Docker Compose
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key:
+            ${{ runner.os }}-playwright-${{
+            hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright browsers
+        working-directory: ./frontend
+        run: npx playwright install --with-deps
+
+      - name: Build frontend
+        working-directory: ./frontend
+        env:
+          VITE_API_BASE: http://localhost:8000
+          VITE_API_KEY: ${{ secrets.STAGING_API_KEY || '' }}
         run: |
-          docker-compose up --exit-code-from-none --remove-orphans -d
-          # Wait for services to be ready
+          npm run build
+
+      - name: Start backend
+        working-directory: ./ocr_service
+        env:
+          PYTHONPATH:
+            ${{ github.workspace }}:${{ github.workspace }}/ocr_service
+          OCR_API_KEY: ${{ secrets.OCR_API_KEY || 'test-key' }}
+        run: |
+          nohup python -m uvicorn main:app --host 0.0.0.0 --port 8000 > ../backend.log 2>&1 &
+          # Wait for backend to be ready
           timeout 60 bash -c 'until curl -f http://localhost:8000/health 2>/dev/null; do sleep 2; done' || true
-          timeout 60 bash -c 'until curl -f http://localhost:80 2>/dev/null; do sleep 2; done' || true
 
-      - name: Run E2E Tests
+      - name: Start frontend
+        working-directory: ./frontend
         run: |
-          cd frontend
-          npm run test:e2e || npm run test
-        continue-on-error: false
+          nohup npx -y http-server dist -p 5173 --silent > ../frontend.log 2>&1 &
+          # Wait for frontend to be ready
+          timeout 60 bash -c 'until curl -f http://localhost:5173 2>/dev/null; do sleep 2; done' || true
 
-      - name: Upload Test Results
+      - name: Run Playwright tests
+        working-directory: ./frontend
+        env:
+          VITE_API_KEY: ${{ secrets.STAGING_API_KEY || 'test-key' }}
+        run: |
+          export BASE_URL="http://localhost:5173"
+          npx playwright test --config=playwright.config.ts || npx playwright test
+
+      - name: Debug Logs on Failure
+        if: failure()
+        run: |
+          echo "--- Backend Logs ---"
+          [ -f backend.log ] && cat backend.log || echo "No backend.log found"
+          echo "--- Frontend Logs ---"
+          [ -f frontend.log ] && cat frontend.log || echo "No frontend.log found"
+
+      - name: Upload Playwright artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-test-results
+          name: playwright-artifacts
           path: |
-            frontend/playwright-report/
-            frontend/test-results/
-          retention-days: 30
-
-      - name: Stop Docker Compose Services
-        if: always()
-        run: docker-compose down --remove-orphans
+            frontend/test-results
+            frontend/playwright-report
+            frontend/tests/e2e/**/screenshots
+            frontend/tests/e2e/**/videos
+            frontend/tests/e2e/**/trace

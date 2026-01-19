@@ -123,7 +123,7 @@ class IterativeOCR:
                 if len(fb_text) > len(text):
                     text = fb_text
                     current = fb_img
-            
+
             # Step 3: Best result retention logic
             if len(text) > len(best_overall_text):
                 best_overall_text = text

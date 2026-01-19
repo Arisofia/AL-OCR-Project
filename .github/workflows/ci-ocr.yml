@@ -1,4 +1,3 @@
----
 name: AL-OCR CI & Integrity Pipeline
 
 on:
@@ -63,7 +62,8 @@ jobs:
         continue-on-error: true
       - name: Run Unit & Integration Tests
         run: pytest --verbose --cov=./ --cov-report=xml --cov-report=term
-      - name: Upload Coverage Reports
+      - name: Upload Test Coverage
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report-py${{ matrix.python-version }}

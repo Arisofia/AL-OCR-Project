@@ -95,9 +95,7 @@ class AdvancedPixelReconstructor:
         prompt = self._build_prompt(context)
 
         try:
-            return await self.providers[primary].reconstruct(
-                image_bytes, prompt
-            )
+            return await self.providers[primary].reconstruct(image_bytes, prompt)
         except (AIProviderError, httpx.HTTPError, Exception) as e:
             logger.warning(
                 "Primary provider %s failed (%s): %s",
@@ -106,9 +104,7 @@ class AdvancedPixelReconstructor:
                 e,
             )
             if fallback:
-                return await self._try_fallback(
-                    image_bytes, prompt, exclude=primary
-                )
+                return await self._try_fallback(image_bytes, prompt, exclude=primary)
 
             return self._format_error(e)
 
@@ -132,9 +128,7 @@ class AdvancedPixelReconstructor:
         """Constructs the reconstruction prompt with optional context."""
         prompt = BASE_RECON_PROMPT
         if context:
-            font_meta = context.get(
-                "font_metadata", "No font metadata available"
-            )
+            font_meta = context.get("font_metadata", "No font metadata available")
             acc_score = context.get("accuracy_score", "N/A")
             prompt += (
                 f"\n\nContext from similar documents: {font_meta}. "
