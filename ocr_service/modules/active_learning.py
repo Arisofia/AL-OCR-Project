@@ -8,7 +8,7 @@ from typing import Protocol, runtime_checkable
 import numpy as np
 from sklearn.cluster import KMeans
 
-__all__ = ["OCRModel", "QueryStrategy", "HybridSampling"]
+__all__ = ["HybridSampling", "OCRModel", "QueryStrategy"]
 
 
 @runtime_checkable

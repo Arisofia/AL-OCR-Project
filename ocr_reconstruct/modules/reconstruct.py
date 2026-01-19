@@ -10,7 +10,7 @@ from typing import Optional
 import cv2
 import numpy as np
 
-__all__ = ["PixelReconstructor", "depixelate_naive", "inpaint_bbox", "deblur_wiener"]
+__all__ = ["PixelReconstructor", "deblur_wiener", "depixelate_naive", "inpaint_bbox"]
 
 
 class PixelReconstructor:

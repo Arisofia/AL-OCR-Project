@@ -8,10 +8,10 @@ import numpy as np
 
 __all__ = [
     "ImageEnhancer",
-    "to_gray",
-    "sharpen",
-    "denoise",
     "adaptive_threshold",
+    "denoise",
+    "sharpen",
+    "to_gray",
     "upscale_and_smooth",
 ]
 
