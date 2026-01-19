@@ -9,7 +9,7 @@ services:
       - "8000:8000"
     environment:
       - REDIS_HOST=redis
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_password}
       - ENVIRONMENT=production
       # OCR_API_KEY should be injected securely via environment or Docker secrets, not hardcoded
       # - OCR_API_KEY=test_production_key
@@ -24,16 +24,16 @@ services:
     command: ["python", "-m", "ocr_service.worker"]
     environment:
       - REDIS_HOST=redis
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_password}
       - ENVIRONMENT=production
     depends_on:
       - redis
 
   redis:
     image: "redis:alpine"
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    command: redis-server --requirepass ${REDIS_PASSWORD:-dev_password}
     environment:
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_password}
     # Security: Do not expose Redis port to host. Only internal containers can access.
     # WARNING: Exposing Redis to the host or public network is a security risk. Use a strong password and restrict access if exposure is required.
     # expose:

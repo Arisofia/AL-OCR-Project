@@ -18,12 +18,16 @@ logger = logging.getLogger("ocr-service.redis")
 def get_redis_client(settings: Settings) -> redis.Redis:
     """
     Factory for creating an asynchronous Redis client based on settings.
-    This function initializes and returns a configured Redis client instance.
 
     This function takes application settings as input and returns an
     initialized Redis client. It uses environment variables as a fallback
     for the Redis host, port, database index, and password, if they are
     not provided in the application settings.
+
+    The returned Redis client is configured with the specified host,
+    port, database index, and password. The decode_responses parameter
+    is set to False to ensure that Redis responses are not decoded as
+    UTF-8 strings.
 
     Parameters:
         settings (Settings): The application settings.

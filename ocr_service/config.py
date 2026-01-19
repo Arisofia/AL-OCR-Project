@@ -1,6 +1,6 @@
 """
 Configuration module for the OCR service.
-# Tracing integration (if opentelemetry is available)
+
 This module defines the settings schema using Pydantic BaseSettings,
 supporting environment variable overrides and LRU caching for performance.
 """
