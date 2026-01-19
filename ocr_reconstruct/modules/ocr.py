@@ -6,6 +6,8 @@ import cv2
 import numpy as np
 import pytesseract  # type: ignore
 
+__all__ = ["image_to_text"]
+
 
 def image_to_text(
     img: np.ndarray, lang: str = "eng", psm: int = 6, oem: int = 3

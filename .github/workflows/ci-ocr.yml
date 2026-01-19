@@ -1,4 +1,4 @@
-name: "CI: Build, Lint & Test (Modernized)"
+name: "CI: Build, Lint & Test (Unified)"
 
 on:
   push:
@@ -6,13 +6,13 @@ on:
     paths:
       - "ocr_service/**"
       - "ocr_reconstruct/**"
-      - ".github/workflows/**"
+      - ".github/workflows/ci-ocr.yml"
   pull_request:
     branches: ["main", "master", "develop"]
     paths:
       - "ocr_service/**"
       - "ocr_reconstruct/**"
-      - ".github/workflows/**"
+      - ".github/workflows/ci-ocr.yml"
   workflow_dispatch: {}
 
 permissions:
@@ -31,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11"]
 
     steps:
       - name: Checkout Repository
@@ -43,8 +43,6 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
 
-      # 3. INSTALACIÓN DE DEPENDENCIAS DEL SISTEMA (CRÍTICO)
-      # Soluciona los errores de Tesseract no encontrado con PPA estable
       - name: Install System Dependencies (Tesseract 5 & Leptonica)
         run: |
           sudo apt-get update
@@ -66,30 +64,36 @@ jobs:
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
 
-      - name: Install Python Dependencies (with Headless Sanitization)
+      - name: Install Python Dependencies
         run: |
-          # 1. Install base requirements
-          if [ -f ocr_service/requirements.txt ]; then
-            pip install -r ocr_service/requirements.txt
+          # Use root requirements.txt
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
           fi
 
-          # 2. Install dev requirements
-          if [ -f requirements-dev.txt ]; then
-            pip install -r requirements-dev.txt
-          fi
-
-          # 3. Enforce Headless OpenCV to avoid GUI conflicts in CI
-          echo "Enforcing Headless OpenCV..."
+          # Enforce Headless OpenCV to avoid GUI conflicts in CI
           pip uninstall -y opencv-python opencv-contrib-python || true
           pip install opencv-python-headless
 
-          # 4. Install local packages
+          # Install local packages in editable mode
           pip install -e ./ocr_reconstruct
 
       - name: Run Linting and Formatting Check (ruff)
         run: |
           ruff check .
           ruff format --check .
+
+      - name: Run Security Scan (bandit)
+        run: |
+          bandit -c bandit.yaml -r ocr_service ocr_reconstruct -ll
+
+      - name: Run Dependency Audit (pip-audit)
+        run: |
+          if [ "${{ matrix.python-version }}" == "3.9" ]; then
+            pip-audit -r requirements.txt --allow-unfixed || true
+          else
+            pip-audit -r requirements.txt
+          fi
 
       - name: Run Type Checking (mypy)
         continue-on-error: true
@@ -106,8 +110,7 @@ jobs:
           OCR_API_KEY: ${{ secrets.OCR_API_KEY }}
         run: |
           # Run all tests with coverage
-          pytest --verbose --cov=ocr_service --cov=ocr_reconstruct \
-            --cov-report=xml
+          pytest --verbose --cov=ocr_service --cov=ocr_reconstruct --cov-report=xml
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5

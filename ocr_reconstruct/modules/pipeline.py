@@ -14,6 +14,8 @@ from .enhance import ImageEnhancer
 from .ocr import image_to_text
 from .reconstruct import PixelReconstructor
 
+__all__ = ["IterativeOCR", "process_bytes"]
+
 logger = logging.getLogger("ocr-reconstruct.pipeline")
 
 

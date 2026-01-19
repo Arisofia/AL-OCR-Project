@@ -16,6 +16,8 @@ from ocr_service.modules.learning_engine import LearningEngine
 from ocr_service.utils.drift_detection import check_for_drift
 from ocr_service.utils.validation import validate_ocr_batch
 
+__all__ = ["ALOrchestrator"]
+
 logger = logging.getLogger("ocr-service.al-orchestrator")
 
 

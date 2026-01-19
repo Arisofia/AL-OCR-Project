@@ -6,6 +6,15 @@ Provides the ImageEnhancer class and functional wrappers for image preprocessing
 import cv2
 import numpy as np
 
+__all__ = [
+    "ImageEnhancer",
+    "to_gray",
+    "sharpen",
+    "denoise",
+    "adaptive_threshold",
+    "upscale_and_smooth",
+]
+
 
 class ImageEnhancer:
     """

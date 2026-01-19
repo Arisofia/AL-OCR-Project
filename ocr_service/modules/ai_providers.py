@@ -221,12 +221,18 @@ class OpenAIVisionProvider(BaseVisionProvider):
             ) from e
 
 
-class GeminiVisionProvider(VisionProvider):
+class GeminiVisionProvider(BaseVisionProvider):
     """
     Implementation of VisionProvider using Google's Gemini Flash model.
     """
 
-    def __init__(self, api_key: str):
+    def __init__(
+        self,
+        api_key: str,
+        max_retries: int = 3,
+        client: Optional[httpx.AsyncClient] = None,
+    ):
+        super().__init__(max_retries=max_retries, client=client)
         self.api_key = api_key
 
     async def reconstruct(

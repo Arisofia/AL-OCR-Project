@@ -70,7 +70,7 @@ class AdvancedPixelReconstructor:
             )
         if self.settings.gemini_api_key:
             self.providers["gemini"] = GeminiVisionProvider(
-                self.settings.gemini_api_key
+                self.settings.gemini_api_key, client=self._client
             )
         if self.settings.hugging_face_hub_token:
             self.providers["huggingface"] = HuggingFaceVisionProvider(
