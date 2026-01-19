@@ -50,17 +50,20 @@ def _rate_limit_exceeded_handler_with_logging(
 ) -> JSONResponse:
     """Enhanced rate limit handler with structured logging and tracing."""
     with tracer.start_as_current_span("limiter.rate_limit_exceeded"):
-        logger.warning(
-            "Rate limit exceeded",
-            extra={
-                "path": request.url.path,
-                "remote_addr": get_remote_address(request),
-                "detail": str(exc),
-            },
-        )
+        # Only log once per event, avoid duplicate logs if wrapped
+        if not getattr(request.state, "rate_limit_logged", False):
+            logger.warning(
+                "Rate limit exceeded | Path: %s | IP: %s | Limit: %s",
+                request.url.path,
+                get_remote_address(request),
+                getattr(request.state, "rate_limit", "unknown"),
+            )
+            request.state.rate_limit_logged = True
         return JSONResponse(
             status_code=429,
-            content={"detail": "Rate limit exceeded"},
+            content={
+                "detail": "Rate limit exceeded. Please try again later.",
+            },
         )
 
 

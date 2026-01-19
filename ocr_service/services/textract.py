@@ -6,7 +6,8 @@ import logging
 import time
 from typing import Any, Optional, cast
 
-import boto3  # type: ignore
+import boto3
+from mypy_boto3_textract import TextractClient
 from botocore.config import Config  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
 from tenacity import (  # type: ignore
@@ -37,7 +38,7 @@ class TextractService:
 
         # Optimize botocore configuration for deterministic retry management
         config = Config(retries={"max_attempts": 1, "mode": "standard"})
-        self.client = boto3.client(
+        self.client: TextractClient = boto3.client(
             "textract",
             config=config,
             region_name=getattr(settings, "aws_region", "us-east-1"),
@@ -65,7 +66,7 @@ class TextractService:
             logger.error("Start detection failed after retries | RID: %s", request_id)
             return None
         except Exception as e:
-            logger.exception("Unexpected error in start_detection: %s", e)
+            logger.error("Non-retried exception in start_detection: %s", e)
             return None
 
     def analyze_document(
@@ -98,7 +99,7 @@ class TextractService:
             logger.error("Analyze document failed after retries | RID: %s", request_id)
             raise RuntimeError("Max retry threshold reached") from e
         except Exception as e:
-            logger.exception("Unexpected error in analyze_document: %s", e)
+            logger.error("Non-retried exception in analyze_document: %s", e)
             raise RuntimeError("Max retry threshold reached") from e
 
     def get_job_results(self, job_id: str) -> dict[str, Any]:

@@ -46,11 +46,16 @@ class OCRProcessor:
         """
         self._validate_file_type(file.content_type or "")
         contents = await file.read()
+        # Infer content_type from UploadFile or file signature
+        inferred_type = file.content_type
+        if not inferred_type and file.filename:
+            import mimetypes
+            inferred_type = mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
 
         return await self.process_bytes(
             contents=contents,
             filename=file.filename or "unknown",
-            content_type=file.content_type or "image/png",
+            content_type=inferred_type,
             reconstruct=reconstruct,
             advanced=advanced,
             doc_type=doc_type,
@@ -157,14 +162,17 @@ class OCRProcessor:
                 )
             )
 
-        upload_results = await asyncio.gather(*upload_tasks)
+        upload_results = await asyncio.gather(*upload_tasks, return_exceptions=True)
+        for res in upload_results:
+            if isinstance(res, Exception):
+                logger.error("Storage upload failed: %s", res)
+                raise HTTPException(status_code=500, detail="Failed to persist results to storage")
         return str(upload_results[0])
 
     def _handle_pipeline_failure(
         self, filename: str, request_id: str, error: Exception
     ):
         """Logs pipeline failures with context."""
-        logger.error("Pipeline failure for %s | Error: %s", filename, error)
         logger.error(
             "Pipeline failure | File: %s | RID: %s | Error: %s",
             filename,
