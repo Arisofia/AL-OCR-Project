@@ -18,11 +18,11 @@ RUN yum update -y && yum install -y \
 # Prepare build workspace and install Python tooling and dependencies in one step
 WORKDIR /build
 COPY ocr_reconstruct ./ocr_reconstruct
-COPY ocr_service/requirements.txt ./ocr_service/requirements.txt
+COPY requirements.txt ./requirements.txt
 
 RUN python -m pip install --no-cache-dir --upgrade pip==24.3.1 setuptools==75.6.0 wheel==0.45.1 && \
     pip install --prefix=/install --prefer-binary --no-cache-dir ./ocr_reconstruct && \
-    pip install --prefix=/install --prefer-binary --no-cache-dir -r ./ocr_service/requirements.txt
+    pip install --prefix=/install --prefer-binary --no-cache-dir -r ./requirements.txt
 
 # Stage 2: Final lightweight runtime image
 FROM public.ecr.aws/lambda/python:3.11
@@ -41,7 +41,7 @@ RUN yum update -y && yum install -y \
     rm -rf /var/cache/yum
 
 # Remove setuid/setgid bits for security compliance
-RUN chmod -R u-s,g-s /usr/bin /usr/sbin /bin /sbin || true
+RUN find /usr/bin /usr/sbin /bin /sbin -type f -perm /6000 -exec chmod u-s,g-s {} + || true
 
 # Copy installed packages from builder
 COPY --from=builder /install /var/lang

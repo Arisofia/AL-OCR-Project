@@ -4,12 +4,12 @@ name: "Terraform CI"
 on:
   pull_request:
     paths:
-      - 'terraform/**'
+      - "terraform/**"
   push:
     branches:
       - main
     paths:
-      - 'terraform/**'
+      - "terraform/**"
   workflow_dispatch:
 
 permissions:
@@ -33,7 +33,7 @@ jobs:
           aws-region: us-east-1
       - uses: hashicorp/setup-terraform@633666f66e0061ca3b725c73b2ec20cd13a8fdd1 # v2.0.3
         with:
-          terraform_version: '1.5.7'
+          terraform_version: "1.5.7"
       - name: Terraform Init
         run: terraform init -backend=false
       - name: Terraform Format Check
@@ -46,7 +46,7 @@ jobs:
           directory: terraform
           framework: terraform
           quiet: true
-          soft_fail: true  # Set to false to block PRs on security findings
+          soft_fail: true # Set to false to block PRs on security findings
       - name: Terraform Plan
         run: terraform plan
 
@@ -66,7 +66,7 @@ jobs:
           aws-region: us-east-1
       - uses: hashicorp/setup-terraform@633666f66e0061ca3b725c73b2ec20cd13a8fdd1 # v2.0.3
         with:
-          terraform_version: '1.5.7'
+          terraform_version: "1.5.7"
       - name: Terraform Init
         run: terraform init -backend=false
       - name: Terraform Apply

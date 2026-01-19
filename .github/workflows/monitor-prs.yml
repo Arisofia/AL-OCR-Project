@@ -1,8 +1,9 @@
+---
 name: Monitor Open PRs
 
 on:
   schedule:
-    - cron: '0 9 * * 1-5' # Run at 09:00 UTC Monday-Friday
+    - cron: "0 9 * * 1-5" # Run at 09:00 UTC Monday-Friday
   workflow_dispatch:
 
 permissions:

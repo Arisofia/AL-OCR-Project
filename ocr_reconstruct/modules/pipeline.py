@@ -121,13 +121,15 @@ class IterativeOCR:
                 if len(fb_text) > len(text):
                     text = fb_text
                     current = fb_img
-
+            
             # Step 3: Best result retention logic
             if len(text) > len(best_overall_text):
                 best_overall_text = text
 
-            # Step 4: Early exit strategy for high-confidence matches
-            if len(best_overall_text) > 20:
+            # Step 4: Early exit strategy
+            # If we didn't update 'current', next iteration will be identical.
+            # We break if we have decent text and didn't trigger feedback.
+            if len(text) >= 10:
                 break
 
         return best_overall_text.strip(), current, meta

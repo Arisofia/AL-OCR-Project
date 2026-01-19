@@ -1,3 +1,4 @@
+---
 name: Auto-request Reviewers
 
 on:
@@ -13,7 +14,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            // Use updated automation reviewers (codex replaces coderabbit)
+            // Use updated automation reviewers
             const reviewers = ['gemini-help', 'codex', 'openia'];
             const pr = context.payload.pull_request;
             if (!pr) {
@@ -21,7 +22,7 @@ jobs:
               return;
             }
             if (pr.draft) {
-              console.log(`PR #${pr.number} is a draft; skipping reviewer requests.`);
+              console.log(`PR #${pr.number} is a draft; skip reviewers.`);
               return;
             }
             const owner = context.repo.owner;
@@ -35,6 +36,6 @@ jobs:
               });
               console.log(`Requested reviewers: ${reviewers.join(', ')}`);
             } catch (err) {
-              // Logging and continue — invalid or non-collaborator reviewers will cause an error
-              console.log(`Warning: unable to request all reviewers: ${err.message}`);
+              // Logging and continue
+              console.log(`Warning: unable to request reviewers: ${err.message}`);
             }

@@ -10,9 +10,9 @@ readme = "README.md"
 authors = [ { name = "AL Project" } ]
 license = "MIT"
 dependencies = [
-    "opencv-python-headless",
+    "opencv-python-headless>=4.12.0",
     "pytesseract",
-    "numpy",
+    "numpy>=2.0.0",
     "pillow",
     "scikit-image",
     "scipy"

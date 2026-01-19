@@ -3,7 +3,8 @@ services:
     build:
       context: .
       dockerfile: ocr_service/Dockerfile
-    command: ["uvicorn", "ocr_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    command:
+      ["uvicorn", "ocr_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "8000:8000"
     environment:

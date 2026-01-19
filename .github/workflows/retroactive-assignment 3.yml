@@ -1,13 +1,12 @@
----
-name: "Manual: Mass-Assign Gemini to Open PRs"
+name: Manual: Mass-Assign Gemini to Open PRs
 
 on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Ejecutar en modo prueba (true/false)"
+        description: 'Ejecutar en modo prueba (true/false)'
         required: true
-        default: "false"
+        default: 'false'
 
 permissions:
   contents: read
@@ -28,49 +27,42 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           echo "=== Iniciando Protocolo de Asignación Masiva de Gemini ==="
-
-          # 1. Obtener lista de PRs abiertas
+          
           PR_LIST=$(gh pr list --state open --json number,title,author --limit 100)
-
-          # Verificar si hay PRs
+          
           COUNT=$(echo "$PR_LIST" | jq '. | length')
           if [ "$COUNT" -eq 0 ]; then
             echo "No se encontraron PRs abiertas. Abortando."
             exit 0
           fi
-
+          
           echo "Se encontraron $COUNT PRs abiertas para procesar."
-
-          # 2. Iterar sobre cada PR
+          
           echo "$PR_LIST" | jq -c '.[]' | while read -r pr; do
             PR_NUM=$(echo "$pr" | jq '.number')
             PR_TITLE=$(echo "$pr" | jq -r '.title')
             PR_AUTHOR=$(echo "$pr" | jq -r '.author.login')
-
+            
             echo "---------------------------------------------------"
             echo "Procesando PR #$PR_NUM: $PR_TITLE (Autor: @$PR_AUTHOR)"
-
+            
             if [ "$DRY_RUN" = "true" ]; then
               echo " [DRY RUN] Se habría asignado revisión a PR #$PR_NUM"
               continue
             fi
-
-            # 3. Acción de Asignación / Revisión
-            # A. Añadir etiqueta identificativa
+            
             gh pr edit "$PR_NUM" --add-label "gemini-reviewed"
-
-            # B. Publicar Comentario de "Asignación"
+            
             MSG="🤖 **Gemini AI Notification**
-
+            
             Hola @$PR_AUTHOR, esta PR ha sido seleccionada para una revisión automatizada retroactiva.
             Un análisis detallado será generado en breve."
-
+            
             gh pr comment "$PR_NUM" --body "$MSG"
-
+            
             echo "PR #$PR_NUM procesada exitosamente."
-
-            # Rate Limiting
+            
             sleep 2
           done
-
+          
           echo "=== Procesamiento Masivo Completado ==="

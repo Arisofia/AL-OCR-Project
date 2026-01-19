@@ -11,7 +11,7 @@
     "frontend:dev": "cd frontend && npm run dev",
     "frontend:build": "cd frontend && npm run build",
     "frontend:lint": "cd frontend && npm run lint",
-    "api:dev": "python serve_api.py",
+    "api:dev": "python -m ocr_service.main",
     "test:all": "pytest ocr_service/tests/ ocr_reconstruct/tests/",
     "lint:python": "ruff check .",
     "format:python": "ruff format ."

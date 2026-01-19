@@ -28,6 +28,9 @@ class Settings(BaseSettings):
         aws_region: AWS region for services.
         enable_reconstruction: Flag to enable pixel reconstruction.
         ocr_iterations: Number of OCR iterations to perform.
+        redis_host: Redis host address.
+        redis_port: Redis port number.
+        redis_db: Redis database index.
     """
 
     app_name: str = "AL Financial OCR Project"
@@ -47,6 +50,11 @@ class Settings(BaseSettings):
 
     enable_reconstruction: bool = False
     ocr_iterations: int = 3
+    
+    # Redis Configuration
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
 
     # Security and Environment
     environment: str = "development"

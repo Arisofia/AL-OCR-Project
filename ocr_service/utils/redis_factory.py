@@ -12,19 +12,9 @@ def get_redis_client(settings: Settings) -> redis.Redis:
     """
     Factory for creating an asynchronous Redis client based on settings.
     """
-    host = os.getenv(
-        "REDIS_HOST",
-        settings.redis_host if hasattr(settings, "redis_host") else "localhost",
-    )
-    port = int(
-        os.getenv(
-            "REDIS_PORT",
-            settings.redis_port if hasattr(settings, "redis_port") else 6379,
-        )
-    )
-    db = int(
-        os.getenv("REDIS_DB", settings.redis_db if hasattr(settings, "redis_db") else 0)
-    )
+    host = os.getenv("REDIS_HOST", settings.redis_host)
+    port = int(os.getenv("REDIS_PORT", str(settings.redis_port)))
+    db = int(os.getenv("REDIS_DB", str(settings.redis_db)))
 
     logger.info(
         "Initializing Redis client | Host: %s | Port: %d | DB: %d", host, port, db

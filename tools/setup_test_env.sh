@@ -32,7 +32,7 @@ if [ -n "${PYTHON_BIN}" ]; then
   PY_BIN="${VENV_DIR}/bin/python"
   PIP_BIN="${VENV_DIR}/bin/pip"
   "${PIP_BIN}" install --upgrade pip
-  "${PIP_BIN}" install -r "${SERVICE_DIR}/requirements.txt"
+  "${PIP_BIN}" install -r "${PROJECT_ROOT}/requirements.txt"
   "${PIP_BIN}" install -e "${PROJECT_ROOT}/ocr_reconstruct"
   "${PIP_BIN}" install pytest
   echo "Running pytest (local venv) from ${SERVICE_DIR}"
@@ -46,5 +46,5 @@ else
     exit 2
   fi
 
-  docker run --rm -v "${PROJECT_ROOT}":/app -w /app python:3.11 bash -lc "python -m pip install -U pip && python -m pip install -r ocr_service/requirements.txt pytest && python -m pip install -e ocr_reconstruct && PYTHONPATH=/app/ocr_service:/app python -m pytest -q"
+  docker run --rm -v "${PROJECT_ROOT}":/app -w /app python:3.11 bash -lc "python -m pip install -U pip && python -m pip install -r requirements.txt pytest && python -m pip install -e ocr_reconstruct && PYTHONPATH=/app/ocr_service:/app python -m pytest -q"
 fi

@@ -1,3 +1,4 @@
+---
 name: Gemini AI Code Reviewer
 
 on:
@@ -27,10 +28,8 @@ jobs:
           model: "gemini-1.5-pro"
           # Prompt engineering específico para el dominio
           custom_prompt: >
-            Actúa como un experto en OCR y Python. Revisa el código buscando:
-            1. Errores de lógica en procesamiento de imágenes.
-            2. Fugas de recursos en OpenCV/Tesseract.
-            3. Claridad y documentación.
-            4. Posibles mejoras de rendimiento.
-            Provee ejemplos de código corregido en formato markdown.
-            Responde siempre en Español.
+            Actúa como un experto en OCR y Python. Revisa el código buscando: 1.
+            Errores de lógica en procesamiento de imágenes. 2. Fugas de recursos
+            en OpenCV/Tesseract. 3. Claridad y documentación. 4. Posibles
+            mejoras de rendimiento. Provee ejemplos de código corregido en
+            formato markdown. Responde siempre en Español.
