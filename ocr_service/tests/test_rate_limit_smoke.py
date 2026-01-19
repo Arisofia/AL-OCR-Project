@@ -64,7 +64,10 @@ def test_rate_limit_smoke_triggers_handler():
         )
         assert "detail" in rate_limited_response.json()
         # Validate the handler-specific payload (adjust if message changes)
-        assert rate_limited_response.json().get("detail") == "Rate limit exceeded. Please try again later."
+        expected_message = "Rate limit exceeded. Please try again later."
+        assert (
+            rate_limited_response.json().get("detail") == expected_message
+        )
 
         # Assert our enhanced handler logged the rate limiting occurrence
         _verify_log_emission(mock_logger, "/presign")
