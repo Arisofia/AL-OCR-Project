@@ -113,9 +113,11 @@ jobs:
 
       - name: Check for Security Best Practices
         run: |
-          echo "Checking for exposed secrets in containers..."
-          docker-compose exec -T api env | grep -i "key\|secret\|password" \
-            || echo "No obvious secrets found in API container env"
+          echo "Checking for presence of sensitive environment variables..."
+          # Check if sensitive env vars are set without displaying values
+          docker-compose exec -T api printenv | grep -c "KEY\|SECRET\|PASSWORD" \
+            && echo "⚠️ Found environment variables with sensitive names" \
+            || echo "✅ No obvious sensitive environment variables found"
       - name: Scan Running Containers with Trivy
         run: |
           for container in $(docker-compose ps -q); do

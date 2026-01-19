@@ -67,6 +67,7 @@ jobs:
 
       - name: Security Audit with pip-audit
         run: |
+          pip install pip-audit
           pip-audit --desc --skip-editable
         continue-on-error: true
 

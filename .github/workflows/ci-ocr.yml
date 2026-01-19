@@ -53,6 +53,7 @@ jobs:
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
       - name: Security Audit with pip-audit
         run: |
+          pip install pip-audit
           pip-audit --desc --skip-editable
         continue-on-error: true
       - name: Secret Scanning with gitleaks
