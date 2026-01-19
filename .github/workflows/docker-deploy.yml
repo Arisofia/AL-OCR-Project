@@ -95,9 +95,9 @@ jobs:
             -t $TAG --load -f ./ocr_service/Dockerfile \
             --cache-from type=gha --cache-to type=gha,mode=max .
 
-      # aquasecurity/trivy-action 0.33.1
+      # aquasecurity/trivy-action v0.9.2
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.9.2
         with:
           image-ref: al-ocr_service:${{ github.sha }}
           format: table
