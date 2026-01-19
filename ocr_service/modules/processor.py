@@ -14,6 +14,8 @@ from ocr_service.services.storage import StorageService
 
 from .ocr_engine import IterativeOCREngine
 
+__all__ = ["OCRProcessor"]
+
 logger = logging.getLogger("ocr-service.processor")
 
 
@@ -25,6 +27,10 @@ class OCRProcessor:
     def __init__(self, ocr_engine: IterativeOCREngine, storage_service: StorageService):
         self.ocr_engine = ocr_engine
         self.storage_service = storage_service
+
+    async def close(self) -> None:
+        """Cleanup processor resources."""
+        await self.ocr_engine.close()
 
     async def process_file(
         self,

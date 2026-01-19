@@ -15,6 +15,8 @@ from supabase import Client, create_client
 
 from ocr_service.config import get_settings
 
+__all__ = ["LearningEngine"]
+
 logger = logging.getLogger("ocr-service.learning")
 
 

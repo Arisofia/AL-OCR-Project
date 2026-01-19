@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional, cast
 
 import cv2
+import httpx
 import numpy as np
 import pytesseract  # type: ignore
 
@@ -23,6 +24,8 @@ from .image_toolkit import ImageToolkit
 from .layout import DocumentLayoutAnalyzer
 from .learning_engine import LearningEngine
 from .ocr_config import EngineConfig, TesseractConfig
+
+__all__ = ["DocumentContext", "DocumentProcessor", "IterativeOCREngine"]
 
 logger = logging.getLogger("ocr-service.engine")
 
@@ -164,8 +167,10 @@ class IterativeOCREngine:
         learning_engine: Optional[LearningEngine] = None,
         confidence_scorer: Optional[ConfidenceScorer] = None,
         ocr_config: Optional[TesseractConfig] = None,
+        client: Optional[httpx.AsyncClient] = None,
     ):
         self.config = config or EngineConfig()
+        self._client = client
         self.processor = DocumentProcessor(
             enhancer=enhancer or ImageEnhancer(),
             ocr_config=ocr_config or TesseractConfig(),
@@ -176,12 +181,16 @@ class IterativeOCREngine:
                 else None
             ),
         )
-        self.advanced_reconstructor = (
-            advanced_reconstructor or AdvancedPixelReconstructor()
+        self.advanced_reconstructor = advanced_reconstructor or AdvancedPixelReconstructor(
+            client=self._client
         )
         self.learning_engine = learning_engine or LearningEngine()
         self.confidence_scorer = confidence_scorer or ConfidenceScorer()
         self._background_tasks: set[asyncio.Task] = set()
+
+    async def close(self) -> None:
+        """Cleanup engine resources."""
+        await self.advanced_reconstructor.close()
 
     async def process_image(
         self, image_bytes: bytes, use_reconstruction: bool = False

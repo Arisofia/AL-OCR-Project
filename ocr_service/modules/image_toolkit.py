@@ -11,6 +11,8 @@ from typing import Any, Optional
 import cv2
 import numpy as np
 
+__all__ = ["ImageToolkit"]
+
 logger = logging.getLogger("ocr-service.image-toolkit")
 
 

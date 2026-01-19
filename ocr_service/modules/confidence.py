@@ -5,6 +5,8 @@ Logic for calculating OCR confidence scores based on text analysis.
 import re
 from typing import Optional
 
+__all__ = ["ConfidenceScorer"]
+
 
 class ConfidenceScorer:
     """

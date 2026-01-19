@@ -9,6 +9,8 @@ from typing import Any, cast
 import cv2
 import numpy as np
 
+__all__ = ["DocumentLayoutAnalyzer"]
+
 logger = logging.getLogger("ocr-service.layout")
 
 

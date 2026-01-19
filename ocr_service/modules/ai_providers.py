@@ -1,3 +1,10 @@
+"""
+AI Provider implementations for document intelligence.
+Provides vision-based reconstruction using multiple vendors (OpenAI, Google).
+"""
+
+# pylint: disable=broad-except,too-few-public-methods
+
 import asyncio
 import base64
 import logging
@@ -5,6 +12,17 @@ from abc import ABC, abstractmethod
 from typing import Any, Optional, Union, cast
 
 import httpx
+
+__all__ = [
+    "AIProviderError",
+    "ProviderConfigError",
+    "ProviderRuntimeError",
+    "VisionProvider",
+    "BaseVisionProvider",
+    "OpenAIVisionProvider",
+    "GeminiVisionProvider",
+    "HuggingFaceVisionProvider",
+]
 
 logger = logging.getLogger("ocr-service.ai-providers")
 
@@ -31,7 +49,9 @@ class VisionProvider(ABC):
     """
 
     @abstractmethod
-    async def reconstruct(self, image_bytes: bytes, prompt: str) -> dict[str, Any]:
+    async def reconstruct(
+        self, image_bytes: bytes, prompt: str
+    ) -> dict[str, Any]:
         """
         Processes an image with a prompt to reconstruct or analyze content.
         Raises AIProviderError on failure.
@@ -40,11 +60,25 @@ class VisionProvider(ABC):
 
 class BaseVisionProvider(VisionProvider, ABC):
     """
-    Base class providing common utilities for VisionProviders, such as retries.
+    Base class providing common utilities for VisionProviders.
     """
 
-    def __init__(self, max_retries: int = 3):
+    def __init__(self, max_retries: int = 3, client: Optional[httpx.AsyncClient] = None):
         self.max_retries = max_retries
+        self._client = client
+        self._own_client = False
+
+    async def close(self) -> None:
+        """Closes the HTTP client if it was created by this provider."""
+        if self._own_client and self._client:
+            await self._client.aclose()
+            self._client = None
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None:
+            self._client = httpx.AsyncClient()
+            self._own_client = True
+        return self._client
 
     async def _request_with_retry(
         self,
@@ -55,28 +89,31 @@ class BaseVisionProvider(VisionProvider, ABC):
         timeout: float = 60.0,
     ) -> Union[dict[str, Any], list[Any]]:
         """
-        Internal helper to perform HTTP requests with exponential backoff on 429s.
+        Internal helper to perform HTTP requests with exponential backoff.
         """
+        client = await self._get_client()
         attempt = 0
         while attempt < self.max_retries:
-            async with httpx.AsyncClient() as client:
-                try:
-                    response = await client.request(
-                        method,
-                        url,
-                        headers=headers,
-                        json=json_payload,
-                        timeout=timeout,
-                    )
-                except httpx.HTTPError as e:
-                    logger.error("HTTP error on attempt %s: %s", attempt + 1, e)
-                    if attempt == self.max_retries - 1:
-                        raise ProviderRuntimeError(
-                            f"HTTP error after {self.max_retries} attempts: {e}"
-                        ) from e
-                    attempt += 1
-                    await asyncio.sleep(2**attempt)
-                    continue
+            try:
+                response = await client.request(
+                    method,
+                    url,
+                    headers=headers,
+                    json=json_payload,
+                    timeout=timeout,
+                )
+            except httpx.HTTPError as e:
+                logger.error(
+                    "HTTP error on attempt %s: %s", attempt + 1, e
+                )
+                if attempt == self.max_retries - 1:
+                    raise ProviderRuntimeError(
+                        f"HTTP error after {self.max_retries} "
+                        f"attempts: {e}"
+                    ) from e
+                attempt += 1
+                await asyncio.sleep(2**attempt)
+                continue
 
             if response.status_code == 429:
                 backoff = 2**attempt
@@ -90,7 +127,9 @@ class BaseVisionProvider(VisionProvider, ABC):
                 return cast(Union[dict[str, Any], list[Any]], response.json())
             except httpx.HTTPStatusError as e:
                 response_body = self._get_response_body(e)
-                logger.error("HTTP status error: %s | body: %s", e, response_body)
+                logger.error(
+                    "HTTP status error: %s | body: %s", e, response_body
+                )
                 raise ProviderRuntimeError(
                     f"HTTP status error: {e.response.status_code}",
                     details={
@@ -107,10 +146,10 @@ class BaseVisionProvider(VisionProvider, ABC):
         if resp is not None:
             try:
                 return resp.json()
-            except Exception:
+            except Exception:  # noqa: BLE001
                 try:
                     return resp.text
-                except Exception:
+                except Exception:  # noqa: BLE001
                     return None
         return None
 
@@ -120,11 +159,18 @@ class OpenAIVisionProvider(BaseVisionProvider):
     Implementation of VisionProvider using OpenAI's GPT-4o model.
     """
 
-    def __init__(self, api_key: str, max_retries: int = 3):
-        super().__init__(max_retries=max_retries)
+    def __init__(
+        self,
+        api_key: str,
+        max_retries: int = 3,
+        client: Optional[httpx.AsyncClient] = None,
+    ):
+        super().__init__(max_retries=max_retries, client=client)
         self.api_key = api_key
 
-    async def reconstruct(self, image_bytes: bytes, prompt: str) -> dict[str, Any]:
+    async def reconstruct(
+        self, image_bytes: bytes, prompt: str
+    ) -> dict[str, Any]:
         """
         Sends an image to OpenAI for reconstruction.
         """
@@ -159,7 +205,9 @@ class OpenAIVisionProvider(BaseVisionProvider):
         )
 
         if not isinstance(data, dict):
-            raise ProviderRuntimeError("Unexpected response format from OpenAI")
+            raise ProviderRuntimeError(
+                "Unexpected response format from OpenAI"
+            )
 
         try:
             return {
@@ -168,7 +216,9 @@ class OpenAIVisionProvider(BaseVisionProvider):
             }
         except (KeyError, IndexError) as e:
             logger.error("OpenAI response parsing failed: %s", e)
-            raise ProviderRuntimeError("Failed to parse OpenAI response") from e
+            raise ProviderRuntimeError(
+                "Failed to parse OpenAI response"
+            ) from e
 
 
 class GeminiVisionProvider(VisionProvider):
@@ -179,7 +229,9 @@ class GeminiVisionProvider(VisionProvider):
     def __init__(self, api_key: str):
         self.api_key = api_key
 
-    async def reconstruct(self, image_bytes: bytes, prompt: str) -> dict[str, Any]:
+    async def reconstruct(
+        self, image_bytes: bytes, prompt: str
+    ) -> dict[str, Any]:
         """
         Sends an image to Gemini for reconstruction.
         """
@@ -189,16 +241,20 @@ class GeminiVisionProvider(VisionProvider):
             genai.configure(api_key=self.api_key)
             model = genai.GenerativeModel("gemini-1.5-flash")
             image_part = {"mime_type": "image/jpeg", "data": image_bytes}
-            # Cast to Any to satisfy mypy's confusion over list of disparate collections
-            response = await model.generate_content_async([prompt, image_part])  # type: ignore[arg-type]
+            # Cast to Any to satisfy mypy
+            response = await model.generate_content_async(
+                [prompt, image_part]  # type: ignore[arg-type]
+            )
             return {"text": response.text, "model": "gemini-1.5-flash"}
         except ImportError as e:
             logger.error("google-generativeai package not installed")
             raise ProviderConfigError("Gemini package missing") from e
         except AttributeError as e:
             logger.error("Gemini Vision response parsing failed: %s", e)
-            raise ProviderRuntimeError("Invalid response structure from Gemini") from e
-        except Exception as e:
+            raise ProviderRuntimeError(
+                "Invalid response structure from Gemini"
+            ) from e
+        except Exception as e:  # noqa: BLE001
             logger.error("Gemini Vision unexpected error: %s", e)
             raise ProviderRuntimeError(str(e)) from e
 
@@ -213,12 +269,15 @@ class HuggingFaceVisionProvider(BaseVisionProvider):
         token: str,
         model: str = "runwayml/stable-diffusion-v1-5",
         max_retries: int = 3,
+        client: Optional[httpx.AsyncClient] = None,
     ):
-        super().__init__(max_retries=max_retries)
+        super().__init__(max_retries=max_retries, client=client)
         self.token = token
         self.model = model
 
-    async def reconstruct(self, image_bytes: bytes, prompt: str) -> dict[str, Any]:
+    async def reconstruct(
+        self, image_bytes: bytes, prompt: str
+    ) -> dict[str, Any]:
         base64_image = base64.b64encode(image_bytes).decode("utf-8")
         headers = {
             "Content-Type": "application/json",
@@ -241,7 +300,9 @@ class HuggingFaceVisionProvider(BaseVisionProvider):
             text = None
             if isinstance(data, dict):
                 text = (
-                    data.get("generated_text") or data.get("text") or data.get("result")
+                    data.get("generated_text")
+                    or data.get("text")
+                    or data.get("result")
                 )
             elif isinstance(data, list) and data:
                 first = data[0]
@@ -258,6 +319,8 @@ class HuggingFaceVisionProvider(BaseVisionProvider):
                 text = str(data)
 
             return {"text": text, "model": self.model}
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("HuggingFace response parsing failed: %s", e)
-            raise ProviderRuntimeError(f"Unexpected response format: {e}") from e
+            raise ProviderRuntimeError(
+                f"Unexpected response format: {e}"
+            ) from e
