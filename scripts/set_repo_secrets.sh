@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-set -euo pipefail
+
+set -uo pipefail  # Do not use -e so we can handle errors explicitly
 
 # Usage: ./scripts/set_repo_secrets.sh owner/repo
 # Requires: GH CLI authenticated (gh auth login)
@@ -19,14 +20,25 @@ declare -A secrets=(
 
 echo "Setting secrets for repo: $REPO"
 
+
+fail=0
 for NAME in "${!secrets[@]}"; do
   VAL=${secrets[$NAME]}
   if [ -z "$VAL" ]; then
-    echo "Secret $NAME is empty or not set in environment; skipping (you can set manually via GH UI or export and re-run)."
+    echo "ERROR: Secret $NAME is required but not set in environment." >&2
+    fail=1
     continue
   fi
   echo "Setting secret: $NAME"
-  gh secret set "$NAME" --repo "$REPO" --body "$VAL"
+  if ! gh secret set "$NAME" --repo "$REPO" --body "$VAL"; then
+    echo "ERROR: Failed to set secret $NAME" >&2
+    fail=1
+  fi
 done
+
+if [ $fail -ne 0 ]; then
+  echo "One or more required secrets were not set. Exiting with error." >&2
+  exit 1
+fi
 
 echo "Done. Verify in GitHub repo settings -> Secrets & variables -> Actions."

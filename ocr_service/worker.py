@@ -69,7 +69,12 @@ class RedisWorker:
             return
 
         try:
-            job_data = json.loads(job_data_raw.decode("utf-8"))
+            try:
+                job_data = json.loads(job_data_raw.decode("utf-8"))
+            except json.JSONDecodeError as jde:
+                logger.error("JSON decode error for job %s: %s", job_id, jde)
+                await self._handle_job_failure(job_key, job_id, jde)
+                return
 
             # Update status to PROCESSING
             job_data["status"] = "PROCESSING"
