@@ -1,6 +1,10 @@
 ---
 name: Model-Training-Workflow
 on: [push]
+
+permissions:
+  contents: read
+
 jobs:
   run:
     runs-on: ubuntu-22.04
