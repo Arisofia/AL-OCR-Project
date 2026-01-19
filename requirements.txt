@@ -1,6 +1,6 @@
 bandit==1.8.6
 boto3==1.35.77
-mypy-boto3-textract==1.35.77
+mypy-boto3-textract==1.41.0
 mypy-boto3-s3==1.35.77
 boto3-stubs[textract,s3]==1.35.77
 dvc[s3]==3.59.0
