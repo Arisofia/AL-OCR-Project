@@ -8,7 +8,7 @@ on:
         type: string
 jobs:
   assign-reviewers:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Assign reviewers
         uses: actions/github-script@v7
