@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     version: str = "1.2.0"
 
     ocr_api_key: str = Field(
-        "default_secret_key", description="Secret key for OCR authentication"
+        ..., description="Secret key for OCR authentication"
     )
     api_key_header_name: str = "X-API-KEY"
 
@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     al_cycle_samples: int = 50
     al_n_clusters: int = 5
 
-    @field_validator("allowed_origins")
+    @field_validator("allowed_origins", mode="after")
     @classmethod
     def validate_origins(cls, v: list[str], info) -> list[str]:
         """Ensures that wildcards are not used for CORS in production."""
@@ -96,9 +96,26 @@ class Settings(BaseSettings):
     )
 
 
+
+# Tracing integration (if opentelemetry is available)
+try:
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+    tracer_provider = TracerProvider()
+    trace.set_tracer_provider(tracer_provider)
+    tracer = trace.get_tracer(__name__)
+    tracer_provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+except ImportError:
+    tracer = None
+
 @lru_cache
 def get_settings() -> Settings:
     """
     Returns a cached instance of the application settings.
     """
-    return Settings()  # type: ignore[call-arg]
+    if tracer:
+        with tracer.start_as_current_span("load_settings"):
+            return Settings()  # type: ignore[call-arg]
+    else:
+        return Settings()  # type: ignore[call-arg]

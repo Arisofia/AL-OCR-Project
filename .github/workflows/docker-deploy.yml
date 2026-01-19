@@ -57,6 +57,7 @@ jobs:
         with:
           dockerfile: ocr_service/Dockerfile
           ignore: DL3033,DL3032,DL3059
+        continue-on-error: false
 
       - name: Run Ruff (check & format)
         run: |

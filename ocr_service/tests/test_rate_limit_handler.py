@@ -42,7 +42,7 @@ def test_rate_limit_handler_response_and_logging(monkeypatch):
 
     assert resp.status_code == 429
     data = json.loads(resp.body)
-    assert data.get("detail") == "Rate limit exceeded"
+    assert data.get("detail") == "Rate limit exceeded. Please try again later."
 
     # Ensure structured log was emitted with expected payload
     mock.warning.assert_called()
@@ -94,7 +94,7 @@ def test_rate_limit_handler_response_shape(monkeypatch):
     import json
 
     assert response.status_code == 429
-    assert json.loads(response.body) == {"detail": "Rate limit exceeded"}
+    assert json.loads(response.body) == {"detail": "Rate limit exceeded. Please try again later."}
 
     # Confirm the original message was logged in the structured extra
     mock_logger.warning.assert_called()

@@ -3,8 +3,10 @@ FROM node:20-slim AS build
 
 WORKDIR /app
 
+
 COPY package*.json ./
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+RUN if [ -f package-lock.json ]; then npm ci; fi
+RUN if [ ! -f package-lock.json ]; then npm install; fi
 
 COPY . .
 # Vite will pick up .env.production automatically during build

@@ -30,6 +30,7 @@ services:
   redis:
     image: "redis:alpine"
     # Security: Do not expose Redis port to host. Only internal containers can access.
+    # WARNING: Exposing Redis to the host or public network is a security risk. Use a strong password and restrict access if exposure is required.
     # expose:
     #   - "6379"
 

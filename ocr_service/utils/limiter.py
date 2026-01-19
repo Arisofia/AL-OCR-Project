@@ -52,11 +52,18 @@ def _rate_limit_exceeded_handler_with_logging(
     with tracer.start_as_current_span("limiter.rate_limit_exceeded"):
         # Only log once per event, avoid duplicate logs if wrapped
         if not getattr(request.state, "rate_limit_logged", False):
+            limit = getattr(request.state, "rate_limit", "unknown")
             logger.warning(
                 "Rate limit exceeded | Path: %s | IP: %s | Limit: %s",
                 request.url.path,
                 get_remote_address(request),
-                getattr(request.state, "rate_limit", "unknown"),
+                limit,
+                extra={
+                    "path": request.url.path,
+                    "ip": get_remote_address(request),
+                    "limit": limit,
+                    "detail": str(exc),
+                },
             )
             request.state.rate_limit_logged = True
         return JSONResponse(
