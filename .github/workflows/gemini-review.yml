@@ -20,7 +20,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: AI Code Review
-        uses: rubensflinco/gemini-code-review-action@v1.0.5
+        uses: rubensflinco/gemini-code-review-action@v1.0.4
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
