@@ -127,6 +127,4 @@ jobs:
         run: |
           REGISTRY=${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
           IMAGE_URI=${REGISTRY}/al-ocr_service:${{ github.sha }}
-          aws lambda update-function-code \
-            --function-name "$LAMBDA_FUNCTION_NAME" \
-            --image-uri "$IMAGE_URI"
+          aws lambda update-function-code --function-name "$LAMBDA_FUNCTION_NAME" --image-uri "$IMAGE_URI"

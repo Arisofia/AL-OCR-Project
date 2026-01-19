@@ -345,7 +345,7 @@ class IterativeOCREngine:
         return resp
 
     def _schedule_learning(self, doc_type: str, model: str, layout: str, score: float):
-        """Schedules background task for learning."""
+        """Schedules background task for learning and logs errors."""
         task = asyncio.create_task(
             self.learning_engine.learn_from_result(
                 doc_type=doc_type,
@@ -358,4 +358,12 @@ class IterativeOCREngine:
             )
         )
         self._background_tasks.add(task)
-        task.add_done_callback(self._background_tasks.discard)
+        def _log_task_error(t):
+            try:
+                exc = t.exception()
+                if exc:
+                    logger.error("Background learning task failed: %s", exc)
+            except Exception as e:
+                logger.error("Error checking background task: %s", e)
+            self._background_tasks.discard(t)
+        task.add_done_callback(_log_task_error)
