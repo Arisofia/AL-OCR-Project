@@ -1,0 +1,79 @@
+{
+  "name": "AL-OCR-Project",
+  "description": "Sophisticated Fintech OCR System for financial document intelligence",
+  "repository": "https://github.com/Arisofia/AL-OCR-Project",
+  "logo": "https://raw.githubusercontent.com/Arisofia/AL-OCR-Project/main/docs/logo.png",
+  "keywords": [
+    "ocr",
+    "fintech",
+    "fastapi",
+    "react",
+    "aws",
+    "textract",
+    "machine-learning"
+  ],
+  "env": {
+    "ENVIRONMENT": {
+      "description": "Application environment (development, staging, production)",
+      "value": "production",
+      "required": true
+    },
+    "OCR_API_KEY": {
+      "description": "API key for OCR service authentication",
+      "required": true
+    },
+    "VITE_API_KEY": {
+      "description": "API key for frontend API authentication",
+      "required": true
+    },
+    "REDIS_PASSWORD": {
+      "description": "Redis password for cache authentication",
+      "required": true
+    },
+    "AWS_ACCESS_KEY_ID": {
+      "description": "AWS access key ID for S3 and Textract services",
+      "required": false
+    },
+    "AWS_SECRET_ACCESS_KEY": {
+      "description": "AWS secret access key for S3 and Textract services",
+      "required": false
+    },
+    "AWS_REGION": {
+      "description": "AWS region for S3 and Textract services",
+      "value": "us-east-1",
+      "required": false
+    },
+    "DATABASE_URL": {
+      "description": "PostgreSQL database connection URL",
+      "required": false
+    },
+    "SENTRY_DSN": {
+      "description": "Sentry DSN for error tracking",
+      "required": false
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "standard-1x"
+    },
+    "worker": {
+      "quantity": 1,
+      "size": "standard-1x"
+    }
+  },
+  "addons": [
+    "heroku-postgresql:hobby-dev",
+    "heroku-redis:hobby-dev"
+  ],
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    },
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  "stack": "heroku-22",
+  "image": "heroku/python"
+}
