@@ -11,9 +11,8 @@ import logging
 from typing import Any, Optional
 
 import httpx
-from ocr_service.config import get_settings
 
-__all__ = ["AdvancedPixelReconstructor"]
+from ocr_service.config import get_settings
 
 from .ai_providers import (
     AIProviderError,
@@ -23,6 +22,8 @@ from .ai_providers import (
     OpenAIVisionProvider,
     VisionProvider,
 )
+
+__all__ = ["AdvancedPixelReconstructor"]
 
 logger = logging.getLogger("ocr-service.advanced-recon")
 
@@ -164,7 +165,7 @@ class AdvancedPixelReconstructor:
                 return await provider.reconstruct(image_bytes, prompt)
             except AIProviderError as e:
                 logger.warning("Fallback to %s failed: %s", name, e)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.error("Unexpected fallback failure in %s: %s", name, e)
 
         return {"error": "All AI providers failed"}

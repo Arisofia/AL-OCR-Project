@@ -15,13 +15,13 @@ import httpx
 
 __all__ = [
     "AIProviderError",
+    "BaseVisionProvider",
+    "GeminiVisionProvider",
+    "HuggingFaceVisionProvider",
+    "OpenAIVisionProvider",
     "ProviderConfigError",
     "ProviderRuntimeError",
     "VisionProvider",
-    "BaseVisionProvider",
-    "OpenAIVisionProvider",
-    "GeminiVisionProvider",
-    "HuggingFaceVisionProvider",
 ]
 
 logger = logging.getLogger("ocr-service.ai-providers")
@@ -63,7 +63,9 @@ class BaseVisionProvider(VisionProvider, ABC):
     Base class providing common utilities for VisionProviders.
     """
 
-    def __init__(self, max_retries: int = 3, client: Optional[httpx.AsyncClient] = None):
+    def __init__(
+        self, max_retries: int = 3, client: Optional[httpx.AsyncClient] = None
+    ):
         self.max_retries = max_retries
         self._client = client
         self._own_client = False
@@ -146,10 +148,10 @@ class BaseVisionProvider(VisionProvider, ABC):
         if resp is not None:
             try:
                 return resp.json()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 try:
                     return resp.text
-                except Exception:  # noqa: BLE001
+                except Exception:
                     return None
         return None
 
@@ -260,7 +262,7 @@ class GeminiVisionProvider(BaseVisionProvider):
             raise ProviderRuntimeError(
                 "Invalid response structure from Gemini"
             ) from e
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error("Gemini Vision unexpected error: %s", e)
             raise ProviderRuntimeError(str(e)) from e
 
@@ -325,7 +327,7 @@ class HuggingFaceVisionProvider(BaseVisionProvider):
                 text = str(data)
 
             return {"text": text, "model": self.model}
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error("HuggingFace response parsing failed: %s", e)
             raise ProviderRuntimeError(
                 f"Unexpected response format: {e}"

@@ -181,8 +181,8 @@ class IterativeOCREngine:
                 else None
             ),
         )
-        self.advanced_reconstructor = advanced_reconstructor or AdvancedPixelReconstructor(
-            client=self._client
+        self.advanced_reconstructor = (
+            advanced_reconstructor or AdvancedPixelReconstructor(client=self._client)
         )
         self.learning_engine = learning_engine or LearningEngine()
         self.confidence_scorer = confidence_scorer or ConfidenceScorer()
