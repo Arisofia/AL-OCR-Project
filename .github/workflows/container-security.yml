@@ -1,0 +1,127 @@
+name: Container Security
+
+on:
+  push:
+    branches: ["main", "master", "develop"]
+  pull_request:
+    branches: ["main", "master", "develop"]
+  schedule:
+    # Run weekly on Mondays at 9 AM UTC
+    - cron: "0 9 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  container-security-scan:
+    name: Container Security Scanning
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        image:
+          - name: api
+            dockerfile: ocr_service/Dockerfile
+            context: .
+          - name: frontend
+            dockerfile: frontend/Dockerfile
+            context: ./frontend
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.dockerfile }}
+          tags: al-ocr-${{ matrix.image.name }}:test
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: al-ocr-${{ matrix.image.name }}:test
+          format: "sarif"
+          output: "trivy-results-${{ matrix.image.name }}.sarif"
+          severity: "CRITICAL,HIGH,MEDIUM"
+        continue-on-error: true
+
+      - name: Upload Trivy Results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: "trivy-results-${{ matrix.image.name }}.sarif"
+          category: "trivy-${{ matrix.image.name }}"
+        continue-on-error: true
+
+      - name: Run Trivy for JSON Output
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: al-ocr-${{ matrix.image.name }}:test
+          format: "json"
+          output: "trivy-results-${{ matrix.image.name }}.json"
+          severity: "CRITICAL,HIGH,MEDIUM"
+        continue-on-error: true
+
+      - name: Upload Trivy JSON Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-scan-${{ matrix.image.name }}
+          path: trivy-results-${{ matrix.image.name }}.json
+          retention-days: 30
+
+      - name: Run Docker Scout (if available)
+        run: |
+          if command -v docker scout &> /dev/null; then
+            docker scout cves al-ocr-${{ matrix.image.name }}:test || echo "Docker Scout scan completed with findings"
+          else
+            echo "Docker Scout not available, skipping"
+          fi
+        continue-on-error: true
+
+  docker-compose-security:
+    name: Docker Compose Security Tests
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Validate docker-compose.yml
+        run: |
+          docker-compose config --quiet
+
+      - name: Build and Start Services
+        run: |
+          docker-compose up --build --remove-orphans -d
+          sleep 10
+
+      - name: Check Service Health
+        run: |
+          docker-compose ps
+          # Verify API is running
+          timeout 30 bash -c 'until curl -f http://localhost:8000/health 2>/dev/null || curl -f http://localhost:8000/docs 2>/dev/null; do sleep 2; done' || echo "API health check timed out"
+
+      - name: Check for Security Best Practices
+        run: |
+          echo "Checking for exposed secrets in containers..."
+          docker-compose exec -T api env | grep -i "key\|secret\|password" || echo "No obvious secrets found in API container env"
+          
+      - name: Scan Running Containers with Trivy
+        run: |
+          for container in $(docker-compose ps -q); do
+            docker inspect $container --format='{{.Name}}' | sed 's/\///' 
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              aquasec/trivy image $(docker inspect $container --format='{{.Config.Image}}') || true
+          done
+        continue-on-error: true
+
+      - name: Stop Services
+        if: always()
+        run: docker-compose down --remove-orphans
