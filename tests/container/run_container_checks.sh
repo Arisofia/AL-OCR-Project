@@ -12,19 +12,25 @@ if [ -z "$UID_OUT" ]; then
   echo "[CI] ERROR: Could not determine UID inside container." >&2
   exit 2
 fi
-if [ "$UID_OUT" -eq 0 ]; then
-  echo "[CI] ERROR: Container is running as root (UID 0)." >&2
-  exit 2
-fi
+  if ! [[ "$UID_OUT" =~ ^[0-9]+$ ]]; then
+    echo "[CI] UID_OUT is not numeric: $UID_OUT"
+    exit 1
+  fi
+  if [ "$UID_OUT" -eq 0 ]; then
+    echo "[CI] Container runs as root (UID 0) — FAIL"
+    exit 1
+  fi
+  echo "[CI] UID inside container: $UID_OUT (OK)"
+  # For debugging startup failures, remove --rm to inspect the container after exit.
 echo "[CI] UID inside container: $UID_OUT (OK)"
 
 # 2) /tmp write
 echo "[CI] Verifying /tmp write permissions..."
 WRITE_OUT=$(docker run --rm --entrypoint '' "$IMAGE" sh -c 'sh -c "echo ok >/tmp/ci_test.txt && stat -c "%U:%G" /tmp/ci_test.txt"' || true)
-if [ -z "$WRITE_OUT" ]; then
-  echo "[CI] ERROR: Unable to write/read /tmp inside container." >&2
-  exit 2
-fi
+  if [ -z "$WRITE_OUT" ]; then
+    echo "[CI] ERROR: Unable to write/read /tmp inside container." >&2
+    exit 2
+  fi
 echo "[CI] /tmp owner: $WRITE_OUT"
 
 # 3) Health endpoint

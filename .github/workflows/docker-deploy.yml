@@ -45,7 +45,7 @@ jobs:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
       - name: Run Checkov Security Scan (Docker context)
-        uses: bridgecrewio/checkov-action@master
+        uses: bridgecrewio/checkov-action@v12.0.0
         with:
           directory: ./ocr_service
           framework: dockerfile
