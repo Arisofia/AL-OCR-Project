@@ -50,7 +50,10 @@ class OCRProcessor:
         inferred_type = file.content_type
         if not inferred_type and file.filename:
             import mimetypes
-            inferred_type = mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
+
+            inferred_type = (
+                mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
+            )
 
         return await self.process_bytes(
             contents=contents,
@@ -166,7 +169,9 @@ class OCRProcessor:
         for res in upload_results:
             if isinstance(res, Exception):
                 logger.error("Storage upload failed: %s", res)
-                raise HTTPException(status_code=500, detail="Failed to persist results to storage")
+                raise HTTPException(
+                    status_code=500, detail="Failed to persist results to storage"
+                )
         return str(upload_results[0])
 
     def _handle_pipeline_failure(
