@@ -4,11 +4,9 @@ Amazon Textract integration service for high-throughput financial document intel
 
 import logging
 import time
-
 from typing import Any, Optional, cast
 
 import boto3
-
 from botocore.config import Config  # type: ignore
 from botocore.exceptions import ClientError  # type: ignore
 from mypy_boto3_textract import TextractClient
