@@ -9,7 +9,7 @@ import redis.asyncio as redis
 from ocr_service.config import Settings, get_settings
 from ocr_service.modules.ocr_config import EngineConfig
 from ocr_service.modules.ocr_engine import IterativeOCREngine
-from ocr_service.utils.custom_logging import setup_logging
+from ocr_service.utils.monitoring import init_monitoring
 from ocr_service.utils.redis_factory import get_redis_client
 
 logger = logging.getLogger("ocr-service.redis-worker")
@@ -160,8 +160,9 @@ class RedisWorker:
 
 
 async def main():
-    setup_logging(level=logging.INFO)
-    worker = RedisWorker()
+    settings = get_settings()
+    init_monitoring(settings)
+    worker = RedisWorker(settings=settings)
     await worker.start()
 
 

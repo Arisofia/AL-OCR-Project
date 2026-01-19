@@ -92,8 +92,9 @@ jobs:
           fi
 
       - name: Run Type Checking (mypy)
+        continue-on-error: true
         run: |
-          mypy . || echo "Mypy found issues, but continuing for report..."
+          mypy .
 
       - name: Generate synthetic images
         run: |

@@ -7,16 +7,18 @@ import asyncio
 import logging
 import sys
 
+from ocr_service.config import get_settings
 from ocr_service.modules.active_learning_mocks import MockOCRModel
 from ocr_service.modules.active_learning_orchestrator import (
     ALOrchestrator,
 )
 from ocr_service.modules.learning_engine import LearningEngine
-from ocr_service.utils.custom_logging import setup_logging
+from ocr_service.utils.monitoring import init_monitoring
 
 
 async def main():
-    setup_logging(level=logging.INFO)
+    settings = get_settings()
+    init_monitoring(settings)
     logger = logging.getLogger("al-worker")
 
     logger.info("Initializing Active Learning Worker...")

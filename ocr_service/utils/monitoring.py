@@ -5,6 +5,14 @@ import sentry_sdk
 
 from .custom_logging import setup_logging
 
+# OpenTelemetry imports
+try:
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+except ImportError:
+    trace = None
+
 
 def init_monitoring(settings: Any, integrations: Optional[list[Any]] = None, **kwargs):
     """
@@ -38,3 +46,10 @@ def init_monitoring(settings: Any, integrations: Optional[list[Any]] = None, **k
         )
     else:
         logger.info("Sentry DSN not configured, skipping SDK initialization")
+
+    # 3. Initialize OpenTelemetry
+    if trace and not isinstance(trace.get_tracer_provider(), TracerProvider):
+        tracer_provider = TracerProvider()
+        trace.set_tracer_provider(tracer_provider)
+        tracer_provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+        logger.info("OpenTelemetry SDK initialized with ConsoleSpanExporter")

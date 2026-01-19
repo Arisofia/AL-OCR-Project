@@ -21,7 +21,7 @@ def _verify_log_emission(mock_logger, expected_path):
     log_calls = mock_logger.warning.call_args_list
     was_logged = any(
         "Rate limit exceeded" in args[0]
-        and (kwargs.get("extra", {}).get("path") == expected_path or True)
+        and kwargs.get("extra", {}).get("path") == expected_path
         for args, kwargs in log_calls
     )
     assert was_logged, "Expected structured rate limit warning log was not emitted"
@@ -65,9 +65,7 @@ def test_rate_limit_smoke_triggers_handler():
         assert "detail" in rate_limited_response.json()
         # Validate the handler-specific payload (adjust if message changes)
         expected_message = "Rate limit exceeded. Please try again later."
-        assert (
-            rate_limited_response.json().get("detail") == expected_message
-        )
+        assert rate_limited_response.json().get("detail") == expected_message
 
         # Assert our enhanced handler logged the rate limiting occurrence
         _verify_log_emission(mock_logger, "/presign")

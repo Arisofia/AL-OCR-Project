@@ -9,7 +9,6 @@ from slowapi.errors import RateLimitExceeded
 from ocr_service.config import Settings, get_settings
 from ocr_service.routers import ocr, storage, system
 from ocr_service.utils.context import get_request_id_from_scope
-from ocr_service.utils.custom_logging import setup_logging
 from ocr_service.utils.limiter import _rate_limit_exceeded_handler_with_logging, limiter
 from ocr_service.utils.monitoring import init_monitoring
 
@@ -24,7 +23,6 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         settings = get_settings()
 
     # Initialize enterprise-grade logging & monitoring
-    setup_logging(level=logging.INFO)
     init_monitoring(settings, release=getattr(settings, "version", None))
 
     app = FastAPI(

@@ -36,7 +36,7 @@ jobs:
         run: |
           for secret in AWS_ROLE_TO_ASSUME AWS_ACCOUNT_ID; do
             if [ -z "${!secret}" ]; then
-              echo "::error ::Secret $secret is not set!"
+              echo "::error::Secret $secret is not set!"
               exit 1
             fi
           done

@@ -15,6 +15,7 @@ def get_redis_client(settings: Settings) -> redis.Redis:
     host = os.getenv("REDIS_HOST", settings.redis_host)
     port = int(os.getenv("REDIS_PORT", str(settings.redis_port)))
     db = int(os.getenv("REDIS_DB", str(settings.redis_db)))
+    password = os.getenv("REDIS_PASSWORD", settings.redis_password)
 
     logger.info(
         "Initializing Redis client | Host: %s | Port: %d | DB: %d", host, port, db
@@ -24,5 +25,6 @@ def get_redis_client(settings: Settings) -> redis.Redis:
         host=host,
         port=port,
         db=db,
+        password=password,
         decode_responses=False,
     )

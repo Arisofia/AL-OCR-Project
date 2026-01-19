@@ -16,7 +16,7 @@ jobs:
         run: |
           for secret in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
             if [ -z "${!secret}" ]; then
-              echo "::warning ::Secret $secret is not set!"
+              echo "::warning::Secret $secret is not set!"
             else
               echo "✅ $secret is set."
             fi
@@ -60,9 +60,10 @@ jobs:
 
           echo "## Model Metrics" > report.md
           if [ -f metrics.json ]; then
-            echo '\n```json' >> report.md
+            echo "" >> report.md
+            echo '```json' >> report.md
             cat metrics.json >> report.md
-            echo '\n```' >> report.md
+            echo '```' >> report.md
           else
             echo "Metrics not found." >> report.md
           fi

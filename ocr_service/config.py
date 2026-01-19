@@ -1,6 +1,6 @@
 """
 Configuration module for the OCR service.
-
+# Tracing integration (if opentelemetry is available)
 This module defines the settings schema using Pydantic BaseSettings,
 supporting environment variable overrides and LRU caching for performance.
 """
@@ -37,9 +37,7 @@ class Settings(BaseSettings):
     app_description: str = "Professional Iterative OCR & Pixel Reconstruction Service"
     version: str = "1.2.0"
 
-    ocr_api_key: str = Field(
-        ..., description="Secret key for OCR authentication"
-    )
+    ocr_api_key: str = Field(..., description="Secret key for OCR authentication")
     api_key_header_name: str = "X-API-KEY"
 
     s3_bucket_name: Optional[str] = None
@@ -50,11 +48,12 @@ class Settings(BaseSettings):
 
     enable_reconstruction: bool = False
     ocr_iterations: int = 3
-    
+
     # Redis Configuration
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_db: int = 0
+    redis_password: Optional[str] = None
 
     # Security and Environment
     environment: str = "development"
@@ -92,22 +91,23 @@ class Settings(BaseSettings):
         return v
 
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
-
 
 
 # Tracing integration (if opentelemetry is available)
 try:
     from opentelemetry import trace
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
-    tracer_provider = TracerProvider()
-    trace.set_tracer_provider(tracer_provider)
+
+    # Only import the API to avoid side effects.
+    # The SDK should be configured in the application entry point
+    # (e.g., main.py).
     tracer = trace.get_tracer(__name__)
-    tracer_provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
 except ImportError:
     tracer = None
+
 
 @lru_cache
 def get_settings() -> Settings:
@@ -117,5 +117,4 @@ def get_settings() -> Settings:
     if tracer:
         with tracer.start_as_current_span("load_settings"):
             return Settings()  # type: ignore[call-arg]
-    else:
-        return Settings()  # type: ignore[call-arg]
+    return Settings()  # type: ignore[call-arg]
