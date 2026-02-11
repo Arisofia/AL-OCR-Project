@@ -9,9 +9,13 @@ from typing import Any, cast
 import cv2
 import numpy as np
 
-__all__ = ["DocumentLayoutAnalyzer"]
+__all__ = ["DocumentLayoutAnalyzer", "LayoutAnalysisError"]
 
 logger = logging.getLogger("ocr-service.layout")
+
+
+class LayoutAnalysisError(Exception):
+    """Custom exception for layout analysis errors."""
 
 
 class DocumentLayoutAnalyzer:
@@ -65,7 +69,7 @@ class DocumentLayoutAnalyzer:
             return regions
         except Exception as e:
             logger.error("Exception in detect_regions: %s", e)
-            return []
+            raise LayoutAnalysisError("Failed to detect regions") from e
 
     @staticmethod
     def classify_layout(regions: list[dict[str, Any]]) -> str:
@@ -86,4 +90,4 @@ class DocumentLayoutAnalyzer:
             return "standard_form"
         except Exception as e:
             logger.error("Exception in classify_layout: %s", e)
-            return "error"
+            raise LayoutAnalysisError("Failed to classify layout") from e
