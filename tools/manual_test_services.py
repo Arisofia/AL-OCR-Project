@@ -2,17 +2,15 @@
 Manual test script for verifying AWS services integration.
 Uses mocking to simulate AWS interactions without requiring real credentials.
 """
-
+import contextlib
 import os
 import sys
 import typing
 from unittest.mock import MagicMock
 
 # Add ocr_service to path
-try:
+with contextlib.suppress(Exception):
     sys.path.append(os.path.join(os.path.dirname(__file__), "..", "ocr_service"))
-except Exception:
-    pass
 
 
 class FakeBoto3Module:

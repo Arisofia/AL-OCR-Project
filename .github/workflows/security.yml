@@ -1,0 +1,65 @@
+---
+name: Security & Audit
+on:
+  push:
+    branches: ["main", "develop"]
+  pull_request:
+    branches: ["main", "develop"]
+  schedule:
+    - cron: "0 0 * * 1" # Weekly
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  static-analysis:
+    name: Static Security Analysis
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Gitleaks (Secret Scan)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Dependency Audit (Python)
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt
+
+  container-scan:
+    name: Container Security Scan
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build local image
+        run: docker build -t al-ocr-service:local -f ocr_service/Dockerfile .
+
+      - name: Trivy Vulnerability Scan
+        uses: aquasec/trivy-action@master
+        with:
+          image-ref: "al-ocr-service:local"
+          format: "table"
+          severity: "CRITICAL,HIGH"
+
+  frontend-audit:
+    name: Frontend Security Audit
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+      - name: npm Audit
+        run: |
+          cd frontend
+          npm audit --audit-level=high

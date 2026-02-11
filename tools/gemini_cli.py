@@ -5,15 +5,14 @@ CLI tool to interact with the Gemini Vision Provider for testing and reconstruct
 
 import argparse
 import asyncio
+import contextlib
 import os
 import sys
 from pathlib import Path
 
 # Add project root to sys.path for local development
-try:
+with contextlib.suppress(Exception):
     sys.path.append(str(Path(__file__).parent.parent))
-except Exception:
-    pass
 
 from ocr_service.config import get_settings
 from ocr_service.modules.ai_providers import GeminiVisionProvider
