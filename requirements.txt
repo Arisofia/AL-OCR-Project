@@ -15,7 +15,8 @@ numpy==1.26.4
 openai==1.14.0
 opencv-python-headless==4.10.0.84
 pandas==2.2.0
-pillow==12.1.1
+pillow==9.5.0 ; python_version < "3.10"
+pillow==12.1.1 ; python_version >= "3.10"
 pip-audit==2.9.0
 pre-commit==4.3.0
 pyasn1==0.6.2
