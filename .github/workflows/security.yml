@@ -44,7 +44,7 @@ jobs:
         run: docker build -t al-ocr-service:local -f ocr_service/Dockerfile .
 
       - name: Trivy Vulnerability Scan
-        uses: aquasec/trivy-action@master
+              uses: aquasecurity/trivy-action@master
         with:
           image-ref: "al-ocr-service:local"
           format: "table"
