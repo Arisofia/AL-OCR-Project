@@ -2,6 +2,7 @@
 Manual test script for verifying AWS services integration.
 Uses mocking to simulate AWS interactions without requiring real credentials.
 """
+
 import contextlib
 import os
 import sys
