@@ -56,7 +56,8 @@ class IterativeOCR:
         iteration: int,
     ) -> tuple[str, np.ndarray, list[dict[str, Any]]]:
         """
-        Applies heuristic strategies (Depixelation, Inpainting) for low confidence.
+                Applies advanced heuristic strategies (Depixelation, Inpainting)
+                for low-confidence scenarios.
         """
         strategies_meta = []
         best_local_text = ""
@@ -128,10 +129,8 @@ class IterativeOCR:
             if len(text) > len(best_overall_text):
                 best_overall_text = text
 
-            # Step 4: Early exit strategy
-            # If we didn't update 'current', next iteration will be identical.
-            # We break if we have decent text and didn't trigger feedback.
-            if len(text) >= 10:
+            # Step 4: Early exit strategy for high-confidence matches
+            if len(best_overall_text) > 20:
                 break
 
         return best_overall_text.strip(), current, meta
@@ -143,7 +142,9 @@ class IterativeOCR:
 
         img = cv2.imread(image_path)
         if img is None:
-            raise ValueError(f"Could not decode image from {image_path}")
+            raise ValueError(
+                f"Payload error: Could not decode source image from {image_path}"
+            )
 
         text, _, meta = self.process_image(img)
         return text, meta
