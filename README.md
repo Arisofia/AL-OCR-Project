@@ -1,6 +1,8 @@
 # AL-OCR-Project
 Sophisticated Fintech OCR System for financial document intelligence, built with FastAPI, React, and AWS (S3/Textract). Features automated infrastructure via Terraform and CI/CD.
 
+**Related:** Background on image inpainting techniques — see `docs/inpainting.md`.
+
 ## Testing & Local Development
 
 This repository includes an automated script to create a reproducible Python 3.11 test environment and run the test-suite.

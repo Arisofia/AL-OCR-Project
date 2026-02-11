@@ -1,2 +1,6 @@
 def test_orchestrator_dummy():
-    assert True
+    """
+    This is a dummy test function for the orchestrator.
+    It asserts that True is True.
+    """
+    pass
