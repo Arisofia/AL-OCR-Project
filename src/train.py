@@ -16,18 +16,9 @@ def train():
     with open("metrics.json", "w") as f:
         json.dump(metrics, f, indent=4)
 
-    # Generate a dummy confusion matrix (empty plot or just a placeholder)
-    try:
-        import matplotlib.pyplot as plt
-
-        fig = plt.figure(figsize=(8, 6))
-        plt.text(0.5, 0.5, "Placeholder Confusion Matrix", ha="center", va="center")
-        plt.savefig("confusion_matrix.png")
-        plt.close(fig)
-    except ImportError:
-        # Write a valid PNG header as a fallback if matplotlib is missing
-        with open("confusion_matrix.png", "wb") as f:
-            f.write(b"\x89PNG\r\n\x1a\n")  # PNG file signature
+    # Write a valid PNG header as a fallback
+    with open("confusion_matrix.png", "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n")  # PNG file signature
 
 
 if __name__ == "__main__":
