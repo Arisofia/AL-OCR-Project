@@ -51,3 +51,24 @@ def get_redis_client(settings: Settings) -> redis.Redis:
         password=password,
         decode_responses=False,
     )
+
+
+async def verify_redis_connection(client: redis.Redis, timeout: float = 1.0) -> dict:
+    """Verify that Redis is reachable and return diagnostics.
+
+    Returns a dict: {"ok": bool, "latency_ms": float|None, "error": Optional[str]}
+    """
+    import time as _time
+
+    start = _time.time()
+    try:
+        # Bound the ping with asyncio.wait_for to avoid long hangs
+        import asyncio
+
+        await asyncio.wait_for(client.ping(), timeout=timeout)
+        latency = round(((_time.time() - start) * 1000), 2)
+        return {"ok": True, "latency_ms": latency}
+    except Exception as e:  # pragma: no cover - defensive
+        latency = round(((_time.time() - start) * 1000), 2)
+        logger.exception("Redis ping failed: %s", e)
+        return {"ok": False, "latency_ms": latency, "error": str(e)}

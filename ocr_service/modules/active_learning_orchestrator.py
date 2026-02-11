@@ -118,7 +118,7 @@ class ALOrchestrator:
                 if res and res.data:
                     return cast(list[dict[str, Any]], res.data)
             except Exception as e:
-                logger.info("Cloud fetch failed in orchestrator: %s", e)
+                logger.warning("Cloud fetch failed in orchestrator: %s", e)
 
         # Fallback to Local Engine logic
         def _local():

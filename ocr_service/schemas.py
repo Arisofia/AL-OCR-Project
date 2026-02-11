@@ -43,6 +43,7 @@ class HealthResponse(BaseModel):
 
     status: str
     timestamp: float
+    components: Optional[dict] = None
 
 
 class ReconStatusResponse(BaseModel):
@@ -68,3 +69,15 @@ class PresignResponse(BaseModel):
 
     url: str
     fields: dict
+
+
+class ErrorResponse(BaseModel):
+    """
+    Standardized error response schema.
+    """
+
+    phase: str
+    message: str
+    correlation_id: Optional[str] = None
+    trace_id: Optional[str] = None
+    filename: Optional[str] = None

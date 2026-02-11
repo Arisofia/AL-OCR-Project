@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError
 
 from ocr_service.config import Settings, get_settings
 from ocr_service.services.storage import StorageService
-from ocr_service.services.textract import TextractService
+from ocr_service.services.textract import TextractService, TextractServiceError
 
 logger = logging.getLogger("ocr-service.worker")
 
@@ -61,6 +61,11 @@ class WorkerService:
         except ClientError as e:
             self._handle_aws_error(e, bucket, key, out_key, storage_service)
             raise
+        except TextractServiceError as e:
+            self._handle_textract_error(
+                e, bucket, key, out_key, request_id, storage_service
+            )
+            raise
         except Exception as e:
             self._handle_generic_error(
                 e, bucket, key, out_key, request_id, storage_service
@@ -106,6 +111,24 @@ class WorkerService:
             "error": "aws_service_failure",
             "message": str(e),
             "requestId": req_id,
+            "input": {"bucket": bucket, "key": key},
+        }
+        storage.save_json(err_obj, out_key)
+
+    def _handle_textract_error(
+        self,
+        e: TextractServiceError,
+        bucket: str,
+        key: str,
+        out_key: str,
+        request_id: str,
+        storage: StorageService,
+    ):
+        logger.error("Textract processing failed for key %s: %s", key, e)
+        err_obj = {
+            "error": "textract_service_failure",
+            "message": str(e),
+            "requestId": request_id,
             "input": {"bucket": bucket, "key": key},
         }
         storage.save_json(err_obj, out_key)

@@ -115,8 +115,10 @@ class LearningEngine:
                 res = await asyncio.to_thread(_fetch)
                 if res and res.data:
                     return cast(dict[str, Any], res.data[0])
-            except Exception:
-                logger.info("Cloud fetch failed, searching local cache")
+            except Exception as e:
+                logger.warning(
+                    "Cloud pattern fetch failed, searching local cache: %s", e
+                )
 
         # Fallback to Local
         return await self._fetch_local(doc_type)
@@ -149,5 +151,6 @@ class LearningEngine:
         try:
             with open(self.storage_path, encoding="utf-8") as f:
                 return cast(list[dict[str, Any]], json.load(f))
-        except Exception:
+        except Exception as e:
+            logger.exception("Failed to load or parse local learning patterns: %s", e)
             return []

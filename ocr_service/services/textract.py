@@ -8,7 +8,7 @@ from typing import Any, Optional, cast
 
 import boto3
 from botocore.config import Config  # type: ignore
-from botocore.exceptions import ClientError  # type: ignore
+from botocore.exceptions import BotoCoreError, ClientError  # type: ignore
 from mypy_boto3_textract import TextractClient
 from tenacity import (  # type: ignore
     retry,
@@ -18,6 +18,10 @@ from tenacity import (  # type: ignore
 )
 
 logger = logging.getLogger("ocr-service.textract")
+
+
+class TextractServiceError(Exception):
+    """Custom exception for TextractService errors."""
 
 
 class TextractService:
@@ -61,13 +65,11 @@ class TextractService:
                 return cast(Optional[str], resp.get("JobId"))
 
             return cast(Optional[str], _do_start())
-        except ClientError as e:
-            request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
-            logger.error("Start detection failed after retries | RID: %s", request_id)
-            return None
-        except Exception as e:
-            logger.error("Non-retried exception in start_detection: %s", e)
-            return None
+        except (ClientError, BotoCoreError) as e:
+            logger.error(
+                "Failed to start Textract detection for %s/%s: %s", bucket, key, e
+            )
+            raise TextractServiceError("Failed to start Textract detection") from e
 
     def analyze_document(
         self, bucket: str, key: str, features: Optional[list[str]] = None
@@ -94,13 +96,9 @@ class TextractService:
                 )
 
             return cast(dict[str, Any], _do_analyze())
-        except ClientError as e:
-            request_id = e.response.get("ResponseMetadata", {}).get("RequestId")
-            logger.error("Analyze document failed after retries | RID: %s", request_id)
-            raise RuntimeError("Max retry threshold reached") from e
-        except Exception as e:
-            logger.error("Non-retried exception in analyze_document: %s", e)
-            raise RuntimeError("Max retry threshold reached") from e
+        except (ClientError, BotoCoreError) as e:
+            logger.error("Analyze document failed for %s/%s: %s", bucket, key, e)
+            raise TextractServiceError("Analyze document failed after retries") from e
 
     def get_job_results(self, job_id: str) -> dict[str, Any]:
         """Polls for asynchronous job completion and aggregates paginated results."""

@@ -62,6 +62,23 @@ class RedisWorker:
     async def process_job(self, job_id: str):
         """Processes a single OCR job from Redis."""
         job_key = f"job:{job_id}"
+
+        # Idempotency guard: prevent double-processing of the same job
+        idempotency_key = f"idempotency:{job_id}"
+        try:
+            # SET NX with TTL to claim the job atomically
+            claimed = await self.redis_client.set(
+                idempotency_key, "1", nx=True, ex=3600
+            )
+            if not claimed:
+                logger.info("Duplicate job detected, skipping | ID: %s", job_id)
+                return
+        except Exception as e:  # pragma: no cover - defensive
+            # If idempotency cannot be determined, continue processing but log a warning
+            logger.warning(
+                "Idempotency check failed, proceeding | ID: %s | Error: %s", job_id, e
+            )
+
         job_data_raw = await self.redis_client.get(job_key)
 
         if not job_data_raw:

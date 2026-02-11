@@ -20,8 +20,8 @@ from ocr_service.utils.capabilities import CapabilityProvider
 
 from .advanced_recon import AdvancedPixelReconstructor
 from .confidence import ConfidenceScorer
-from .image_toolkit import ImageToolkit
-from .layout import DocumentLayoutAnalyzer
+from .image_toolkit import ImageToolkit, ImageToolkitError
+from .layout import DocumentLayoutAnalyzer, LayoutAnalysisError
 from .learning_engine import LearningEngine
 from .ocr_config import EngineConfig, TesseractConfig
 
@@ -65,11 +65,15 @@ class DocumentProcessor:
 
     async def decode_and_validate(self, ctx: DocumentContext) -> bool:
         """Decodes image and performs initial validation."""
-        ctx.original_img = await ImageToolkit.decode_image_async(ctx.image_bytes)
-        if ctx.original_img is None:
+        try:
+            ctx.original_img = await ImageToolkit.decode_image_async(ctx.image_bytes)
+            if ctx.original_img is None:
+                return False
+            ctx.current_img = ctx.original_img.copy()
+            return True
+        except ImageToolkitError as e:
+            logger.error("Initial image decoding failed: %s", e)
             return False
-        ctx.current_img = ctx.original_img.copy()
-        return True
 
     async def run_reconstruction(self, ctx: DocumentContext, max_iterations: int):
         """Executes reconstruction preprocessor if enabled."""
@@ -88,12 +92,20 @@ class DocumentProcessor:
             )
 
             if recon_img_bytes:
-                ctx.current_img = await ImageToolkit.decode_image_async(recon_img_bytes)
-                ctx.reconstruction_info = {
-                    "preview_text": recon_text,
-                    "meta": recon_meta,
-                }
-                logger.info("Using high-fidelity reconstructed source")
+                try:
+                    ctx.current_img = await ImageToolkit.decode_image_async(
+                        recon_img_bytes
+                    )
+                    ctx.reconstruction_info = {
+                        "preview_text": recon_text,
+                        "meta": recon_meta,
+                    }
+                    logger.info("Using high-fidelity reconstructed source")
+                except ImageToolkitError as e:
+                    logger.warning(
+                        "Failed to decode reconstructed image, continuing with original: %s",
+                        e,
+                    )
         except Exception as e:
             logger.warning("Reconstruction pipeline failed: %s", e)
 
@@ -288,7 +300,12 @@ class IterativeOCREngine:
             l_type = DocumentLayoutAnalyzer.classify_layout(regions)
             return regions, l_type
 
-        ctx.layout_regions, ctx.layout_type = await asyncio.to_thread(_run)
+        try:
+            ctx.layout_regions, ctx.layout_type = await asyncio.to_thread(_run)
+        except LayoutAnalysisError as e:
+            logger.warning("Layout analysis failed, continuing without regions: %s", e)
+            ctx.layout_regions = []
+            ctx.layout_type = "unknown"
 
     async def _run_iteration(self, ctx: DocumentContext, i: int):
         """Executes a single iteration loop."""

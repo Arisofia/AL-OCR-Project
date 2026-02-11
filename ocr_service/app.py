@@ -4,10 +4,13 @@ from typing import Optional
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
 from ocr_service.config import Settings, get_settings
+from ocr_service.exceptions import OCRPipelineError
 from ocr_service.routers import ocr, storage, system
+from ocr_service.schemas import ErrorResponse
 from ocr_service.utils.context import get_request_id_from_scope
 from ocr_service.utils.limiter import _rate_limit_exceeded_handler_with_logging, limiter
 from ocr_service.utils.monitoring import init_monitoring
@@ -39,6 +42,19 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         RateLimitExceeded,
         _rate_limit_exceeded_handler_with_logging,  # type: ignore
     )
+
+    @app.exception_handler(OCRPipelineError)
+    async def ocr_pipeline_error_handler(request: Request, exc: OCRPipelineError):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=ErrorResponse(
+                phase=exc.phase,
+                message=exc.message,
+                correlation_id=exc.correlation_id,
+                trace_id=exc.trace_id,
+                filename=exc.filename,
+            ).model_dump(exclude_none=True),
+        )
 
     # Middleware
     @app.middleware("http")
@@ -77,6 +93,28 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Startup checks for critical dependencies
+    @app.on_event("startup")
+    async def check_dependencies():
+        """Perform lightweight dependency checks on startup and mark app state."""
+        try:
+            from ocr_service.utils.redis_factory import (
+                get_redis_client,
+                verify_redis_connection,
+            )
+
+            redis_client = get_redis_client(settings)
+            redis_status = await verify_redis_connection(redis_client)
+            if not redis_status.get("ok"):
+                logger.error("Redis not available at startup: %s", redis_status)
+                app.state.degraded = True
+            else:
+                app.state.degraded = False
+            logger.info("Dependency check complete: %s", redis_status)
+        except Exception as e:  # pragma: no cover - defensive
+            logger.exception("Startup dependency check failed: %s", e)
+            app.state.degraded = True
 
     # Routers
     app.include_router(system.router, tags=["System"])
