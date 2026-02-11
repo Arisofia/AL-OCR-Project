@@ -1,0 +1,8 @@
+name: Test Workflow
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Say hello
+        run: echo "Hello, world!"
