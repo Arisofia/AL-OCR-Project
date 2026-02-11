@@ -3,7 +3,7 @@ boto3==1.35.77
 boto3-stubs[textract,s3]==1.35.77
 dvc[s3]==3.59.0
 evidently==0.7.20
-fastapi==0.111.0
+fastapi==0.115.6
 filelock==3.20.3; python_version >= "3.10"
 filelock==3.19.1; python_version < "3.10"
 google-generativeai==0.8.6
@@ -39,7 +39,7 @@ slowapi==0.1.9
 supabase==2.27.2
 tenacity==9.1.2
 tqdm==4.67.1
-urllib3==2.2.2
+urllib3==2.6.3
 types-redis==4.6.0.20240417
 types-requests==2.31.0.20240406
 uvicorn==0.39.0
