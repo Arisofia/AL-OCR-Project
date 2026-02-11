@@ -56,8 +56,8 @@ class IterativeOCR:
         iteration: int,
     ) -> tuple[str, np.ndarray, list[dict[str, Any]]]:
         """
-                Applies advanced heuristic strategies (Depixelation, Inpainting)
-                for low-confidence scenarios.
+        Applies advanced heuristic strategies (Depixelation, Inpainting)
+        for low-confidence scenarios.
         """
         strategies_meta = []
         best_local_text = ""
