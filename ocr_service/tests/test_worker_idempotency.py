@@ -24,9 +24,7 @@ class FakeRedis:
         v = self._store.get(name)
         if v is None:
             return None
-        if isinstance(v, str):
-            return v.encode("utf-8")
-        return v
+        return v.encode("utf-8") if isinstance(v, str) else v
 
 
 class DummyEngine:
@@ -51,11 +49,11 @@ async def test_worker_idempotency():
 
     # First processing should run engine once
     await worker.process_job(job_id)
-    assert worker.engine.counter == 1
+    assert getattr(worker.engine, "counter", 0) == 1
 
     # Second processing (same id) should be detected as duplicate and skipped
     await worker.process_job(job_id)
-    assert worker.engine.counter == 1
+    assert getattr(worker.engine, "counter", 0) == 1
 
     # Check job status stored as COMPLETED
     stored = await redis.get(job_key)
