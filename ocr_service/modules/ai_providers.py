@@ -49,9 +49,7 @@ class VisionProvider(ABC):
     """
 
     @abstractmethod
-    async def reconstruct(
-        self, image_bytes: bytes, prompt: str
-    ) -> dict[str, Any]:
+    async def reconstruct(self, image_bytes: bytes, prompt: str) -> dict[str, Any]:
         """
         Processes an image with a prompt to reconstruct or analyze content.
         Raises AIProviderError on failure.
@@ -105,13 +103,10 @@ class BaseVisionProvider(VisionProvider, ABC):
                     timeout=timeout,
                 )
             except httpx.HTTPError as e:
-                logger.error(
-                    "HTTP error on attempt %s: %s", attempt + 1, e
-                )
+                logger.error("HTTP error on attempt %s: %s", attempt + 1, e)
                 if attempt == self.max_retries - 1:
                     raise ProviderRuntimeError(
-                        f"HTTP error after {self.max_retries} "
-                        f"attempts: {e}"
+                        f"HTTP error after {self.max_retries} attempts: {e}"
                     ) from e
                 attempt += 1
                 await asyncio.sleep(2**attempt)
@@ -129,9 +124,7 @@ class BaseVisionProvider(VisionProvider, ABC):
                 return cast(Union[dict[str, Any], list[Any]], response.json())
             except httpx.HTTPStatusError as e:
                 response_body = self._get_response_body(e)
-                logger.error(
-                    "HTTP status error: %s | body: %s", e, response_body
-                )
+                logger.error("HTTP status error: %s | body: %s", e, response_body)
                 raise ProviderRuntimeError(
                     f"HTTP status error: {e.response.status_code}",
                     details={
@@ -170,9 +163,7 @@ class OpenAIVisionProvider(BaseVisionProvider):
         super().__init__(max_retries=max_retries, client=client)
         self.api_key = api_key
 
-    async def reconstruct(
-        self, image_bytes: bytes, prompt: str
-    ) -> dict[str, Any]:
+    async def reconstruct(self, image_bytes: bytes, prompt: str) -> dict[str, Any]:
         """
         Sends an image to OpenAI for reconstruction.
         """
@@ -207,9 +198,7 @@ class OpenAIVisionProvider(BaseVisionProvider):
         )
 
         if not isinstance(data, dict):
-            raise ProviderRuntimeError(
-                "Unexpected response format from OpenAI"
-            )
+            raise ProviderRuntimeError("Unexpected response format from OpenAI")
 
         try:
             return {
@@ -218,9 +207,7 @@ class OpenAIVisionProvider(BaseVisionProvider):
             }
         except (KeyError, IndexError) as e:
             logger.error("OpenAI response parsing failed: %s", e)
-            raise ProviderRuntimeError(
-                "Failed to parse OpenAI response"
-            ) from e
+            raise ProviderRuntimeError("Failed to parse OpenAI response") from e
 
 
 class GeminiVisionProvider(BaseVisionProvider):
@@ -237,9 +224,7 @@ class GeminiVisionProvider(BaseVisionProvider):
         super().__init__(max_retries=max_retries, client=client)
         self.api_key = api_key
 
-    async def reconstruct(
-        self, image_bytes: bytes, prompt: str
-    ) -> dict[str, Any]:
+    async def reconstruct(self, image_bytes: bytes, prompt: str) -> dict[str, Any]:
         """
         Sends an image to Gemini for reconstruction.
         """
@@ -259,9 +244,7 @@ class GeminiVisionProvider(BaseVisionProvider):
             raise ProviderConfigError("Gemini package missing") from e
         except AttributeError as e:
             logger.error("Gemini Vision response parsing failed: %s", e)
-            raise ProviderRuntimeError(
-                "Invalid response structure from Gemini"
-            ) from e
+            raise ProviderRuntimeError("Invalid response structure from Gemini") from e
         except Exception as e:
             logger.error("Gemini Vision unexpected error: %s", e)
             raise ProviderRuntimeError(str(e)) from e
@@ -283,9 +266,7 @@ class HuggingFaceVisionProvider(BaseVisionProvider):
         self.token = token
         self.model = model
 
-    async def reconstruct(
-        self, image_bytes: bytes, prompt: str
-    ) -> dict[str, Any]:
+    async def reconstruct(self, image_bytes: bytes, prompt: str) -> dict[str, Any]:
         base64_image = base64.b64encode(image_bytes).decode("utf-8")
         headers = {
             "Content-Type": "application/json",
@@ -308,9 +289,7 @@ class HuggingFaceVisionProvider(BaseVisionProvider):
             text = None
             if isinstance(data, dict):
                 text = (
-                    data.get("generated_text")
-                    or data.get("text")
-                    or data.get("result")
+                    data.get("generated_text") or data.get("text") or data.get("result")
                 )
             elif isinstance(data, list) and data:
                 first = data[0]
@@ -329,6 +308,4 @@ class HuggingFaceVisionProvider(BaseVisionProvider):
             return {"text": text, "model": self.model}
         except Exception as e:
             logger.error("HuggingFace response parsing failed: %s", e)
-            raise ProviderRuntimeError(
-                f"Unexpected response format: {e}"
-            ) from e
+            raise ProviderRuntimeError(f"Unexpected response format: {e}") from e

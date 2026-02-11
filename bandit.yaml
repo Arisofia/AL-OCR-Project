@@ -1,3 +1,4 @@
+---
 # Bandit configuration
 exclude_dirs:
   - .venv_test

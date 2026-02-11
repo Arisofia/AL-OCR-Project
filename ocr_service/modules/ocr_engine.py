@@ -358,6 +358,7 @@ class IterativeOCREngine:
             )
         )
         self._background_tasks.add(task)
+
         def _log_task_error(t):
             try:
                 exc = t.exception()
@@ -366,4 +367,5 @@ class IterativeOCREngine:
             except Exception as e:
                 logger.error("Error checking background task: %s", e)
             self._background_tasks.discard(t)
+
         task.add_done_callback(_log_task_error)

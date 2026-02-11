@@ -1,3 +1,4 @@
+---
 name: Retroactive PR Assignment
 on:
   workflow_dispatch:
