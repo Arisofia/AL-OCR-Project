@@ -4,7 +4,8 @@ from typing import Optional
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from slowapi.errors import RateLimitExceeded
 
 from ocr_service.config import Settings, get_settings
@@ -55,6 +56,11 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                 filename=exc.filename,
             ).model_dump(exclude_none=True),
         )
+
+    # Metrics endpoint
+    @app.get("/metrics")
+    async def metrics():
+        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     # Middleware
     @app.middleware("http")
