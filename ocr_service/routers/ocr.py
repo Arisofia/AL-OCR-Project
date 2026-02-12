@@ -1,3 +1,4 @@
+import logging
 import time
 
 from fastapi import APIRouter, Depends, File, Request, UploadFile
@@ -9,6 +10,8 @@ from ocr_service.modules.processor import OCRProcessor
 from ocr_service.routers.deps import get_api_key, get_ocr_processor, get_request_id
 from ocr_service.schemas import OCRResponse
 from ocr_service.utils.limiter import limiter
+
+logger = logging.getLogger("ocr-service.routers.ocr")
 
 router = APIRouter()
 
@@ -49,6 +52,11 @@ async def perform_ocr(
         OCR_ERROR_COUNT.labels(phase=e.phase, error_type=type(e).__name__).inc()
         raise  # Re-raise the exception after logging
     except Exception:
+        logger.exception(
+            "Unexpected error handling OCR request | method=%s | RID=%s",
+            request.method,
+            request_id,
+        )
         OCR_ERROR_COUNT.labels(
             phase="request_handling", error_type="UnexpectedError"
         ).inc()

@@ -93,11 +93,12 @@ class OCRProcessor:
         Executes the full OCR pipeline on raw bytes: Extraction and Cloud Persistence.
         """
         start_time = time.time()
-        trace_id = (
-            trace.get_current_span().get_span_context().trace_id
-            if trace.get_current_span()
-            else None
-        )
+
+        span = trace.get_current_span()
+        trace_id: Optional[str] = None
+        ctx = span.get_span_context() if span is not None else None
+        if ctx is not None and getattr(ctx, "trace_id", None) is not None:
+            trace_id = format(ctx.trace_id, "x")
 
         idempotency_key = (
             f"idempotency:{hashlib.sha256(contents).hexdigest()}:{filename}"
@@ -120,7 +121,7 @@ class OCRProcessor:
                             message="Duplicate request already being processed",
                             status_code=409,
                             correlation_id=request_id,
-                            trace_id=str(trace_id),
+                            trace_id=trace_id,
                             filename=filename,
                         )
                     return cached_data
@@ -149,7 +150,7 @@ class OCRProcessor:
                     message=f"Extraction failure: {result['error']}",
                     status_code=400,
                     correlation_id=request_id,
-                    trace_id=str(trace_id),
+                    trace_id=trace_id,
                     filename=filename,
                 )
 
@@ -160,7 +161,7 @@ class OCRProcessor:
                 content_type,
                 result,
                 request_id,
-                str(trace_id),
+                trace_id,
             )
 
             # Enrich response with traceability metadata
@@ -193,7 +194,7 @@ class OCRProcessor:
                 message="Internal processing failure in OCR orchestrator",
                 status_code=500,
                 correlation_id=request_id,
-                trace_id=str(trace_id),
+                trace_id=trace_id,
                 filename=filename,
             ) from e
 
@@ -202,17 +203,17 @@ class OCRProcessor:
     ):
         """Ensures the uploaded file is an image."""
         if not content_type or not content_type.startswith("image/"):
-            trace_id = (
-                trace.get_current_span().get_span_context().trace_id
-                if trace.get_current_span()
-                else None
-            )
+            span = trace.get_current_span()
+            trace_id: Optional[str] = None
+            ctx = span.get_span_context() if span is not None else None
+            if ctx is not None and getattr(ctx, "trace_id", None) is not None:
+                trace_id = format(ctx.trace_id, "x")
             raise OCRPipelineError(
                 phase="validation",
                 message="File must be a valid image format",
                 status_code=400,
                 correlation_id=request_id,
-                trace_id=str(trace_id),
+                trace_id=trace_id,
                 filename=filename,
             )
 
@@ -237,7 +238,7 @@ class OCRProcessor:
         content_type: str,
         result: dict[str, Any],
         request_id: str,
-        trace_id: str,
+        trace_id: Optional[str],
     ) -> str:
         """Uploads files and metadata to cloud storage."""
         upload_tasks = [
@@ -271,17 +272,14 @@ class OCRProcessor:
                     filename=filename,
                 )
         s3_key_result = upload_results[0]
-        if isinstance(s3_key_result, str):
-            return s3_key_result
-        return "unknown"
+        return s3_key_result if isinstance(s3_key_result, str) else "unknown"
 
     def _handle_pipeline_failure(
-        self, filename: str, request_id: str, error: Exception
+        self, filename: str, request_id: str, _error: Exception
     ):
         """Logs pipeline failures with context."""
-        logger.error(
-            "Pipeline failure | File: %s | RID: %s | Error: %s",
+        logger.exception(
+            "Pipeline failure | File: %s | RID: %s",
             filename,
             request_id,
-            error,
         )

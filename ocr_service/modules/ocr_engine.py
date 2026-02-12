@@ -5,6 +5,7 @@ Refactored into modular components for better maintainability and performance.
 
 import asyncio
 import logging
+import time  # Added for metrics
 from dataclasses import dataclass, field
 from typing import Any, Optional, cast
 
@@ -16,6 +17,14 @@ import pytesseract  # type: ignore
 from ocr_reconstruct import process_bytes as recon_process_bytes
 from ocr_reconstruct.modules.enhance import ImageEnhancer
 from ocr_reconstruct.modules.reconstruct import PixelReconstructor
+from ocr_service.metrics import (
+    OCR_ENGINE_PROCESS_IMAGE_ADVANCED_LATENCY,
+    OCR_ENGINE_PROCESS_IMAGE_LATENCY,
+    OCR_ERROR_COUNT,
+    OCR_EXTRACTION_LATENCY,
+    OCR_ITERATION_COUNT,
+    OCR_RECONSTRUCTION_LATENCY,
+)
 from ocr_service.utils.capabilities import CapabilityProvider
 
 from .advanced_recon import AdvancedPixelReconstructor
@@ -73,6 +82,9 @@ class DocumentProcessor:
             return True
         except ImageToolkitError as e:
             logger.error("Initial image decoding failed: %s", e)
+            OCR_ERROR_COUNT.labels(
+                phase="decode_and_validate", error_type=type(e).__name__
+            ).inc()
             return False
 
     async def run_reconstruction(self, ctx: DocumentContext, max_iterations: int):
@@ -84,6 +96,8 @@ class DocumentProcessor:
         ):
             return
 
+        start_time = time.time()
+        status = "failure"
         try:
             logger.info("Executing reconstruction preprocessor pipeline")
             # process_bytes is likely CPU bound, run in thread
@@ -108,8 +122,22 @@ class DocumentProcessor:
                         ctx.doc_type,
                         e,
                     )
+                    OCR_ERROR_COUNT.labels(
+                        phase="reconstruction_decode", error_type=type(e).__name__
+                    ).inc()
+            status = "success"
         except Exception as e:
-            logger.warning("Reconstruction pipeline failed: %s", e)
+            logger.exception(
+                "Reconstruction pipeline failed | doc_type=%s | use_reconstruction=%s",
+                ctx.doc_type,
+                ctx.use_reconstruction,
+            )
+            OCR_ERROR_COUNT.labels(
+                phase="reconstruction", error_type=type(e).__name__
+            ).inc()
+        finally:
+            latency = time.time() - start_time
+            OCR_RECONSTRUCTION_LATENCY.labels(status=status).observe(latency)
 
     def preprocess_frame(
         self, img: np.ndarray, iteration: int, use_recon: bool
@@ -131,16 +159,31 @@ class DocumentProcessor:
         self, img: np.ndarray, regions: Optional[list[dict[str, Any]]] = None
     ) -> str:
         """Performs OCR on the whole image or specific regions."""
-        if regions:
-            return await self._extract_from_regions(img, regions)
-
+        start_time = time.time()
+        status = "failure"
+        method = "regions" if regions else "full_page"
         try:
-            return await asyncio.to_thread(
-                pytesseract.image_to_string, img, config=self.ocr_config.flags
-            )
+            if regions:
+                text = await self._extract_from_regions(img, regions)
+            else:
+                text = await asyncio.to_thread(
+                    pytesseract.image_to_string, img, config=self.ocr_config.flags
+                )
+            status = "success"
+            return text
         except Exception as e:
-            logger.error("OCR whole image extraction failed: %s", e)
+            logger.exception(
+                "OCR whole image extraction failed | method=%s | error=%s",
+                method,
+                e,
+            )
+            OCR_ERROR_COUNT.labels(
+                phase="extraction", error_type=type(e).__name__
+            ).inc()
             return ""
+        finally:
+            latency = time.time() - start_time
+            OCR_EXTRACTION_LATENCY.labels(method=method, status=status).observe(latency)
 
     async def _extract_from_regions(
         self, img: np.ndarray, regions: list[dict[str, Any]]
@@ -161,7 +204,14 @@ class DocumentProcessor:
                 if text.strip():
                     combined_text.append(text.strip())
             except Exception as e:
-                logger.warning("Region extraction failed: %s", e)
+                logger.exception(
+                    "Region extraction failed | bbox=%s | error=%s",
+                    region.get("bbox"),
+                    e,
+                )
+                OCR_ERROR_COUNT.labels(
+                    phase="region_extraction", error_type=type(e).__name__
+                ).inc()
 
         return "\n\n".join(combined_text)
 
@@ -210,89 +260,139 @@ class IterativeOCREngine:
         self, image_bytes: bytes, use_reconstruction: bool = False
     ) -> dict[str, Any]:
         """Entry point for standard iterative OCR pipeline."""
-        validation_error = ImageToolkit.validate_image(
-            image_bytes, self.config.max_image_size_mb
-        )
-        if validation_error:
-            return {"error": validation_error}
+        start_time = time.time()
+        status = "failure"
+        try:
+            validation_error = ImageToolkit.validate_image(
+                image_bytes, self.config.max_image_size_mb
+            )
+            if validation_error:
+                OCR_ERROR_COUNT.labels(
+                    phase="validation", error_type="ImageTooLarge"
+                ).inc()
+                return {"error": validation_error}
 
-        ctx = DocumentContext(
-            image_bytes=image_bytes, use_reconstruction=use_reconstruction
-        )
+            ctx = DocumentContext(
+                image_bytes=image_bytes, use_reconstruction=use_reconstruction
+            )
 
-        if not await self.processor.decode_and_validate(ctx):
-            return {"error": "Corrupted or unsupported image format"}
+            if not await self.processor.decode_and_validate(ctx):
+                OCR_ERROR_COUNT.labels(
+                    phase="validation", error_type="ImageDecodeError"
+                ).inc()
+                return {"error": "Corrupted or unsupported image format"}
 
-        # Initial Setup
-        await asyncio.gather(
-            self.processor.run_reconstruction(ctx, self.config.max_iterations),
-            self._analyze_layout(ctx),
-        )
+            # Initial Setup
+            await asyncio.gather(
+                self.processor.run_reconstruction(ctx, self.config.max_iterations),
+                self._analyze_layout(ctx),
+            )
 
-        # Iteration Loop
-        for i in range(self.config.max_iterations):
-            await self._run_iteration(ctx, i)
+            # Iteration Loop
+            for i in range(self.config.max_iterations):
+                OCR_ITERATION_COUNT.inc()
+                await self._run_iteration(ctx, i)
 
-        return self._build_response(ctx)
+            status = "success"
+            return self._build_response(ctx)
+        except Exception as e:
+            logger.exception(
+                "Error in process_image | use_reconstruction=%s | error=%s",
+                use_reconstruction,
+                e,
+            )
+            OCR_ERROR_COUNT.labels(
+                phase="process_image", error_type=type(e).__name__
+            ).inc()
+            return {"error": str(e)}
+        finally:
+            latency = time.time() - start_time
+            OCR_ENGINE_PROCESS_IMAGE_LATENCY.labels(status=status).observe(latency)
 
     async def process_image_advanced(
         self, image_bytes: bytes, doc_type: Optional[str] = None
     ) -> dict[str, Any]:
         """AI-driven pipeline with contextual learning."""
-        validation_error = ImageToolkit.validate_image(
-            image_bytes, self.config.max_image_size_mb
-        )
-        if validation_error:
-            return {"error": validation_error}
+        start_time = time.time()
+        status = "failure"
+        try:
+            validation_error = ImageToolkit.validate_image(
+                image_bytes, self.config.max_image_size_mb
+            )
+            if validation_error:
+                OCR_ERROR_COUNT.labels(
+                    phase="validation_advanced", error_type="ImageTooLarge"
+                ).inc()
+                return {"error": validation_error}
 
-        ctx = DocumentContext(
-            image_bytes=image_bytes,
-            use_reconstruction=True,
-            doc_type=doc_type or self.config.default_doc_type,
-        )
+            ctx = DocumentContext(
+                image_bytes=image_bytes,
+                use_reconstruction=True,
+                doc_type=doc_type or self.config.default_doc_type,
+            )
 
-        # Parallel initialization: Layout + Learning Retrieval
-        layout_task = self._analyze_layout(ctx)
-        learning_task = self.learning_engine.get_pattern_knowledge(ctx.doc_type)
+            # Parallel initialization: Layout + Learning Retrieval
+            layout_task = self._analyze_layout(ctx)
+            learning_task = self.learning_engine.get_pattern_knowledge(ctx.doc_type)
 
-        await layout_task
-        pattern = await learning_task
+            await layout_task
+            pattern = await learning_task
 
-        # AI Reconstruction Pass
-        context = (pattern or {}) | {
-            "layout_type": ctx.layout_type,
-            "region_count": len(ctx.layout_regions),
-        }
+            # AI Reconstruction Pass
+            context = (pattern or {}) | {
+                "layout_type": ctx.layout_type,
+                "region_count": len(ctx.layout_regions),
+            }
 
-        ai_result = await self.advanced_reconstructor.reconstruct_with_ai(
-            image_bytes, context=context
-        )
+            ai_result = await self.advanced_reconstructor.reconstruct_with_ai(
+                image_bytes, context=context
+            )
 
-        if "error" in ai_result:
-            logger.warning("AI reconstruction failed | Triggering iterative fallback")
-            return await self.process_image(image_bytes, use_reconstruction=True)
+            if "error" in ai_result:
+                logger.warning(
+                    "AI reconstruction failed | Triggering iterative fallback"
+                )
+                OCR_ERROR_COUNT.labels(
+                    phase="ai_reconstruction", error_type="AIReconstructionFailed"
+                ).inc()
+                return await self.process_image(image_bytes, use_reconstruction=True)
 
-        extracted_text = ai_result.get("text", "")
-        confidence = self.confidence_scorer.calculate(extracted_text)
+            extracted_text = ai_result.get("text", "")
+            confidence = self.confidence_scorer.calculate(extracted_text)
 
-        # Learning Update (Background)
-        self._schedule_learning(
-            ctx.doc_type,
-            ai_result.get("model", "unknown"),
-            ctx.layout_type,
-            confidence,
-        )
-
-        return {
-            "text": extracted_text,
-            "method": "advanced_ai_reconstruction",
-            "confidence": confidence,
-            "layout_analysis": {
-                "type": ctx.layout_type,
-                "regions": len(ctx.layout_regions),
-            },
-            "success": True,
-        }
+            # Learning Update (Background)
+            self._schedule_learning(
+                ctx.doc_type,
+                ai_result.get("model", "unknown"),
+                ctx.layout_type,
+                confidence,
+            )
+            status = "success"
+            return {
+                "text": extracted_text,
+                "method": "advanced_ai_reconstruction",
+                "confidence": confidence,
+                "layout_analysis": {
+                    "type": ctx.layout_type,
+                    "regions": len(ctx.layout_regions),
+                },
+                "success": True,
+            }
+        except Exception as e:
+            logger.exception(
+                "Error in process_image_advanced | doc_type=%s | error=%s",
+                ctx.doc_type,
+                e,
+            )
+            OCR_ERROR_COUNT.labels(
+                phase="process_image_advanced", error_type=type(e).__name__
+            ).inc()
+            return {"error": str(e)}
+        finally:
+            latency = time.time() - start_time
+            OCR_ENGINE_PROCESS_IMAGE_ADVANCED_LATENCY.labels(status=status).observe(
+                latency
+            )
 
     async def _analyze_layout(self, ctx: DocumentContext):
         """Analyzes document layout in a thread."""
@@ -306,6 +406,9 @@ class IterativeOCREngine:
             ctx.layout_regions, ctx.layout_type = await asyncio.to_thread(_run)
         except LayoutAnalysisError as e:
             logger.warning("Layout analysis failed, continuing without regions: %s", e)
+            OCR_ERROR_COUNT.labels(
+                phase="layout_analysis", error_type=type(e).__name__
+            ).inc()
             ctx.layout_regions = []
             ctx.layout_type = "unknown"
 
@@ -348,7 +451,15 @@ class IterativeOCREngine:
             # Prepare for next pass
             ctx.current_img = await ImageToolkit.enhance_iteration(ctx.current_img)
         except Exception as e:
-            logger.error("Iteration %d failed: %s", i + 1, e)
+            logger.exception(
+                "Iteration %d failed | layout_type=%s | use_reconstruction=%s | "
+                "error=%s",
+                i + 1,
+                ctx.layout_type,
+                ctx.use_reconstruction,
+                e,
+            )
+            OCR_ERROR_COUNT.labels(phase="iteration", error_type=type(e).__name__).inc()
             ctx.iteration_history.append({"iteration": i + 1, "error": "failed"})
 
     def _build_response(self, ctx: DocumentContext) -> dict[str, Any]:
@@ -383,8 +494,14 @@ class IterativeOCREngine:
                 exc = t.exception()
                 if exc:
                     logger.error("Background learning task failed: %s", exc)
+                    OCR_ERROR_COUNT.labels(
+                        phase="background_learning", error_type=type(exc).__name__
+                    ).inc()
             except Exception as e:
                 logger.error("Error checking background task: %s", e)
+                OCR_ERROR_COUNT.labels(
+                    phase="background_task_error_check", error_type=type(e).__name__
+                ).inc()
             self._background_tasks.discard(t)
 
         task.add_done_callback(_log_task_error)
