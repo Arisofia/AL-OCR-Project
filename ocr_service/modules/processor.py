@@ -107,7 +107,10 @@ class OCRProcessor:
             try:
                 cached_result = await self.redis_client.get(idempotency_key)
             except Exception as e:  # pragma: no cover - redis defensive
+                from ocr_service.metrics import OCR_IDEMPOTENCY_REDIS_ERROR_COUNT
+
                 logger.exception("Redis GET failed during idempotency check: %s", e)
+                OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="get").inc()
                 raise OCRPipelineError(
                     phase="idempotency",
                     message="Failed to query idempotency store",
@@ -150,7 +153,10 @@ class OCRProcessor:
                     ex=120,  # 2 minutes TTL for processing
                 )
             except Exception as e:  # pragma: no cover - redis defensive
+                from ocr_service.metrics import OCR_IDEMPOTENCY_REDIS_ERROR_COUNT
+
                 logger.exception("Redis SET failed during idempotency set: %s", e)
+                OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="set").inc()
                 raise OCRPipelineError(
                     phase="idempotency",
                     message="Failed to set idempotency key",
@@ -215,10 +221,13 @@ class OCRProcessor:
                 try:
                     await self.redis_client.delete(idempotency_key)
                 except Exception as de:
+                    from ocr_service.metrics import OCR_IDEMPOTENCY_REDIS_ERROR_COUNT
+
                     logger.exception(
                         "Redis DELETE failed during cleanup after OCRPipelineError: %s",
                         de,
                     )
+                    OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="delete").inc()
             raise
         except Exception as e:
             try:

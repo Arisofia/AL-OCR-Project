@@ -43,3 +43,10 @@ OCR_IDEMPOTENCY_HIT_COUNT = Counter(
 OCR_IDEMPOTENCY_MISS_COUNT = Counter(
     "ocr_idempotency_miss_total", "Number of times idempotency cache was missed"
 )
+
+# Redis-related error counts impacting idempotency operations (get/set/delete)
+OCR_IDEMPOTENCY_REDIS_ERROR_COUNT = Counter(
+    "ocr_idempotency_redis_errors_total",
+    "Redis errors impacting idempotency operations",
+    ["operation"],
+)
