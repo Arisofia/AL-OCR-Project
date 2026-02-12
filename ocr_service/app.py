@@ -44,7 +44,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     )
 
     @app.exception_handler(OCRPipelineError)
-    async def ocr_pipeline_error_handler(request: Request, exc: OCRPipelineError):
+    async def ocr_pipeline_error_handler(_request: Request, exc: OCRPipelineError):
         return JSONResponse(
             status_code=exc.status_code,
             content=ErrorResponse(

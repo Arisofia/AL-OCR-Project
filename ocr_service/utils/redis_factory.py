@@ -6,7 +6,6 @@ using environment variables and application settings.
 """
 
 import logging
-import os
 
 import redis.asyncio as redis
 
@@ -35,10 +34,10 @@ def get_redis_client(settings: Settings) -> redis.Redis:
     Returns:
         redis.Redis: An asynchronous Redis client.
     """
-    host = os.getenv("REDIS_HOST", settings.redis_host)
-    port = int(os.getenv("REDIS_PORT", str(settings.redis_port)))
-    db = int(os.getenv("REDIS_DB", str(settings.redis_db)))
-    password = os.getenv("REDIS_PASSWORD", settings.redis_password)
+    host = settings.redis_host
+    port = settings.redis_port
+    db = settings.redis_db
+    password = settings.redis_password
 
     log_message = f"Initializing Redis client | Host: {host} | Port: {port} | DB: {db}"
     logger.info(log_message)

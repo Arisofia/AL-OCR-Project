@@ -103,7 +103,9 @@ class DocumentProcessor:
                     logger.info("Using high-fidelity reconstructed source")
                 except ImageToolkitError as e:
                     logger.warning(
-                        "Failed to decode reconstructed image, continuing with original: %s",
+                        "Failed to decode reconstructed image; using original | "
+                        "doc_type=%s | error=%s",
+                        ctx.doc_type,
                         e,
                     )
         except Exception as e:
