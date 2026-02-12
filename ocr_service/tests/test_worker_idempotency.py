@@ -93,7 +93,7 @@ async def test_worker_job_failure_resets_idempotency(redis_client, dummy_setting
     class FailingEngine(DummyEngine):
         async def process_image(self, _image_bytes, _use_reconstruction=False):
             self.counter += 1
-            raise Exception("Simulated OCR Failure")
+            raise RuntimeError("Simulated OCR Failure")
 
     worker.engine = FailingEngine()  # type: ignore[assignment]
 
