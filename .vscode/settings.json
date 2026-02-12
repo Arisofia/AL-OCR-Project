@@ -14,5 +14,6 @@
             ]
         }
     },
-    "al.showHomeAtStartup": "Always"
+    "al.showHomeAtStartup": "Always",
+    "python.terminal.useEnvFile": true
 }
