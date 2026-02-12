@@ -39,7 +39,7 @@ async def health_check() -> HealthResponse:
     except Exception as e:  # pragma: no cover - defensive
         components["s3"] = {"ok": False, "error": str(e)}
 
-    overall_ok = all([c.get("ok") for c in components.values()])
+    overall_ok = all(c.get("ok") for c in components.values())
     status = "ok" if overall_ok else "degraded"
 
     return HealthResponse(status=status, timestamp=time.time(), components=components)

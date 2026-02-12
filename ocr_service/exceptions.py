@@ -2,6 +2,8 @@
 Custom exceptions for the OCR service.
 """
 
+from typing import Optional
+
 
 class OCRPipelineError(Exception):
     """Custom exception for OCR pipeline errors."""
@@ -11,9 +13,9 @@ class OCRPipelineError(Exception):
         phase: str,
         message: str,
         status_code: int = 500,
-        correlation_id: str | None = None,
-        trace_id: str | None = None,
-        filename: str | None = None,
+        correlation_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        filename: Optional[str] = None,
     ):
         self.phase = phase
         self.message = message

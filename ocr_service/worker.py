@@ -62,62 +62,127 @@ class RedisWorker:
     async def process_job(self, job_id: str):
         """Processes a single OCR job from Redis."""
         job_key = f"job:{job_id}"
-
-        # Idempotency guard: prevent double-processing of the same job
         idempotency_key = f"idempotency:{job_id}"
+        request_id = "N/A"  # Default request_id
+
         try:
-            # SET NX with TTL to claim the job atomically
+            # Check if job is already processed or processing
+            cached_status = await self.redis_client.get(idempotency_key)
+            if cached_status:
+                try:
+                    cached_data = json.loads(cached_status)
+                    request_id = cached_data.get("request_id", request_id)
+                    if cached_data.get("status") == "COMPLETED":
+                        logger.info(
+                            "Job already completed; returning cached result | "
+                            "ID: %s | RID: %s",
+                            job_id,
+                            request_id,
+                        )
+                        return
+                    if cached_data.get("status") == "PROCESSING":
+                        logger.info(
+                            "Job already processing; skipping | ID: %s | RID: %s",
+                            job_id,
+                            request_id,
+                        )
+                        return
+                except json.JSONDecodeError:
+                    logger.warning(
+                        "Could not decode cached idempotency status for key %s",
+                        idempotency_key,
+                    )
+
+            # Claim the job
+            initial_status = {
+                "status": "PROCESSING",
+                "updated_at": time.time(),
+                "request_id": request_id,  # Will be updated from job_data later
+            }
             claimed = await self.redis_client.set(
-                idempotency_key, "1", nx=True, ex=3600
-            )
+                idempotency_key, json.dumps(initial_status), nx=True, ex=3600
+            )  # 1 hour TTL for processing/completion
+
             if not claimed:
-                logger.info("Duplicate job detected, skipping | ID: %s", job_id)
+                # This could happen if another worker just claimed it
+                # or it was processing. Re-checking a race condition
+                # here is more involved; for now, log and skip.
+                logger.warning(
+                    "Failed to claim job; another worker likely processing | "
+                    "ID: %s | RID: %s",
+                    job_id,
+                    request_id,
+                )
                 return
-        except Exception as e:  # pragma: no cover - defensive
-            # If idempotency cannot be determined, continue processing but log a warning
-            logger.warning(
-                "Idempotency check failed, proceeding | ID: %s | Error: %s", job_id, e
-            )
 
-        job_data_raw = await self.redis_client.get(job_key)
+            job_data_raw = await self.redis_client.get(job_key)
 
-        if not job_data_raw:
-            logger.warning("Job data not found | ID: %s", job_id)
-            return
+            if not job_data_raw:
+                logger.warning(
+                    "Job data not found | ID: %s | RID: %s", job_id, request_id
+                )
+                await self.redis_client.delete(idempotency_key)  # Release claim
+                return
 
-        try:
             try:
                 job_data = json.loads(job_data_raw.decode("utf-8"))
+                request_id = job_data.get("request_id", request_id)
+                # Update idempotency key with actual request_id from job_data
+                initial_status["request_id"] = request_id
+                await self.redis_client.set(
+                    idempotency_key, json.dumps(initial_status), ex=3600
+                )
+
             except json.JSONDecodeError as jde:
-                logger.error("JSON decode error for job %s: %s", job_id, jde)
-                await self._handle_job_failure(job_key, job_id, jde)
+                logger.error(
+                    "JSON decode error for job %s | RID: %s: %s",
+                    job_id,
+                    request_id,
+                    jde,
+                )
+                await self._handle_job_failure(job_key, job_id, jde, request_id)
+                await self.redis_client.delete(idempotency_key)  # Release claim
                 return
 
-            # Update status to PROCESSING
-            job_data["status"] = "PROCESSING"
-            job_data["updated_at"] = time.time()
-            await self.redis_client.set(job_key, json.dumps(job_data))
-
-            logger.info("Processing job | ID: %s", job_id)
+            logger.info("Processing job | ID: %s | RID: %s", job_id, request_id)
 
             # --- OCR Extraction Logic ---
-            # In a Redis queue context, we expect the image path or raw bytes
-            # to be in job_data.
-            # For this implementation, we'll look for 'image_path' or 'image_base64'
-
             result = await self._execute_ocr(job_data)
 
             # Update status to COMPLETED
-            job_data["status"] = "COMPLETED"
-            job_data["result"] = result
-            job_data["completed_at"] = time.time()
-            await self.redis_client.set(job_key, json.dumps(job_data))
+            final_status = {
+                "status": "COMPLETED",
+                "result": result,
+                "completed_at": time.time(),
+                "request_id": request_id,
+            }
+            await self.redis_client.set(job_key, json.dumps(final_status))
+            await self.redis_client.set(
+                idempotency_key,
+                json.dumps(final_status),
+                ex=self.settings.redis_idempotency_ttl,
+            )
 
-            logger.info("Job completed | ID: %s", job_id)
+            logger.info("Job completed | ID: %s | RID: %s", job_id, request_id)
 
         except Exception as e:
-            logger.exception("Job failed | ID: %s | Error: %s", job_id, e)
-            await self._handle_job_failure(job_key, job_id, e)
+            logger.exception(
+                "Job failed | ID: %s | RID: %s | Error: %s", job_id, request_id, e
+            )
+            await self._handle_job_failure(job_key, job_id, e, request_id)
+            # On failure, remove idempotency key or set status to FAILED
+            # to allow retries
+            await self.redis_client.set(
+                idempotency_key,
+                json.dumps(
+                    {
+                        "status": "FAILED",
+                        "error": str(e),
+                        "request_id": request_id,
+                    }
+                ),
+                ex=300,
+            )
 
     async def _execute_ocr(self, job_data: dict[str, Any]) -> dict[str, Any]:
         """Runs the actual OCR engine on the provided data."""
@@ -160,7 +225,9 @@ class RedisWorker:
             image_bytes, use_reconstruction=self.settings.enable_reconstruction
         )
 
-    async def _handle_job_failure(self, job_key: str, job_id: str, error: Exception):
+    async def _handle_job_failure(
+        self, job_key: str, job_id: str, error: Exception, request_id: str
+    ):
         """Handles job failure by updating status in Redis."""
         try:
             job_data_raw = await self.redis_client.get(job_key)
@@ -169,10 +236,14 @@ class RedisWorker:
                 job_data["status"] = "FAILED"
                 job_data["error"] = str(error)
                 job_data["failed_at"] = time.time()
+                job_data["request_id"] = request_id
                 await self.redis_client.set(job_key, json.dumps(job_data))
         except Exception as e:
             logger.error(
-                "Failed to record job failure in Redis | ID: %s | Error: %s", job_id, e
+                "Failed to record job failure in Redis | ID: %s | RID: %s | Error: %s",
+                job_id,
+                request_id,
+                e,
             )
 
 

@@ -4,12 +4,17 @@ Coordinates OCR pipelines with automated S3 storage integration.
 """
 
 import asyncio
+import hashlib
+import json
 import logging
 import time
-from typing import Any
+from typing import Any, Optional, cast
 
-from fastapi import HTTPException, UploadFile
+import redis.asyncio as redis
+from fastapi import UploadFile
+from opentelemetry import trace
 
+from ocr_service.exceptions import OCRPipelineError
 from ocr_service.services.storage import StorageService
 
 from .ocr_engine import IterativeOCREngine
@@ -17,6 +22,7 @@ from .ocr_engine import IterativeOCREngine
 __all__ = ["OCRProcessor"]
 
 logger = logging.getLogger("ocr-service.processor")
+tracer = trace.get_tracer(__name__)
 
 
 class OCRProcessor:
@@ -24,9 +30,15 @@ class OCRProcessor:
     Orchestrates the OCR lifecycle, managing extraction and storage.
     """
 
-    def __init__(self, ocr_engine: IterativeOCREngine, storage_service: StorageService):
+    def __init__(
+        self,
+        ocr_engine: IterativeOCREngine,
+        storage_service: StorageService,
+        redis_client: redis.Redis,
+    ):
         self.ocr_engine = ocr_engine
         self.storage_service = storage_service
+        self.redis_client = redis_client
 
     async def close(self) -> None:
         """Cleanup processor resources."""
@@ -44,7 +56,7 @@ class OCRProcessor:
         """
         Handles UploadFile objects from FastAPI and routes to core process_bytes.
         """
-        self._validate_file_type(file.content_type or "")
+        self._validate_file_type(file.content_type or "", file.filename, request_id)
         contents = await file.read()
         # Infer content_type from UploadFile or file signature
         inferred_type = file.content_type
@@ -81,8 +93,49 @@ class OCRProcessor:
         Executes the full OCR pipeline on raw bytes: Extraction and Cloud Persistence.
         """
         start_time = time.time()
+        trace_id = (
+            trace.get_current_span().get_span_context().trace_id
+            if trace.get_current_span()
+            else None
+        )
 
+        idempotency_key = (
+            f"idempotency:{hashlib.sha256(contents).hexdigest()}:{filename}"
+        )
         try:
+            cached_result = await self.redis_client.get(idempotency_key)
+            if cached_result:
+                try:
+                    # Redis may return bytes or str depending on client config.
+                    # Normalize to text before JSON parsing.
+                    if isinstance(cached_result, (bytes, bytearray)):
+                        cached_text = cached_result.decode("utf-8")
+                    else:
+                        cached_text = cached_result
+
+                    cached_data = cast(dict[str, Any], json.loads(cached_text))
+                    if cached_data.get("status") == "processing":
+                        raise OCRPipelineError(
+                            phase="idempotency",
+                            message="Duplicate request already being processed",
+                            status_code=409,
+                            correlation_id=request_id,
+                            trace_id=str(trace_id),
+                            filename=filename,
+                        )
+                    return cached_data
+                except json.JSONDecodeError:
+                    logger.warning(
+                        "Could not decode cached idempotency result for key %s",
+                        idempotency_key,
+                    )
+
+            await self.redis_client.set(
+                idempotency_key,
+                json.dumps({"status": "processing"}),
+                ex=120,  # 2 minutes TTL for processing
+            )
+
             # Execute targeted OCR strategy
             use_recon = reconstruct or enable_reconstruction_config
             result = await self._execute_ocr_strategy(
@@ -90,8 +143,14 @@ class OCRProcessor:
             )
 
             if "error" in result:
-                raise HTTPException(
-                    status_code=400, detail=f"Extraction failure: {result['error']}"
+                await self.redis_client.delete(idempotency_key)
+                raise OCRPipelineError(
+                    phase="extraction",
+                    message=f"Extraction failure: {result['error']}",
+                    status_code=400,
+                    correlation_id=request_id,
+                    trace_id=str(trace_id),
+                    filename=filename,
                 )
 
             # Synchronize raw document and extracted intelligence to S3
@@ -100,6 +159,8 @@ class OCRProcessor:
                 filename,
                 content_type,
                 result,
+                request_id,
+                str(trace_id),
             )
 
             # Enrich response with traceability metadata
@@ -111,22 +172,48 @@ class OCRProcessor:
                     "request_id": request_id,
                 }
             )
+
+            await self.redis_client.set(
+                idempotency_key,
+                json.dumps(result),
+                ex=3600,  # 1 hour TTL for final result
+            )
             return result
 
-        except HTTPException:
+        except OCRPipelineError as e:
+            # Do not delete key on 409 conflict
+            if e.status_code != 409:
+                await self.redis_client.delete(idempotency_key)
             raise
         except Exception as e:
+            await self.redis_client.delete(idempotency_key)
             self._handle_pipeline_failure(filename, request_id, e)
-            raise HTTPException(
+            raise OCRPipelineError(
+                phase="orchestration",
+                message="Internal processing failure in OCR orchestrator",
                 status_code=500,
-                detail="Internal processing failure in OCR orchestrator",
+                correlation_id=request_id,
+                trace_id=str(trace_id),
+                filename=filename,
             ) from e
 
-    def _validate_file_type(self, content_type: str):
+    def _validate_file_type(
+        self, content_type: str, filename: "Optional[str]", request_id: str
+    ):
         """Ensures the uploaded file is an image."""
         if not content_type or not content_type.startswith("image/"):
-            raise HTTPException(
-                status_code=400, detail="File must be a valid image format"
+            trace_id = (
+                trace.get_current_span().get_span_context().trace_id
+                if trace.get_current_span()
+                else None
+            )
+            raise OCRPipelineError(
+                phase="validation",
+                message="File must be a valid image format",
+                status_code=400,
+                correlation_id=request_id,
+                trace_id=str(trace_id),
+                filename=filename,
             )
 
     async def _execute_ocr_strategy(
@@ -144,7 +231,13 @@ class OCRProcessor:
         )
 
     async def _persist_results(
-        self, contents: bytes, filename: str, content_type: str, result: dict[str, Any]
+        self,
+        contents: bytes,
+        filename: str,
+        content_type: str,
+        result: dict[str, Any],
+        request_id: str,
+        trace_id: str,
     ) -> str:
         """Uploads files and metadata to cloud storage."""
         upload_tasks = [
@@ -169,10 +262,18 @@ class OCRProcessor:
         for res in upload_results:
             if isinstance(res, Exception):
                 logger.error("Storage upload failed: %s", res)
-                raise HTTPException(
-                    status_code=500, detail="Failed to persist results to storage"
+                raise OCRPipelineError(
+                    phase="storage",
+                    message="Failed to persist results to storage",
+                    status_code=500,
+                    correlation_id=request_id,
+                    trace_id=trace_id,
+                    filename=filename,
                 )
-        return str(upload_results[0])
+        s3_key_result = upload_results[0]
+        if isinstance(s3_key_result, str):
+            return s3_key_result
+        return "unknown"
 
     def _handle_pipeline_failure(
         self, filename: str, request_id: str, error: Exception
