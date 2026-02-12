@@ -6,7 +6,6 @@ using environment variables and application settings.
 """
 
 import logging
-import os
 
 import redis.asyncio as redis
 
@@ -19,17 +18,17 @@ class RedisInitializationError(RuntimeError):
     """Raised when Redis initialization or validation fails."""
 
 
-def _env_or_default(name: str, default: str) -> str:
-    value = os.getenv(name)
-    return value if value not in (None, "") else default
-
-
 def get_redis_client(settings: Settings) -> redis.Redis:
-    """Create an asynchronous Redis client from settings and environment."""
-    host = _env_or_default("REDIS_HOST", settings.redis_host)
-    port = int(_env_or_default("REDIS_PORT", str(settings.redis_port)))
-    db = int(_env_or_default("REDIS_DB", str(settings.redis_db)))
-    password = os.getenv("REDIS_PASSWORD", settings.redis_password)
+    """
+    Factory for creating an asynchronous Redis client based on settings.
+
+    This function takes application settings as input and returns an
+    initialized Redis client.
+    """
+    host = settings.redis_host
+    port = settings.redis_port
+    db = settings.redis_db
+    password = settings.redis_password
 
     logger.info(
         "Initializing Redis client | host=%s | port=%d | db=%d",
@@ -38,28 +37,35 @@ def get_redis_client(settings: Settings) -> redis.Redis:
         db,
     )
 
+    # Create the Redis client instance with conservative timeouts to
+    # avoid long blocking calls in high-concurrency environments.
     return redis.Redis(
         host=host,
         port=port,
         db=db,
         password=password,
         decode_responses=False,
-        socket_connect_timeout=3,
-        socket_timeout=3,
-        health_check_interval=30,
-        retry_on_timeout=True,
+        socket_connect_timeout=1.0,
+        socket_timeout=1.0,
     )
 
 
-async def verify_redis_connection(client: redis.Redis, settings: Settings) -> None:
-    """Perform startup ping check for Redis connectivity."""
-    if not settings.redis_startup_check:
-        logger.info("Redis startup check disabled by configuration")
-        return
+async def verify_redis_connection(client: redis.Redis, timeout: float = 1.0) -> dict:
+    """Verify that Redis is reachable and return diagnostics.
 
+    Returns a dict: {"ok": bool, "latency_ms": float|None, "error": Optional[str]}
+    """
+    import time as _time
+
+    start = _time.time()
     try:
-        await client.ping()
-        logger.info("Redis connectivity check succeeded")
-    except Exception as exc:  # pragma: no cover - covered through API lifecycle tests
-        logger.exception("Redis connectivity check failed")
-        raise RedisInitializationError("Redis startup connectivity check failed") from exc
+        # Bound the ping with asyncio.wait_for to avoid long hangs
+        import asyncio
+
+        await asyncio.wait_for(client.ping(), timeout=timeout)
+        latency = round(((_time.time() - start) * 1000), 2)
+        return {"ok": True, "latency_ms": latency}
+    except Exception as e:  # pragma: no cover - defensive
+        latency = round(((_time.time() - start) * 1000), 2)
+        logger.exception("Redis ping failed: %s", e)
+        return {"ok": False, "latency_ms": latency, "error": str(e)}

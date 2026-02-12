@@ -78,6 +78,9 @@ class Settings(BaseSettings):
     sentry_dsn: Optional[str] = None
     azure_application_insights_connection_string: Optional[str] = None
 
+    # Redis idempotency TTL (seconds) — used by background workers
+    redis_idempotency_ttl: int = 3600
+
     # Active Learning & Drift
     drift_report_path: str = "reports/drift_report.html"
     reference_baseline_path: str = "data/reference_baseline.csv"

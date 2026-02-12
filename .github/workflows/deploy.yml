@@ -1,0 +1,102 @@
+name: Deploy to SSH host (Docker Compose)
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (sha or latest)"
+        required: true
+        default: ""
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare deploy variables
+        run: |
+          echo "IMAGE_TAG=${{ github.event.inputs.image_tag || github.sha }}" >> $GITHUB_ENV
+          echo "IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/al-ocr-project" >> $GITHUB_ENV
+
+      - name: Copy deploy scripts to remote and run deploy
+        uses: appleboy/ssh-action@v0.1.8
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          script: |
+            set -euo pipefail
+            echo "Received deploy request for image: $IMAGE_NAME:$IMAGE_TAG"
+            mkdir -p ~/deploy/al-ocr
+            cat > ~/deploy/al-ocr/.env <<'EOF'
+            API_IMAGE=$IMAGE_NAME:$IMAGE_TAG
+            REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+            OCR_API_KEY=${{ secrets.OCR_API_KEY }}
+            AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+            AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+            AWS_REGION=${{ secrets.AWS_REGION }}
+            GHCR_PAT=${{ secrets.GHCR_PAT }}
+            EOF
+            # copy docker-compose
+            cat > ~/deploy/al-ocr/docker-compose.prod.yml <<'YAML'
+            version: '3.8'
+            services:
+              api:
+                image: ${API_IMAGE}
+                command: ["uvicorn", "ocr_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
+                restart: unless-stopped
+                ports:
+                  - "8000:8000"
+                environment:
+                  - REDIS_HOST=redis
+                  - REDIS_PASSWORD=${REDIS_PASSWORD}
+                  - OCR_API_KEY=${OCR_API_KEY}
+                  - ENVIRONMENT=production
+                depends_on:
+                  - redis
+
+              worker:
+                image: ${API_IMAGE}
+                command: ["python", "-m", "ocr_service.worker"]
+                restart: unless-stopped
+                environment:
+                  - REDIS_HOST=redis
+                  - REDIS_PASSWORD=${REDIS_PASSWORD}
+                  - ENVIRONMENT=production
+                depends_on:
+                  - redis
+
+              redis:
+                image: "redis:alpine"
+                command: redis-server --requirepass ${REDIS_PASSWORD}
+                restart: unless-stopped
+                environment:
+                  - REDIS_PASSWORD=${REDIS_PASSWORD}
+            YAML
+
+            # Login to GHCR to pull private images
+            if [ -n "${GHCR_PAT}" ]; then
+              echo "Login to GHCR"
+              echo "${GHCR_PAT}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+            fi
+
+            cd ~/deploy/al-ocr
+            docker compose pull
+            docker compose up -d --remove-orphans
+
+            # Health check with retries
+            OK=0
+            for i in 1 2 3 4 5; do
+              if curl -sSf http://localhost:8000/health | grep -q '"status"'; then
+                OK=1
+                break
+              fi
+              sleep 2
+            done
+            if [ "$OK" -ne 1 ]; then
+              echo "Health check failed, aborting deploy"
+              exit 1
+            fi
+            echo "Deploy complete"

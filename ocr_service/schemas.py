@@ -43,6 +43,7 @@ class HealthResponse(BaseModel):
 
     status: str
     timestamp: float
+    components: Optional[dict] = None
 
 
 class ReconStatusResponse(BaseModel):
@@ -70,18 +71,13 @@ class PresignResponse(BaseModel):
     fields: dict
 
 
-class ErrorContext(BaseModel):
-    """Structured error payload for OCR pipeline failures."""
+class ErrorResponse(BaseModel):
+    """
+    Standardized error response schema.
+    """
 
     phase: str
-    correlation_id: str
-    trace_id: str
+    message: str
+    correlation_id: Optional[str] = None
+    trace_id: Optional[str] = None
     filename: Optional[str] = None
-    content_type: Optional[str] = None
-    detail: str
-
-
-class ErrorResponse(BaseModel):
-    """API error envelope with auditable execution context."""
-
-    error: ErrorContext

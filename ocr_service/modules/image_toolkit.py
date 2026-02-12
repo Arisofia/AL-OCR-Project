@@ -4,6 +4,7 @@ Utility toolkit for image processing operations.
 
 import asyncio
 import base64
+import binascii
 import logging
 from typing import Any, Optional
 
@@ -14,6 +15,10 @@ import numpy as np
 __all__ = ["ImageToolkit"]
 
 logger = logging.getLogger("ocr-service.image-toolkit")
+
+
+class ImageToolkitError(Exception):
+    """Custom exception for image toolkit errors."""
 
 
 class ImageToolkit:
@@ -35,9 +40,9 @@ class ImageToolkit:
                 if data.startswith("data:image"):
                     data = data.split(",")[-1]
                 return base64.b64decode(data)
-            except Exception as e:
+            except (binascii.Error, TypeError) as e:
                 logger.error("Failed to decode base64 image data: %s", e)
-                return None
+                raise ImageToolkitError("Invalid base64 image data") from e
 
         return None
 
@@ -51,11 +56,14 @@ class ImageToolkit:
             nparr = np.frombuffer(image_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             if img is None:
-                logger.error("Failed to decode image bytes.")
+                logger.error("Failed to decode image bytes: imdecode returned None")
+                raise ImageToolkitError(
+                    "Failed to decode image: imdecode returned None"
+                )
             return img
         except Exception as e:
             logger.error("Error decoding image: %s", e)
-            return None
+            raise ImageToolkitError(f"Error decoding image: {e}") from e
 
     @staticmethod
     async def decode_image_async(image_bytes: bytes) -> Optional[np.ndarray]:

@@ -157,7 +157,7 @@ class AdvancedPixelReconstructor:
             logger.info("Attempting fallback to %s", name)
             try:
                 return await provider.reconstruct(image_bytes, prompt)
-            except AIProviderError as e:
+            except (AIProviderError, httpx.HTTPError) as e:
                 logger.warning("Fallback to %s failed: %s", name, e)
             except Exception as e:
                 logger.error("Unexpected fallback failure in %s: %s", name, e)

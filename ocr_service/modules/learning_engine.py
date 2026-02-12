@@ -42,7 +42,12 @@ class LearningEngine:
                 )
                 logger.info("Supabase integration active (Free Tier Mode)")
             except Exception as e:
-                logger.error("Supabase init bypassed, local-only mode: %s", e)
+                logger.exception(
+                    "LearningEngine: Supabase init bypassed, running local-only "
+                    "mode | url=%s | error=%s",
+                    self.settings.supabase_url,
+                    e,
+                )
 
         # Ensure local directory exists
         os.makedirs(os.path.dirname(self.storage_path), exist_ok=True)
@@ -55,8 +60,11 @@ class LearningEngine:
                     1
                 ).execute()
                 return True
-            except Exception:
-                logger.warning("Supabase health check failed")
+            except Exception as e:
+                logger.exception(
+                    "LearningEngine: Supabase health check failed | error=%s",
+                    e,
+                )
 
         return os.access(os.path.dirname(self.storage_path), os.W_OK)
 
@@ -90,7 +98,11 @@ class LearningEngine:
                 await asyncio.to_thread(_upsert)
                 logger.debug("Cloud sync successful")
             except Exception as e:
-                logger.warning("Cloud sync failed (possibly quota exceeded): %s", e)
+                logger.exception(
+                    "LearningEngine: Cloud sync failed (possibly quota exceeded) | "
+                    "error=%s",
+                    e,
+                )
 
         await save_task
 
@@ -115,8 +127,13 @@ class LearningEngine:
                 res = await asyncio.to_thread(_fetch)
                 if res and res.data:
                     return cast(dict[str, Any], res.data[0])
-            except Exception:
-                logger.info("Cloud fetch failed, searching local cache")
+            except Exception as e:
+                logger.exception(
+                    "LearningEngine: Cloud pattern fetch failed for doc_type=%s | "
+                    "error=%s",
+                    doc_type,
+                    e,
+                )
 
         # Fallback to Local
         return await self._fetch_local(doc_type)
@@ -149,5 +166,6 @@ class LearningEngine:
         try:
             with open(self.storage_path, encoding="utf-8") as f:
                 return cast(list[dict[str, Any]], json.load(f))
-        except Exception:
+        except Exception as e:
+            logger.exception("Failed to load or parse local learning patterns: %s", e)
             return []

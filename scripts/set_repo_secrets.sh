@@ -15,7 +15,7 @@ declare -A secrets=(
   [AWS_LAMBDA_ROLE_ARN]="${AWS_LAMBDA_ROLE_ARN:-}"
   [ENABLE_LAMBDA_ROLLBACK]="${ENABLE_LAMBDA_ROLLBACK:-false}"
   [ROLLBACK_COLD_MS]="${ROLLBACK_COLD_MS:-2000}"
-  [SLACK_WEBHOOK_URL]="${SLACK_WEBHOOK_URL:-}"
+
 )
 
 echo "Setting secrets for repo: $REPO"

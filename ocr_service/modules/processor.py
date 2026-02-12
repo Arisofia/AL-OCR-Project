@@ -4,17 +4,17 @@ Coordinates OCR pipelines with automated S3 storage integration.
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import time
-from hashlib import sha256
-from typing import Any
-
-from fastapi import HTTPException, UploadFile
+from typing import Any, Optional, cast
 
 import redis.asyncio as redis
-from redis.exceptions import RedisError
+from fastapi import UploadFile
+from opentelemetry import trace
 
+from ocr_service.exceptions import OCRPipelineError
 from ocr_service.services.storage import StorageService
 
 from .ocr_engine import IterativeOCREngine
@@ -22,6 +22,7 @@ from .ocr_engine import IterativeOCREngine
 __all__ = ["OCRProcessor"]
 
 logger = logging.getLogger("ocr-service.processor")
+tracer = trace.get_tracer(__name__)
 
 
 class OCRProcessor:
@@ -29,9 +30,15 @@ class OCRProcessor:
     Orchestrates the OCR lifecycle, managing extraction and storage.
     """
 
-    def __init__(self, ocr_engine: IterativeOCREngine, storage_service: StorageService):
+    def __init__(
+        self,
+        ocr_engine: IterativeOCREngine,
+        storage_service: StorageService,
+        redis_client: redis.Redis,
+    ):
         self.ocr_engine = ocr_engine
         self.storage_service = storage_service
+        self.redis_client = redis_client
 
     async def close(self) -> None:
         """Cleanup processor resources."""
@@ -45,14 +52,14 @@ class OCRProcessor:
         doc_type: str = "generic",
         enable_reconstruction_config: bool = False,
         request_id: str = "N/A",
-        redis_client: redis.Redis | None = None,
-        idempotency_key: str | None = None,
+        redis_client: Optional[redis.Redis] = None,
+        idempotency_key: Optional[str] = None,
         idempotency_ttl_seconds: int = 3600,
     ) -> dict[str, Any]:
         """
         Handles UploadFile objects from FastAPI and routes to core process_bytes.
         """
-        self._validate_file_type(file.content_type or "")
+        self._validate_file_type(file.content_type or "", file.filename, request_id)
         contents = await file.read()
         # Infer content_type from UploadFile or file signature
         inferred_type = file.content_type
@@ -87,8 +94,8 @@ class OCRProcessor:
         doc_type: str = "generic",
         enable_reconstruction_config: bool = False,
         request_id: str = "N/A",
-        redis_client: redis.Redis | None = None,
-        idempotency_key: str | None = None,
+        redis_client: Optional[redis.Redis] = None,
+        idempotency_key: Optional[str] = None,
         idempotency_ttl_seconds: int = 3600,
     ) -> dict[str, Any]:
         """
@@ -96,20 +103,59 @@ class OCRProcessor:
         """
         start_time = time.time()
 
+        span = trace.get_current_span()
+        trace_id: Optional[str] = None
+        ctx = span.get_span_context() if span is not None else None
+        if ctx is not None and getattr(ctx, "trace_id", None) is not None:
+            trace_id = format(ctx.trace_id, "x")
+
+            # Build the canonical idempotency cache key (supports client-provided key)
+        cache_key = self._build_idempotency_key(
+            idempotency_key=idempotency_key,
+            filename=filename,
+            doc_type=doc_type,
+            reconstruct=reconstruct or enable_reconstruction_config,
+            advanced=advanced,
+            contents=contents,
+        )
+
+        # Allow callers to override the Redis client for testing or isolation
+        redis_client = redis_client or self.redis_client
+
         try:
-            cache_key = self._build_idempotency_key(
-                idempotency_key=idempotency_key,
-                filename=filename,
-                doc_type=doc_type,
-                reconstruct=reconstruct or enable_reconstruction_config,
-                advanced=advanced,
-                contents=contents,
-            )
             cached_result = await self._read_cached_result(redis_client, cache_key)
             if cached_result is not None:
-                logger.info("Idempotency cache hit | key=%s | filename=%s | request_id=%s", cache_key, filename, request_id)
+                logger.info(
+                    "Idempotency cache hit | key=%s | filename=%s | request_id=%s",
+                    cache_key,
+                    filename,
+                    request_id,
+                )
                 return cached_result
+        except OCRPipelineError:
+            # Bubble up OCRPipelineError raised by read helper
+            raise
+        except Exception as e:
+            logger.exception("Unexpected error checking idempotency cache: %s", e)
 
+        # Wrap core pipeline so idempotency key can be cleaned on failure.
+        # Mark request as processing (short TTL) to prevent duplicates.
+        try:
+            await self._write_cached_result(
+                redis_client, cache_key, {"status": "processing"}, 120
+            )
+        except Exception as e:
+            logger.exception("Failed to set idempotency processing marker: %s", e)
+            raise OCRPipelineError(
+                phase="idempotency",
+                message="Failed to set idempotency key",
+                status_code=500,
+                correlation_id=request_id,
+                trace_id=trace_id,
+                filename=filename,
+            ) from e
+
+        try:
             # Execute targeted OCR strategy
             use_recon = reconstruct or enable_reconstruction_config
             result = await self._execute_ocr_strategy(
@@ -117,8 +163,20 @@ class OCRProcessor:
             )
 
             if "error" in result:
-                raise HTTPException(
-                    status_code=400, detail=f"Extraction failure: {result['error']}"
+                try:
+                    if redis_client is not None:
+                        await redis_client.delete(cache_key)
+                except Exception as e:  # pragma: no cover - defensive
+                    logger.exception(
+                        "Redis DELETE failed when cleaning idempotency key: %s", e
+                    )
+                raise OCRPipelineError(
+                    phase="extraction",
+                    message=f"Extraction failure: {result['error']}",
+                    status_code=400,
+                    correlation_id=request_id,
+                    trace_id=trace_id,
+                    filename=filename,
                 )
 
             # Synchronize raw document and extracted intelligence to S3
@@ -127,6 +185,8 @@ class OCRProcessor:
                 filename,
                 content_type,
                 result,
+                request_id,
+                trace_id,
             )
 
             # Enrich response with traceability metadata
@@ -138,6 +198,8 @@ class OCRProcessor:
                     "request_id": request_id,
                 }
             )
+
+            # Persist final result to idempotency cache with caller TTL
             await self._write_cached_result(
                 redis_client,
                 cache_key,
@@ -146,21 +208,120 @@ class OCRProcessor:
             )
             return result
 
-        except HTTPException:
+        except OCRPipelineError as e:
+            # Do not delete key on 409 conflict
+            if e.status_code != 409:
+                try:
+                    if redis_client is not None:
+                        await redis_client.delete(cache_key)
+                except Exception as de:
+                    from ocr_service.metrics import OCR_IDEMPOTENCY_REDIS_ERROR_COUNT
+
+                    logger.exception(
+                        "Redis DELETE failed during cleanup after OCRPipelineError: %s",
+                        de,
+                    )
+                    OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="delete").inc()
             raise
         except Exception as e:
+            try:
+                if redis_client is not None:
+                    await redis_client.delete(cache_key)
+            except Exception as de:
+                logger.exception(
+                    "Redis DELETE failed during cleanup after exception: %s", de
+                )
             self._handle_pipeline_failure(filename, request_id, e)
-            raise HTTPException(
+            raise OCRPipelineError(
+                phase="orchestration",
+                message="Internal processing failure in OCR orchestrator",
                 status_code=500,
-                detail="Internal processing failure in OCR orchestrator",
+                correlation_id=request_id,
+                trace_id=trace_id,
+                filename=filename,
             ) from e
 
-    def _validate_file_type(self, content_type: str):
+    def _validate_file_type(
+        self, content_type: str, filename: "Optional[str]", request_id: str
+    ):
         """Ensures the uploaded file is an image."""
         if not content_type or not content_type.startswith("image/"):
-            raise HTTPException(
-                status_code=400, detail="File must be a valid image format"
+            span = trace.get_current_span()
+            trace_id: Optional[str] = None
+            ctx = span.get_span_context() if span is not None else None
+            if ctx is not None and getattr(ctx, "trace_id", None) is not None:
+                trace_id = format(ctx.trace_id, "x")
+            raise OCRPipelineError(
+                phase="validation",
+                message="File must be a valid image format",
+                status_code=400,
+                correlation_id=request_id,
+                trace_id=trace_id,
+                filename=filename,
             )
+
+    def _build_idempotency_key(
+        self,
+        idempotency_key: Optional[str],
+        filename: str,
+        doc_type: str,
+        reconstruct: bool,
+        advanced: bool,
+        contents: bytes,
+    ) -> str:
+        """Create canonical idempotency key (client-provided or deterministic)."""
+        if idempotency_key:
+            return f"ocr:idempotency:{idempotency_key}"
+
+        h = hashlib.sha256()
+        h.update(contents or b"")
+        meta = f"{filename}|{doc_type}|{int(reconstruct)}|{int(advanced)}"
+        h.update(meta.encode("utf-8"))
+        return f"ocr:idempotency:{h.hexdigest()}"
+
+    async def _read_cached_result(
+        self, redis_client: Optional[redis.Redis], cache_key: str
+    ) -> Optional[dict[str, Any]]:
+        """Read and decode a JSON result from Redis idempotency cache."""
+        if redis_client is None:
+            return None
+        try:
+            raw = await redis_client.get(cache_key)
+            if not raw:
+                return None
+            if isinstance(raw, bytes):
+                raw = raw.decode("utf-8")
+            return cast(dict[str, Any], json.loads(raw))
+        except Exception as e:
+            logger.exception("Redis read failed for key=%s: %s", cache_key, e)
+            raise OCRPipelineError(
+                phase="idempotency",
+                message="Redis read failure",
+                status_code=500,
+            ) from e
+
+    async def _write_cached_result(
+        self,
+        redis_client: Optional[redis.Redis],
+        cache_key: str,
+        value: dict[str, Any],
+        ttl: int,
+    ) -> None:
+        """Serialize and write a JSON result to the idempotency cache."""
+        if redis_client is None:
+            return
+        try:
+            await redis_client.set(cache_key, json.dumps(value), ex=ttl)
+        except Exception as e:
+            logger.exception("Redis write failed for key=%s: %s", cache_key, e)
+            from ocr_service.metrics import OCR_IDEMPOTENCY_REDIS_ERROR_COUNT
+
+            OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="set").inc()
+            raise OCRPipelineError(
+                phase="idempotency",
+                message="Redis write failure",
+                status_code=500,
+            ) from e
 
     async def _execute_ocr_strategy(
         self, contents: bytes, advanced: bool, use_recon: bool, doc_type: str
@@ -177,7 +338,13 @@ class OCRProcessor:
         )
 
     async def _persist_results(
-        self, contents: bytes, filename: str, content_type: str, result: dict[str, Any]
+        self,
+        contents: bytes,
+        filename: str,
+        content_type: str,
+        result: dict[str, Any],
+        request_id: str,
+        trace_id: Optional[str],
     ) -> str:
         """Uploads files and metadata to cloud storage."""
         upload_tasks = [
@@ -202,97 +369,23 @@ class OCRProcessor:
         for res in upload_results:
             if isinstance(res, Exception):
                 logger.error("Storage upload failed: %s", res)
-                raise HTTPException(
-                    status_code=500, detail="Failed to persist results to storage"
+                raise OCRPipelineError(
+                    phase="storage",
+                    message="Failed to persist results to storage",
+                    status_code=500,
+                    correlation_id=request_id,
+                    trace_id=trace_id,
+                    filename=filename,
                 )
-        return str(upload_results[0])
+        s3_key_result = upload_results[0]
+        return s3_key_result if isinstance(s3_key_result, str) else "unknown"
 
     def _handle_pipeline_failure(
-        self, filename: str, request_id: str, error: Exception
+        self, filename: str, request_id: str, _error: Exception
     ):
         """Logs pipeline failures with context."""
-        logger.error(
-            "Pipeline failure | File: %s | RID: %s | Error: %s",
+        logger.exception(
+            "Pipeline failure | File: %s | RID: %s",
             filename,
             request_id,
-            error,
         )
-
-
-    def _build_idempotency_key(
-        self,
-        *,
-        idempotency_key: str | None,
-        filename: str,
-        doc_type: str,
-        reconstruct: bool,
-        advanced: bool,
-        contents: bytes,
-    ) -> str:
-        if idempotency_key:
-            return f"ocr:idempotency:{idempotency_key}"
-
-        digest = sha256(contents).hexdigest()
-        return (
-            f"ocr:idempotency:auto:{filename}:{doc_type}:{int(reconstruct)}:"
-            f"{int(advanced)}:{digest}"
-        )
-
-    async def _read_cached_result(
-        self, redis_client: redis.Redis | None, cache_key: str
-    ) -> dict[str, Any] | None:
-        if redis_client is None:
-            return None
-
-        try:
-            cached = await redis_client.get(cache_key)
-            if not cached:
-                return None
-            if isinstance(cached, bytes):
-                cached = cached.decode("utf-8")
-            return json.loads(cached)
-        except json.JSONDecodeError as exc:
-            logger.warning(
-                "Invalid idempotency cache payload | key=%s | error=%s",
-                cache_key,
-                exc,
-            )
-            try:
-                await redis_client.delete(cache_key)
-            except RedisError as delete_error:
-                logger.error(
-                    "Failed to delete invalid idempotency cache payload | key=%s | error=%s",
-                    cache_key,
-                    delete_error,
-                )
-            return None
-        except RedisError as exc:
-            logger.error(
-                "Failed to read idempotency cache from Redis | key=%s | error=%s",
-                cache_key,
-                exc,
-            )
-            return None
-
-    async def _write_cached_result(
-        self,
-        redis_client: redis.Redis | None,
-        cache_key: str,
-        result: dict[str, Any],
-        idempotency_ttl_seconds: int,
-    ) -> None:
-        if redis_client is None:
-            return
-
-        try:
-            await redis_client.set(
-                cache_key,
-                json.dumps(result),
-                ex=max(1, idempotency_ttl_seconds),
-            )
-        except RedisError as exc:
-            logger.error(
-                "Failed to write idempotency cache | key=%s | error=%s",
-                cache_key,
-                exc,
-            )
