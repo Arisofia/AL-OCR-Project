@@ -1,7 +1,8 @@
 import logging
 import time
+from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Header, Request, UploadFile
 
 from ocr_service.config import Settings, get_settings
 from ocr_service.exceptions import OCRPipelineError
@@ -25,6 +26,7 @@ async def perform_ocr(
     advanced: bool = False,
     doc_type: str = "generic",
     _api_key: str = Depends(get_api_key),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
     request_id: str = Depends(get_request_id),
     curr_settings: Settings = Depends(get_settings),
     processor: OCRProcessor = Depends(get_ocr_processor),
@@ -38,6 +40,8 @@ async def perform_ocr(
 
     try:
         # SlowAPI uses 'request' via decorator internally
+        redis_client = getattr(request.app.state, "redis_client", None)
+
         result = await processor.process_file(
             file=file,
             reconstruct=reconstruct,
@@ -45,6 +49,11 @@ async def perform_ocr(
             doc_type=doc_type,
             enable_reconstruction_config=curr_settings.enable_reconstruction,
             request_id=request_id,
+            redis_client=redis_client,
+            idempotency_key=idempotency_key,
+            idempotency_ttl_seconds=getattr(
+                curr_settings, "redis_idempotency_ttl", 3600
+            ),
         )
         status = "success"
         return OCRResponse(**result)

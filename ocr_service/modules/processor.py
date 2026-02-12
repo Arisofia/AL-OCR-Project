@@ -52,6 +52,9 @@ class OCRProcessor:
         doc_type: str = "generic",
         enable_reconstruction_config: bool = False,
         request_id: str = "N/A",
+        redis_client: Optional[redis.Redis] = None,
+        idempotency_key: Optional[str] = None,
+        idempotency_ttl_seconds: int = 3600,
     ) -> dict[str, Any]:
         """
         Handles UploadFile objects from FastAPI and routes to core process_bytes.
@@ -76,6 +79,9 @@ class OCRProcessor:
             doc_type=doc_type,
             enable_reconstruction_config=enable_reconstruction_config,
             request_id=request_id,
+            redis_client=redis_client,
+            idempotency_key=idempotency_key,
+            idempotency_ttl_seconds=idempotency_ttl_seconds,
         )
 
     async def process_bytes(
@@ -88,6 +94,9 @@ class OCRProcessor:
         doc_type: str = "generic",
         enable_reconstruction_config: bool = False,
         request_id: str = "N/A",
+        redis_client: Optional[redis.Redis] = None,
+        idempotency_key: Optional[str] = None,
+        idempotency_ttl_seconds: int = 3600,
     ) -> dict[str, Any]:
         """
         Executes the full OCR pipeline on raw bytes: Extraction and Cloud Persistence.
@@ -100,72 +109,53 @@ class OCRProcessor:
         if ctx is not None and getattr(ctx, "trace_id", None) is not None:
             trace_id = format(ctx.trace_id, "x")
 
-        idempotency_key = (
-            f"idempotency:{hashlib.sha256(contents).hexdigest()}:{filename}"
+            # Build the canonical idempotency cache key (supports client-provided key)
+        cache_key = self._build_idempotency_key(
+            idempotency_key=idempotency_key,
+            filename=filename,
+            doc_type=doc_type,
+            reconstruct=reconstruct or enable_reconstruction_config,
+            advanced=advanced,
+            contents=contents,
         )
+
+        # Allow callers to override the Redis client for testing or isolation
+        redis_client = redis_client or self.redis_client
+
         try:
-            try:
-                cached_result = await self.redis_client.get(idempotency_key)
-            except Exception as e:  # pragma: no cover - redis defensive
-                from ocr_service.metrics import OCR_IDEMPOTENCY_REDIS_ERROR_COUNT
-
-                logger.exception("Redis GET failed during idempotency check: %s", e)
-                OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="get").inc()
-                raise OCRPipelineError(
-                    phase="idempotency",
-                    message="Failed to query idempotency store",
-                    status_code=500,
-                    correlation_id=request_id,
-                    trace_id=trace_id,
-                    filename=filename,
-                ) from e
-
-            if cached_result:
-                try:
-                    # Redis may return bytes or str depending on client config.
-                    # Normalize to text before JSON parsing.
-                    if isinstance(cached_result, (bytes, bytearray)):
-                        cached_text = cached_result.decode("utf-8")
-                    else:
-                        cached_text = cached_result
-
-                    cached_data = cast(dict[str, Any], json.loads(cached_text))
-                    if cached_data.get("status") == "processing":
-                        raise OCRPipelineError(
-                            phase="idempotency",
-                            message="Duplicate request already being processed",
-                            status_code=409,
-                            correlation_id=request_id,
-                            trace_id=trace_id,
-                            filename=filename,
-                        )
-                    return cached_data
-                except json.JSONDecodeError:
-                    logger.warning(
-                        "Could not decode cached idempotency result for key %s",
-                        idempotency_key,
-                    )
-
-            try:
-                await self.redis_client.set(
-                    idempotency_key,
-                    json.dumps({"status": "processing"}),
-                    ex=120,  # 2 minutes TTL for processing
+            cached_result = await self._read_cached_result(redis_client, cache_key)
+            if cached_result is not None:
+                logger.info(
+                    "Idempotency cache hit | key=%s | filename=%s | request_id=%s",
+                    cache_key,
+                    filename,
+                    request_id,
                 )
-            except Exception as e:  # pragma: no cover - redis defensive
-                from ocr_service.metrics import OCR_IDEMPOTENCY_REDIS_ERROR_COUNT
+                return cached_result
+        except OCRPipelineError:
+            # Bubble up OCRPipelineError raised by read helper
+            raise
+        except Exception as e:
+            logger.exception("Unexpected error checking idempotency cache: %s", e)
 
-                logger.exception("Redis SET failed during idempotency set: %s", e)
-                OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="set").inc()
-                raise OCRPipelineError(
-                    phase="idempotency",
-                    message="Failed to set idempotency key",
-                    status_code=500,
-                    correlation_id=request_id,
-                    trace_id=trace_id,
-                    filename=filename,
-                ) from e
+        # Wrap core pipeline so idempotency key can be cleaned on failure.
+        # Mark request as processing (short TTL) to prevent duplicates.
+        try:
+            await self._write_cached_result(
+                redis_client, cache_key, {"status": "processing"}, 120
+            )
+        except Exception as e:
+            logger.exception("Failed to set idempotency processing marker: %s", e)
+            raise OCRPipelineError(
+                phase="idempotency",
+                message="Failed to set idempotency key",
+                status_code=500,
+                correlation_id=request_id,
+                trace_id=trace_id,
+                filename=filename,
+            ) from e
 
+        try:
             # Execute targeted OCR strategy
             use_recon = reconstruct or enable_reconstruction_config
             result = await self._execute_ocr_strategy(
@@ -174,7 +164,8 @@ class OCRProcessor:
 
             if "error" in result:
                 try:
-                    await self.redis_client.delete(idempotency_key)
+                    if redis_client is not None:
+                        await redis_client.delete(cache_key)
                 except Exception as e:  # pragma: no cover - defensive
                     logger.exception(
                         "Redis DELETE failed when cleaning idempotency key: %s", e
@@ -208,18 +199,22 @@ class OCRProcessor:
                 }
             )
 
-            await self.redis_client.set(
-                idempotency_key,
-                json.dumps(result),
-                ex=3600,  # 1 hour TTL for final result
+            # Persist final result to idempotency cache with caller TTL
+            await self._write_cached_result(
+                redis_client,
+                cache_key,
+                result,
+                idempotency_ttl_seconds,
             )
+
             return result
 
         except OCRPipelineError as e:
             # Do not delete key on 409 conflict
             if e.status_code != 409:
                 try:
-                    await self.redis_client.delete(idempotency_key)
+                    if redis_client is not None:
+                        await redis_client.delete(cache_key)
                 except Exception as de:
                     from ocr_service.metrics import OCR_IDEMPOTENCY_REDIS_ERROR_COUNT
 
@@ -231,7 +226,8 @@ class OCRProcessor:
             raise
         except Exception as e:
             try:
-                await self.redis_client.delete(idempotency_key)
+                if redis_client is not None:
+                    await redis_client.delete(cache_key)
             except Exception as de:
                 logger.exception(
                     "Redis DELETE failed during cleanup after exception: %s", de
@@ -264,6 +260,69 @@ class OCRProcessor:
                 trace_id=trace_id,
                 filename=filename,
             )
+
+    def _build_idempotency_key(
+        self,
+        idempotency_key: Optional[str],
+        filename: str,
+        doc_type: str,
+        reconstruct: bool,
+        advanced: bool,
+        contents: bytes,
+    ) -> str:
+        """Create canonical idempotency key (client-provided or deterministic)."""
+        if idempotency_key:
+            return f"ocr:idempotency:{idempotency_key}"
+
+        h = hashlib.sha256()
+        h.update(contents or b"")
+        meta = f"{filename}|{doc_type}|{int(reconstruct)}|{int(advanced)}"
+        h.update(meta.encode("utf-8"))
+        return f"ocr:idempotency:{h.hexdigest()}"
+
+    async def _read_cached_result(
+        self, redis_client: Optional[redis.Redis], cache_key: str
+    ) -> Optional[dict[str, Any]]:
+        """Read and decode a JSON result from Redis idempotency cache."""
+        if redis_client is None:
+            return None
+        try:
+            raw = await redis_client.get(cache_key)
+            if not raw:
+                return None
+            if isinstance(raw, bytes):
+                raw = raw.decode("utf-8")
+            return cast(dict[str, Any], json.loads(raw))
+        except Exception as e:
+            logger.exception("Redis read failed for key=%s: %s", cache_key, e)
+            raise OCRPipelineError(
+                phase="idempotency",
+                message="Redis read failure",
+                status_code=500,
+            ) from e
+
+    async def _write_cached_result(
+        self,
+        redis_client: Optional[redis.Redis],
+        cache_key: str,
+        value: dict[str, Any],
+        ttl: int,
+    ) -> None:
+        """Serialize and write a JSON result to the idempotency cache."""
+        if redis_client is None:
+            return
+        try:
+            await redis_client.set(cache_key, json.dumps(value), ex=ttl)
+        except Exception as e:
+            logger.exception("Redis write failed for key=%s: %s", cache_key, e)
+            from ocr_service.metrics import OCR_IDEMPOTENCY_REDIS_ERROR_COUNT
+
+            OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="set").inc()
+            raise OCRPipelineError(
+                phase="idempotency",
+                message="Redis write failure",
+                status_code=500,
+            ) from e
 
     async def _execute_ocr_strategy(
         self, contents: bytes, advanced: bool, use_recon: bool, doc_type: str
