@@ -1,7 +1,7 @@
 """
 Redis client factory for OCR service.
 
-This module provides a function to initialize and configure a Redis client
+This module provides helpers to initialize and validate Redis connectivity
 using environment variables and application settings.
 """
 
@@ -15,39 +15,51 @@ from ocr_service.config import Settings
 logger = logging.getLogger("ocr-service.redis")
 
 
+class RedisInitializationError(RuntimeError):
+    """Raised when Redis initialization or validation fails."""
+
+
+def _env_or_default(name: str, default: str) -> str:
+    value = os.getenv(name)
+    return value if value not in (None, "") else default
+
+
 def get_redis_client(settings: Settings) -> redis.Redis:
-    """
-    Factory for creating an asynchronous Redis client based on settings.
-
-    This function takes application settings as input and returns an
-    initialized Redis client. It uses environment variables as a fallback
-    for the Redis host, port, database index, and password, if they are
-    not provided in the application settings.
-
-    The returned Redis client is configured with the specified host,
-    port, database index, and password. The decode_responses parameter
-    is set to False to ensure that Redis responses are not decoded as
-    UTF-8 strings.
-
-    Parameters:
-        settings (Settings): The application settings.
-
-    Returns:
-        redis.Redis: An asynchronous Redis client.
-    """
-    host = os.getenv("REDIS_HOST", settings.redis_host)
-    port = int(os.getenv("REDIS_PORT", str(settings.redis_port)))
-    db = int(os.getenv("REDIS_DB", str(settings.redis_db)))
+    """Create an asynchronous Redis client from settings and environment."""
+    host = _env_or_default("REDIS_HOST", settings.redis_host)
+    port = int(_env_or_default("REDIS_PORT", str(settings.redis_port)))
+    db = int(_env_or_default("REDIS_DB", str(settings.redis_db)))
     password = os.getenv("REDIS_PASSWORD", settings.redis_password)
 
-    log_message = f"Initializing Redis client | Host: {host} | Port: {port} | DB: {db}"
-    logger.info(log_message)
+    logger.info(
+        "Initializing Redis client | host=%s | port=%d | db=%d",
+        host,
+        port,
+        db,
+    )
 
-    # Create the Redis client instance
     return redis.Redis(
         host=host,
         port=port,
         db=db,
         password=password,
         decode_responses=False,
+        socket_connect_timeout=3,
+        socket_timeout=3,
+        health_check_interval=30,
+        retry_on_timeout=True,
     )
+
+
+async def verify_redis_connection(client: redis.Redis, settings: Settings) -> None:
+    """Perform startup ping check for Redis connectivity."""
+    if not settings.redis_startup_check:
+        logger.info("Redis startup check disabled by configuration")
+        return
+
+    try:
+        await client.ping()
+        logger.info("Redis connectivity check succeeded")
+    except Exception as exc:  # pragma: no cover - covered through API lifecycle tests
+        logger.exception("Redis connectivity check failed")
+        raise RedisInitializationError("Redis startup connectivity check failed") from exc

@@ -68,3 +68,20 @@ class PresignResponse(BaseModel):
 
     url: str
     fields: dict
+
+
+class ErrorContext(BaseModel):
+    """Structured error payload for OCR pipeline failures."""
+
+    phase: str
+    correlation_id: str
+    trace_id: str
+    filename: Optional[str] = None
+    content_type: Optional[str] = None
+    detail: str
+
+
+class ErrorResponse(BaseModel):
+    """API error envelope with auditable execution context."""
+
+    error: ErrorContext

@@ -4,11 +4,15 @@ Coordinates OCR pipelines with automated S3 storage integration.
 """
 
 import asyncio
+import json
 import logging
 import time
+from hashlib import sha256
 from typing import Any
 
 from fastapi import HTTPException, UploadFile
+
+import redis.asyncio as redis
 
 from ocr_service.services.storage import StorageService
 
@@ -40,6 +44,8 @@ class OCRProcessor:
         doc_type: str = "generic",
         enable_reconstruction_config: bool = False,
         request_id: str = "N/A",
+        redis_client: redis.Redis | None = None,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         """
         Handles UploadFile objects from FastAPI and routes to core process_bytes.
@@ -64,6 +70,8 @@ class OCRProcessor:
             doc_type=doc_type,
             enable_reconstruction_config=enable_reconstruction_config,
             request_id=request_id,
+            redis_client=redis_client,
+            idempotency_key=idempotency_key,
         )
 
     async def process_bytes(
@@ -76,6 +84,8 @@ class OCRProcessor:
         doc_type: str = "generic",
         enable_reconstruction_config: bool = False,
         request_id: str = "N/A",
+        redis_client: redis.Redis | None = None,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         """
         Executes the full OCR pipeline on raw bytes: Extraction and Cloud Persistence.
@@ -83,6 +93,19 @@ class OCRProcessor:
         start_time = time.time()
 
         try:
+            cache_key = self._build_idempotency_key(
+                idempotency_key=idempotency_key,
+                filename=filename,
+                doc_type=doc_type,
+                reconstruct=reconstruct or enable_reconstruction_config,
+                advanced=advanced,
+                contents=contents,
+            )
+            cached_result = await self._read_cached_result(redis_client, cache_key)
+            if cached_result is not None:
+                logger.info("Idempotency cache hit | key=%s | filename=%s | request_id=%s", cache_key, filename, request_id)
+                return cached_result
+
             # Execute targeted OCR strategy
             use_recon = reconstruct or enable_reconstruction_config
             result = await self._execute_ocr_strategy(
@@ -111,6 +134,7 @@ class OCRProcessor:
                     "request_id": request_id,
                 }
             )
+            await self._write_cached_result(redis_client, cache_key, result)
             return result
 
         except HTTPException:
@@ -184,3 +208,59 @@ class OCRProcessor:
             request_id,
             error,
         )
+
+
+    def _build_idempotency_key(
+        self,
+        *,
+        idempotency_key: str | None,
+        filename: str,
+        doc_type: str,
+        reconstruct: bool,
+        advanced: bool,
+        contents: bytes,
+    ) -> str:
+        if idempotency_key:
+            return f"ocr:idempotency:{idempotency_key}"
+
+        digest = sha256(contents).hexdigest()
+        return (
+            f"ocr:idempotency:auto:{filename}:{doc_type}:{int(reconstruct)}:"
+            f"{int(advanced)}:{digest}"
+        )
+
+    async def _read_cached_result(
+        self, redis_client: redis.Redis | None, cache_key: str
+    ) -> dict[str, Any] | None:
+        if redis_client is None:
+            return None
+
+        try:
+            cached = await redis_client.get(cache_key)
+            if not cached:
+                return None
+            if isinstance(cached, bytes):
+                cached = cached.decode("utf-8")
+            return json.loads(cached)
+        except Exception as exc:
+            logger.exception(
+                "Failed to read idempotency cache | key=%s | error=%s",
+                cache_key,
+                exc,
+            )
+            return None
+
+    async def _write_cached_result(
+        self, redis_client: redis.Redis | None, cache_key: str, result: dict[str, Any]
+    ) -> None:
+        if redis_client is None:
+            return
+
+        try:
+            await redis_client.set(cache_key, json.dumps(result), ex=3600)
+        except Exception as exc:
+            logger.exception(
+                "Failed to write idempotency cache | key=%s | error=%s",
+                cache_key,
+                exc,
+            )
