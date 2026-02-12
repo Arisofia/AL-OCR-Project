@@ -1,6 +1,5 @@
 import logging
 import time
-import uuid
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request
@@ -31,8 +30,17 @@ def _build_error_response(
     request: Request,
     status_code: int,
 ) -> JSONResponse:
-    correlation_id = request.headers.get("X-Correlation-ID") or str(uuid.uuid4())
-    trace_id = request.headers.get("X-Trace-ID") or get_request_id_from_scope(request.scope)
+    request_id = getattr(request.state, "request_id", get_request_id_from_scope(request.scope))
+    correlation_id = getattr(
+        request.state,
+        "correlation_id",
+        request.headers.get("X-Correlation-ID") or request_id,
+    )
+    trace_id = getattr(
+        request.state,
+        "trace_id",
+        request.headers.get("X-Trace-ID") or request_id,
+    )
     payload = ErrorResponse(
         error=ErrorContext(
             phase=phase,
@@ -128,8 +136,12 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         """Logs request lifecycle and adds performance metadata to responses."""
         start_time = time.time()
         request_id = get_request_id_from_scope(request.scope)
-        correlation_id = request.headers.get("X-Correlation-ID") or str(uuid.uuid4())
+        correlation_id = request.headers.get("X-Correlation-ID") or request_id
         trace_id = request.headers.get("X-Trace-ID") or request_id
+
+        request.state.request_id = request_id
+        request.state.correlation_id = correlation_id
+        request.state.trace_id = trace_id
 
         logger.info(
             "Request started | path=%s | method=%s | request_id=%s | correlation_id=%s | trace_id=%s",

@@ -13,6 +13,7 @@ from typing import Any
 from fastapi import HTTPException, UploadFile
 
 import redis.asyncio as redis
+from redis.exceptions import RedisError
 
 from ocr_service.services.storage import StorageService
 
@@ -46,6 +47,7 @@ class OCRProcessor:
         request_id: str = "N/A",
         redis_client: redis.Redis | None = None,
         idempotency_key: str | None = None,
+        idempotency_ttl_seconds: int = 3600,
     ) -> dict[str, Any]:
         """
         Handles UploadFile objects from FastAPI and routes to core process_bytes.
@@ -72,6 +74,7 @@ class OCRProcessor:
             request_id=request_id,
             redis_client=redis_client,
             idempotency_key=idempotency_key,
+            idempotency_ttl_seconds=idempotency_ttl_seconds,
         )
 
     async def process_bytes(
@@ -86,6 +89,7 @@ class OCRProcessor:
         request_id: str = "N/A",
         redis_client: redis.Redis | None = None,
         idempotency_key: str | None = None,
+        idempotency_ttl_seconds: int = 3600,
     ) -> dict[str, Any]:
         """
         Executes the full OCR pipeline on raw bytes: Extraction and Cloud Persistence.
@@ -134,7 +138,12 @@ class OCRProcessor:
                     "request_id": request_id,
                 }
             )
-            await self._write_cached_result(redis_client, cache_key, result)
+            await self._write_cached_result(
+                redis_client,
+                cache_key,
+                result,
+                idempotency_ttl_seconds,
+            )
             return result
 
         except HTTPException:
@@ -242,24 +251,47 @@ class OCRProcessor:
             if isinstance(cached, bytes):
                 cached = cached.decode("utf-8")
             return json.loads(cached)
-        except Exception as exc:
-            logger.exception(
-                "Failed to read idempotency cache | key=%s | error=%s",
+        except json.JSONDecodeError as exc:
+            logger.warning(
+                "Invalid idempotency cache payload | key=%s | error=%s",
+                cache_key,
+                exc,
+            )
+            try:
+                await redis_client.delete(cache_key)
+            except RedisError as delete_error:
+                logger.error(
+                    "Failed to delete invalid idempotency cache payload | key=%s | error=%s",
+                    cache_key,
+                    delete_error,
+                )
+            return None
+        except RedisError as exc:
+            logger.error(
+                "Failed to read idempotency cache from Redis | key=%s | error=%s",
                 cache_key,
                 exc,
             )
             return None
 
     async def _write_cached_result(
-        self, redis_client: redis.Redis | None, cache_key: str, result: dict[str, Any]
+        self,
+        redis_client: redis.Redis | None,
+        cache_key: str,
+        result: dict[str, Any],
+        idempotency_ttl_seconds: int,
     ) -> None:
         if redis_client is None:
             return
 
         try:
-            await redis_client.set(cache_key, json.dumps(result), ex=3600)
-        except Exception as exc:
-            logger.exception(
+            await redis_client.set(
+                cache_key,
+                json.dumps(result),
+                ex=max(1, idempotency_ttl_seconds),
+            )
+        except RedisError as exc:
+            logger.error(
                 "Failed to write idempotency cache | key=%s | error=%s",
                 cache_key,
                 exc,

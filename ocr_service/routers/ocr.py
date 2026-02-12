@@ -39,6 +39,7 @@ async def perform_ocr(
         request_id=request_id,
         redis_client=redis_client,
         idempotency_key=idempotency_key,
+        idempotency_ttl_seconds=curr_settings.ocr_idempotency_ttl_seconds,
     )
 
     return OCRResponse(**result)
