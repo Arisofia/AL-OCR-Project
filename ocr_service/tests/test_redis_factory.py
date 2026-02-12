@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-import fakeredis.asyncio as fakeredis_async
+import fakeredis
 import pytest
 import redis.exceptions
 
@@ -24,15 +24,15 @@ def dummy_settings():
 async def test_get_redis_client_success(dummy_settings):
     # Mock fakeredis to simulate a successful connection
     with pytest.MonkeyPatch().context() as m:
-        m.setattr("redis.asyncio.Redis", fakeredis_async.FakeRedis)
+        m.setattr("redis.asyncio.Redis", fakeredis.FakeAsyncRedis)
         client = get_redis_client(dummy_settings)
         assert client is not None
-        assert isinstance(client, fakeredis_async.FakeRedis)
+        assert isinstance(client, fakeredis.FakeAsyncRedis)
 
 
 @pytest.mark.asyncio
 async def test_verify_redis_connection_success():
-    client = fakeredis_async.FakeRedis()
+    client = fakeredis.FakeAsyncRedis()
     result = await verify_redis_connection(client)
     assert result["ok"] is True
     assert "latency_ms" in result
@@ -41,7 +41,7 @@ async def test_verify_redis_connection_success():
 @pytest.mark.asyncio
 async def test_verify_redis_connection_failure(caplog):
     # Simulate a Redis connection error
-    class BrokenRedis(fakeredis_async.FakeRedis):
+    class BrokenRedis(fakeredis.FakeAsyncRedis):
         async def ping(self):
             raise redis.exceptions.ConnectionError("Simulated connection error")
 
@@ -58,7 +58,7 @@ async def test_verify_redis_connection_failure(caplog):
 @pytest.mark.asyncio
 async def test_verify_redis_connection_timeout(caplog):
     # Simulate a Redis timeout
-    class SlowRedis(fakeredis_async.FakeRedis):
+    class SlowRedis(fakeredis.FakeAsyncRedis):
         async def ping(self):
             await asyncio.sleep(2)  # Simulate a long delay
             return True

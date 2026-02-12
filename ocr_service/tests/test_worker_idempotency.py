@@ -1,7 +1,7 @@
 import base64
 import json
 
-import fakeredis.asyncio as fakeredis_async
+import fakeredis
 import pytest
 
 from ocr_service.config import Settings
@@ -19,7 +19,7 @@ class DummyEngine:
 
 @pytest.fixture
 async def redis_client():
-    client = fakeredis_async.FakeRedis()
+    client = fakeredis.FakeAsyncRedis()
     yield client
     await client.aclose()
 
