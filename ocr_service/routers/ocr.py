@@ -61,7 +61,9 @@ async def perform_ocr(
         OCR_ERROR_COUNT.labels(phase=e.phase, error_type=type(e).__name__).inc()
         raise  # Re-raise the exception after logging
     except Exception:
-        from ocr_service.utils.tracing import get_current_trace_id
+        from ocr_service.utils.tracing import (
+            get_current_trace_id,  # pylint: disable=import-outside-toplevel
+        )
 
         trace_id = get_current_trace_id()
         logger.exception(

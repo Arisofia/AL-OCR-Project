@@ -276,11 +276,6 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         troubleshooting in production.
         """
         try:
-            from ocr_service.utils.redis_factory import (
-                get_redis_client,
-                verify_redis_connection,
-            )
-
             redis_client = get_redis_client(settings)
             redis_status = await verify_redis_connection(redis_client)
             if not redis_status.get("ok"):

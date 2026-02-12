@@ -214,8 +214,10 @@ class OCRProcessor:
                 try:
                     if redis_client is not None:
                         await redis_client.delete(cache_key)
-                except Exception as de:
-                    from ocr_service.metrics import OCR_IDEMPOTENCY_REDIS_ERROR_COUNT
+                except Exception as de:  # pylint: disable=broad-exception-caught
+                    from ocr_service.metrics import (
+                        OCR_IDEMPOTENCY_REDIS_ERROR_COUNT,  # pylint: disable=import-outside-toplevel
+                    )
 
                     logger.exception(
                         "Redis DELETE failed during cleanup after OCRPipelineError: %s",
@@ -223,11 +225,11 @@ class OCRProcessor:
                     )
                     OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="delete").inc()
             raise
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             try:
                 if redis_client is not None:
                     await redis_client.delete(cache_key)
-            except Exception as de:
+            except Exception as de:  # pylint: disable=broad-exception-caught
                 logger.exception(
                     "Redis DELETE failed during cleanup after exception: %s", de
                 )
@@ -312,9 +314,11 @@ class OCRProcessor:
             return
         try:
             await redis_client.set(cache_key, json.dumps(value), ex=ttl)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logger.exception("Redis write failed for key=%s: %s", cache_key, e)
-            from ocr_service.metrics import OCR_IDEMPOTENCY_REDIS_ERROR_COUNT
+            from ocr_service.metrics import (
+                OCR_IDEMPOTENCY_REDIS_ERROR_COUNT,  # pylint: disable=import-outside-toplevel
+            )
 
             OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="set").inc()
             raise OCRPipelineError(
