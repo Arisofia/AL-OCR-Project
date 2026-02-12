@@ -104,7 +104,19 @@ class OCRProcessor:
             f"idempotency:{hashlib.sha256(contents).hexdigest()}:{filename}"
         )
         try:
-            cached_result = await self.redis_client.get(idempotency_key)
+            try:
+                cached_result = await self.redis_client.get(idempotency_key)
+            except Exception as e:  # pragma: no cover - redis defensive
+                logger.exception("Redis GET failed during idempotency check: %s", e)
+                raise OCRPipelineError(
+                    phase="idempotency",
+                    message="Failed to query idempotency store",
+                    status_code=500,
+                    correlation_id=request_id,
+                    trace_id=trace_id,
+                    filename=filename,
+                ) from e
+
             if cached_result:
                 try:
                     # Redis may return bytes or str depending on client config.
@@ -131,11 +143,22 @@ class OCRProcessor:
                         idempotency_key,
                     )
 
-            await self.redis_client.set(
-                idempotency_key,
-                json.dumps({"status": "processing"}),
-                ex=120,  # 2 minutes TTL for processing
-            )
+            try:
+                await self.redis_client.set(
+                    idempotency_key,
+                    json.dumps({"status": "processing"}),
+                    ex=120,  # 2 minutes TTL for processing
+                )
+            except Exception as e:  # pragma: no cover - redis defensive
+                logger.exception("Redis SET failed during idempotency set: %s", e)
+                raise OCRPipelineError(
+                    phase="idempotency",
+                    message="Failed to set idempotency key",
+                    status_code=500,
+                    correlation_id=request_id,
+                    trace_id=trace_id,
+                    filename=filename,
+                ) from e
 
             # Execute targeted OCR strategy
             use_recon = reconstruct or enable_reconstruction_config
@@ -144,7 +167,12 @@ class OCRProcessor:
             )
 
             if "error" in result:
-                await self.redis_client.delete(idempotency_key)
+                try:
+                    await self.redis_client.delete(idempotency_key)
+                except Exception as e:  # pragma: no cover - defensive
+                    logger.exception(
+                        "Redis DELETE failed when cleaning idempotency key: %s", e
+                    )
                 raise OCRPipelineError(
                     phase="extraction",
                     message=f"Extraction failure: {result['error']}",
@@ -184,10 +212,21 @@ class OCRProcessor:
         except OCRPipelineError as e:
             # Do not delete key on 409 conflict
             if e.status_code != 409:
-                await self.redis_client.delete(idempotency_key)
+                try:
+                    await self.redis_client.delete(idempotency_key)
+                except Exception as de:
+                    logger.exception(
+                        "Redis DELETE failed during cleanup after OCRPipelineError: %s",
+                        de,
+                    )
             raise
         except Exception as e:
-            await self.redis_client.delete(idempotency_key)
+            try:
+                await self.redis_client.delete(idempotency_key)
+            except Exception as de:
+                logger.exception(
+                    "Redis DELETE failed during cleanup after exception: %s", de
+                )
             self._handle_pipeline_failure(filename, request_id, e)
             raise OCRPipelineError(
                 phase="orchestration",

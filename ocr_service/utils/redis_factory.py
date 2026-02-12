@@ -42,13 +42,16 @@ def get_redis_client(settings: Settings) -> redis.Redis:
     log_message = f"Initializing Redis client | Host: {host} | Port: {port} | DB: {db}"
     logger.info(log_message)
 
-    # Create the Redis client instance
+    # Create the Redis client instance with conservative timeouts to
+    # avoid long blocking calls in high-concurrency environments.
     return redis.Redis(
         host=host,
         port=port,
         db=db,
         password=password,
         decode_responses=False,
+        socket_connect_timeout=1.0,
+        socket_timeout=1.0,
     )
 
 

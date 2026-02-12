@@ -52,10 +52,14 @@ async def perform_ocr(
         OCR_ERROR_COUNT.labels(phase=e.phase, error_type=type(e).__name__).inc()
         raise  # Re-raise the exception after logging
     except Exception:
+        from ocr_service.utils.tracing import get_current_trace_id
+
+        trace_id = get_current_trace_id()
         logger.exception(
-            "Unexpected error handling OCR request | method=%s | RID=%s",
+            "Unexpected error handling OCR request | method=%s | RID=%s | TID=%s",
             request.method,
             request_id,
+            trace_id,
         )
         OCR_ERROR_COUNT.labels(
             phase="request_handling", error_type="UnexpectedError"

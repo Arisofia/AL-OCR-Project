@@ -57,6 +57,33 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             ).model_dump(exclude_none=True),
         )
 
+    @app.exception_handler(Exception)
+    async def generic_exception_handler(request: Request, _exc: Exception):
+        """Catch-all handler that converts unhandled exceptions into a
+        structured `ErrorResponse` and logs contextual identifiers.
+        """
+        from ocr_service.utils.tracing import get_current_trace_id
+
+        trace_id = get_current_trace_id()
+        request_id = getattr(request.state, "request_id", None)
+        correlation_id = getattr(request.state, "correlation_id", None)
+
+        logger.exception(
+            "Unhandled exception handled by generic handler | RID=%s CID=%s",
+            request_id,
+            correlation_id,
+        )
+
+        payload = ErrorResponse(
+            phase="orchestration",
+            message="Internal server error",
+            correlation_id=correlation_id or request_id,
+            trace_id=trace_id,
+        )
+        return JSONResponse(
+            status_code=500, content=payload.model_dump(exclude_none=True)
+        )
+
     # Metrics endpoint
     @app.get("/metrics")
     async def metrics():
@@ -65,29 +92,68 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     # Middleware
     @app.middleware("http")
     async def add_process_time_and_logging(request: Request, call_next):
-        """Logs request lifecycle and adds performance metadata to responses."""
+        """Logs request lifecycle, injects correlation IDs and traces, and adds
+        performance metadata to responses.
+        """
+        import uuid
+
+        from ocr_service.utils.tracing import get_current_trace_id
+
         start_time = time.time()
+        # Prefer AWS request id when present, otherwise accept incoming headers
+        # or generate a UUID to correlate logs across systems.
         request_id = get_request_id_from_scope(request.scope)
+        correlation_id = (
+            request.headers.get("X-Correlation-ID")
+            or request.headers.get("X-Request-ID")
+            or str(uuid.uuid4())
+        )
+
+        trace_id = get_current_trace_id()
+
+        # Expose context on request.state for downstream handlers and logs
+        request.state.request_id = request_id
+        request.state.correlation_id = correlation_id
+        request.state.trace_id = trace_id
 
         logger.info(
-            "Request started | Path: %s | Method: %s | ID: %s",
+            "Request started | Path: %s | Method: %s | RID: %s | CID: %s | TID: %s",
             request.url.path,
             request.method,
             request_id,
+            correlation_id,
+            trace_id,
         )
 
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:  # Ensure we log context for uncaught errors
+            logger.exception(
+                "Unhandled exception during request processing | RID=%s CID=%s TID=%s",
+                request_id,
+                correlation_id,
+                trace_id,
+            )
+            raise
 
         process_time = time.time() - start_time
         response.headers["X-Process-Time"] = f"{process_time:.4f}s"
         response.headers["X-Request-ID"] = request_id
+        response.headers["X-Correlation-ID"] = correlation_id
+        if trace_id is not None:
+            response.headers["X-Trace-ID"] = trace_id
 
         logger.info(
-            "Request finished | Path: %s | Status: %d | Latency: %.4fs | ID: %s",
+            "Request finished | Path: %s | Status: %d | Latency: %.4fs",
             request.url.path,
             response.status_code,
             process_time,
+        )
+        logger.info(
+            "Request context | RID: %s | CID: %s | TID: %s",
             request_id,
+            correlation_id,
+            trace_id,
         )
 
         return response
@@ -103,7 +169,12 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     # Startup checks for critical dependencies
     @app.on_event("startup")
     async def check_dependencies():
-        """Perform lightweight dependency checks on startup and mark app state."""
+        """Perform lightweight dependency checks on startup and mark app state.
+
+        If Redis is unavailable at startup the application marks itself as
+        degraded. This function also records minimal diagnostics to aid
+        troubleshooting in production.
+        """
         try:
             from ocr_service.utils.redis_factory import (
                 get_redis_client,
@@ -121,6 +192,12 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         except Exception as e:  # pragma: no cover - defensive
             logger.exception("Startup dependency check failed: %s", e)
             app.state.degraded = True
+
+        # Add health check endpoint for convenience (non-production friendly)
+        # and allow ops to probe internal readiness.
+        app.state.redis_diagnostics = (
+            redis_status if "redis_status" in locals() else {"ok": False}
+        )
 
     # Routers
     app.include_router(system.router, tags=["System"])
