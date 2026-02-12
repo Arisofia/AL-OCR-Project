@@ -1,7 +1,7 @@
 """
 Redis client factory for OCR service.
 
-This module provides a function to initialize and configure a Redis client
+This module provides helpers to initialize and validate Redis connectivity
 using environment variables and application settings.
 """
 
@@ -14,33 +14,28 @@ from ocr_service.config import Settings
 logger = logging.getLogger("ocr-service.redis")
 
 
+class RedisInitializationError(RuntimeError):
+    """Raised when Redis initialization or validation fails."""
+
+
 def get_redis_client(settings: Settings) -> redis.Redis:
     """
     Factory for creating an asynchronous Redis client based on settings.
 
     This function takes application settings as input and returns an
-    initialized Redis client. It uses environment variables as a fallback
-    for the Redis host, port, database index, and password, if they are
-    not provided in the application settings.
-
-    The returned Redis client is configured with the specified host,
-    port, database index, and password. The decode_responses parameter
-    is set to False to ensure that Redis responses are not decoded as
-    UTF-8 strings.
-
-    Parameters:
-        settings (Settings): The application settings.
-
-    Returns:
-        redis.Redis: An asynchronous Redis client.
+    initialized Redis client.
     """
     host = settings.redis_host
     port = settings.redis_port
     db = settings.redis_db
     password = settings.redis_password
 
-    log_message = f"Initializing Redis client | Host: {host} | Port: {port} | DB: {db}"
-    logger.info(log_message)
+    logger.info(
+        "Initializing Redis client | host=%s | port=%d | db=%d",
+        host,
+        port,
+        db,
+    )
 
     # Create the Redis client instance with conservative timeouts to
     # avoid long blocking calls in high-concurrency environments.

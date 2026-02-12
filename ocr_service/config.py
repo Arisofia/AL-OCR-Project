@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     redis_port: int = 6379
     redis_db: int = 0
     redis_password: Optional[str] = None
+    redis_startup_check: bool = True
+    ocr_idempotency_ttl_seconds: int = 3600
 
     # Security and Environment
     environment: str = "development"

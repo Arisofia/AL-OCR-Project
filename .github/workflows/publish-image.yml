@@ -1,5 +1,4 @@
 name: Build and publish container
-
 on:
   push:
     branches: [main]

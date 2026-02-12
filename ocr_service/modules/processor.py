@@ -206,7 +206,6 @@ class OCRProcessor:
                 result,
                 idempotency_ttl_seconds,
             )
-
             return result
 
         except OCRPipelineError as e:

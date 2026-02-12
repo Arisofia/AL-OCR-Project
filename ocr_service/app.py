@@ -2,7 +2,8 @@ import logging
 import time
 from typing import Optional
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
@@ -15,8 +16,45 @@ from ocr_service.schemas import ErrorResponse
 from ocr_service.utils.context import get_request_id_from_scope
 from ocr_service.utils.limiter import _rate_limit_exceeded_handler_with_logging, limiter
 from ocr_service.utils.monitoring import init_monitoring
+from ocr_service.utils.redis_factory import (
+    RedisInitializationError,
+    get_redis_client,
+    verify_redis_connection,
+)
 
 logger = logging.getLogger("ocr-service")
+
+
+def _build_error_response(
+    *,
+    phase: str,
+    detail: str,
+    request: Request,
+    status_code: int,
+) -> JSONResponse:
+    request_id = getattr(
+        request.state, "request_id", get_request_id_from_scope(request.scope)
+    )
+    correlation_id = getattr(
+        request.state,
+        "correlation_id",
+        request.headers.get("X-Correlation-ID") or request_id,
+    )
+    trace_id = getattr(
+        request.state,
+        "trace_id",
+        request.headers.get("X-Trace-ID") or request_id,
+    )
+    payload = ErrorResponse(
+        phase=phase,
+        message=detail,
+        correlation_id=correlation_id,
+        trace_id=trace_id,
+        filename=request.headers.get("X-File-Name"),
+    )
+    return JSONResponse(
+        status_code=status_code, content=payload.model_dump(exclude_none=True)
+    )
 
 
 def create_app(settings: Optional[Settings] = None) -> FastAPI:
@@ -36,6 +74,68 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         docs_url="/docs" if settings.environment != "production" else None,
         redoc_url="/redoc" if settings.environment != "production" else None,
     )
+
+    @app.on_event("startup")
+    async def startup_event() -> None:
+        app.state.redis_client = get_redis_client(settings)
+        # perform a light ping to verify connectivity; detailed checks run later
+        try:
+            redis_diag = await verify_redis_connection(app.state.redis_client)
+            logger.info("Redis startup ping: %s", redis_diag)
+        except Exception:
+            logger.exception("Redis startup ping failed")
+
+    @app.on_event("shutdown")
+    async def shutdown_event() -> None:
+        redis_client = getattr(app.state, "redis_client", None)
+        if redis_client is not None:
+            await redis_client.aclose()
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(
+        request: Request, exc: HTTPException
+    ) -> JSONResponse:
+        logger.warning(
+            "HTTP exception | path=%s | status=%d | detail=%s",
+            request.url.path,
+            exc.status_code,
+            exc.detail,
+        )
+        return _build_error_response(
+            phase="api",
+            detail=str(exc.detail),
+            request=request,
+            status_code=exc.status_code,
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        logger.warning(
+            "Request validation failure | path=%s | detail=%s", request.url.path, exc
+        )
+        return _build_error_response(
+            phase="validation",
+            detail="Request validation failed",
+            request=request,
+            status_code=422,
+        )
+
+    @app.exception_handler(RedisInitializationError)
+    async def redis_init_exception_handler(
+        request: Request,
+        exc: RedisInitializationError,
+    ) -> JSONResponse:
+        logger.error(
+            "Redis initialization failure | path=%s | error=%s", request.url.path, exc
+        )
+        return _build_error_response(
+            phase="startup",
+            detail=str(exc),
+            request=request,
+            status_code=503,
+        )
 
     # Rate Limiting
     app.state.limiter = limiter
