@@ -1,14 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Enterprise Deployment Orchestrator for AL OCR Service
 # Standardizes containerized deployments with automated ECR synchronization and Lambda updates.
 
-set -e # Exit immediately on error
+set -euo pipefail
 
 # --- Configuration & Identity Management ---
-AWS_REGION=${AWS_REGION:-"us-east-1"}
-AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-"510701314494"}
-ECR_REPOSITORY=${ECR_REPOSITORY:-"al-ocr-service"}
-LAMBDA_FUNCTION_NAME=${LAMBDA_FUNCTION_NAME:-"AL-OCR-Processor"}
+AWS_REGION=${AWS_REGION:?AWS_REGION is required}
+AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:?AWS_ACCOUNT_ID is required}
+ECR_REPOSITORY=${ECR_REPOSITORY:-al-ocr-service}
+LAMBDA_FUNCTION_NAME=${LAMBDA_FUNCTION_NAME:-AL-OCR-Processor}
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "Initializing deployment for account: $AWS_ACCOUNT_ID in region: $AWS_REGION"
 
@@ -27,7 +28,13 @@ fi
 
 # --- Container Image Construction ---
 echo "Building container image: $IMAGE_URI"
-docker buildx build --platform linux/amd64 -t $IMAGE_URI --push .
+docker buildx create --use || true
+docker buildx build \
+  --platform linux/amd64 \
+  -t "$IMAGE_URI" \
+  --push \
+  -f "$REPO_ROOT/ocr_service/Dockerfile" \
+  "$REPO_ROOT"
 
 # --- Alias Management (Latest) ---
 LATEST_TAG="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest"

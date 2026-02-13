@@ -28,23 +28,25 @@ check_var() {
 
 echo "[secrets] Checking deploy and CI/CD secret environment values"
 
-# Deploy-to-SSH workflow
-check_var DEPLOY_HOST required
-check_var DEPLOY_USER required
-check_var DEPLOY_PORT required
-check_var DEPLOY_SSH_KEY required
+# Primary deploy workflow (push to main + npm run deploy)
 check_var GHCR_PAT required
-check_var REDIS_PASSWORD required
 check_var OCR_API_KEY required
-
-# AWS deploy/build workflows
 check_var AWS_ACCOUNT_ID required
 check_var AWS_ROLE_TO_ASSUME required
 check_var AWS_REGION required
-check_var AWS_ACCESS_KEY_ID optional
-check_var AWS_SECRET_ACCESS_KEY optional
+
+# Optional deploy/build settings
 check_var ECR_REPOSITORY optional
 check_var AWS_LAMBDA_FUNCTION_NAME optional
+
+# Legacy and extended workflows
+check_var DEPLOY_HOST optional
+check_var DEPLOY_USER optional
+check_var DEPLOY_PORT optional
+check_var DEPLOY_SSH_KEY optional
+check_var REDIS_PASSWORD optional
+check_var AWS_ACCESS_KEY_ID optional
+check_var AWS_SECRET_ACCESS_KEY optional
 check_var AWS_LAMBDA_ROLE_ARN optional
 check_var ENABLE_LAMBDA_ROLLBACK optional
 check_var ROLLBACK_COLD_MS optional

@@ -2,47 +2,66 @@ Deployment README
 
 Overview
 --------
-This repository contains a GitHub Actions-based deployment pipeline that builds and publishes a container image to GHCR and deploys it to an SSH-accessible host using Docker Compose. The solution uses free components only.
+This repository deploys on push to `main` using GitHub Actions.
+The deploy workflow (`.github/workflows/deploy.yml`) performs:
 
-Secrets to add in GitHub repository settings (under Settings → Secrets → Actions):
-- DEPLOY_HOST: SSH host (IP or hostname)
-- DEPLOY_USER: SSH username
-- DEPLOY_PORT: SSH port (default: 22)
-- DEPLOY_SSH_KEY: Private deploy key (contents of key from gen_ssh_key.sh)
-- GHCR_PAT: Personal Access Token with `read:packages` scope for pulling images from GHCR
-- REDIS_PASSWORD: Password to secure Redis
-- OCR_API_KEY: API key for the OCR service
-- AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION (if you use S3)
+1. Checkout repository code
+2. Set up Node.js
+3. Install dependencies
+4. Run `npm run deploy`
 
-You can validate secret presence from your local environment before deployment:
+`npm run deploy` delegates to `tools/deploy_app.sh`, which validates required
+secrets/env vars and then runs `ocr_service/deploy.sh` to build/push the
+container image and update Lambda.
+
+Required GitHub Actions secrets
+-------------------------------
+Add these in **Settings → Secrets and variables → Actions**:
+
+- `OCR_API_KEY` (mapped to `API_KEY` in deploy job env)
+- `GHCR_PAT` (mapped to `ACCESS_TOKEN` in deploy job env)
+- `AWS_ACCOUNT_ID`
+- `AWS_ROLE_TO_ASSUME`
+- `AWS_REGION`
+
+Optional secrets (recommended depending on environment):
+
+- `ECR_REPOSITORY`
+- `AWS_LAMBDA_FUNCTION_NAME`
+- `STAGING_API_KEY`
+- `NETLIFY_AUTH_TOKEN`
+
+Secret verification
+-------------------
+You can verify secret presence from local environment variables:
 
 ```bash
 npm run check:deploy-secrets
-# strict mode (fails when required vars are missing)
+# strict mode: fails if required deploy secrets are missing
 ./tools/check_deploy_secrets.sh --strict
 ```
 
-Generating keys
-----------------
-Run:
+CLI automation
+--------------
+You can generate secrets and upload them to GitHub Actions from CLI:
 
-  ./deploy/gen_ssh_key.sh
+```bash
+# Example: generate secure values, generate SSH key, and set secrets
+./scripts/set_repo_secrets.sh \
+  --repo owner/repo \
+  --generate \
+  --generate-ssh-key \
+  --set-ssh-secret
+```
 
-Copy the printed public key to the remote server's `~/.ssh/authorized_keys` for the `DEPLOY_USER`.
-Add the private key to `DEPLOY_SSH_KEY` secret in the GitHub repository.
+Notes:
+- `GHCR_PAT`, `AWS_ACCOUNT_ID`, `AWS_ROLE_TO_ASSUME`, and `AWS_REGION` must be
+  provided as environment variables before running the script.
+- Generated values are written to `.deploy-secrets.generated.env` for local
+  reuse and are ignored by git.
 
-How deployment works
---------------------
-- On push to `main`, `.github/workflows/publish-image.yml` builds and pushes Docker images to GHCR with two tags: `${{ github.sha }}` and `latest`.
-- Trigger the `Deploy to SSH host` workflow manually in Actions or pass `image_tag` to deploy a specific tag.
-- The deploy step uses SSH to write a `docker-compose.prod.yml` on the remote host using provided secrets and runs `docker compose pull` and `docker compose up -d`.
-- A simple health check hits `/health` and the deploy fails if the app doesn't respond in time (action will report failure).
-
-Notes & rollback
-----------------
-- This first iteration performs a basic deploy with a health check and will fail the job on unhealthy deploys.
-- For more sophisticated canary/blue-green rollouts and automated rollbacks we can extend the `deploy` step with temporary containers and dynamic proxy switching (I can add that next).
-
-Support
--------
-If you want me to also provision a free VM and configure it, I can provide Terraform snippets for (e.g., Hetzner Cloud/Runscope or FreeTier) — you'll need to provide credentials or run them yourself.
+Notes
+-----
+- Replace generic env names (`API_KEY`, `ACCESS_TOKEN`) in the workflow only if
+  your deployment command expects different variable names.
+- Keep secrets in GitHub Actions; never hardcode credentials in the repository.

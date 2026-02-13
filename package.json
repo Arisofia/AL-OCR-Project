@@ -11,12 +11,14 @@
     "frontend:dev": "cd frontend && npm run dev",
     "frontend:build": "cd frontend && npm run build",
     "frontend:lint": "cd frontend && npm run lint",
+    "deploy": "./tools/deploy_app.sh",
     "api:dev": "python -m ocr_service.main",
     "test:all": "pytest ocr_service/tests/ ocr_reconstruct/tests/",
     "lint:python": "ruff check .",
     "format:python": "ruff format .",
     "validate:repo": "./tools/validate_repo.sh",
     "verify:cicd": "./tools/verify_cicd.sh",
-    "check:deploy-secrets": "./tools/check_deploy_secrets.sh"
+    "check:deploy-secrets": "./tools/check_deploy_secrets.sh",
+    "set:repo-secrets": "./scripts/set_repo_secrets.sh --help"
   }
 }
