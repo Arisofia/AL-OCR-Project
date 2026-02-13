@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, Header, Request, UploadFile
 from ocr_service.config import Settings, get_settings
 from ocr_service.exceptions import OCRPipelineError
 from ocr_service.metrics import OCR_ERROR_COUNT, OCR_REQUEST_COUNT, OCR_REQUEST_LATENCY
-from ocr_service.modules.processor import OCRProcessor
+from ocr_service.modules.processor import OCRProcessor, ProcessingConfig
 from ocr_service.routers.deps import get_api_key, get_ocr_processor, get_request_id
 from ocr_service.schemas import OCRResponse
 from ocr_service.utils.limiter import limiter
@@ -42,18 +42,22 @@ async def perform_ocr(
         # SlowAPI uses 'request' via decorator internally
         redis_client = getattr(request.app.state, "redis_client", None)
 
-        result = await processor.process_file(
-            file=file,
+        config = ProcessingConfig(
             reconstruct=reconstruct,
             advanced=advanced,
             doc_type=doc_type,
             enable_reconstruction_config=curr_settings.enable_reconstruction,
             request_id=request_id,
-            redis_client=redis_client,
             idempotency_key=idempotency_key,
             idempotency_ttl_seconds=getattr(
                 curr_settings, "redis_idempotency_ttl", 3600
             ),
+        )
+
+        result = await processor.process_file(
+            file=file,
+            config=config,
+            redis_client=redis_client,
         )
         status = "success"
         return OCRResponse(**result)

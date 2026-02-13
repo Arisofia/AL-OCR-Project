@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from ocr_service.exceptions import OCRPipelineError
-from ocr_service.modules.processor import OCRProcessor
+from ocr_service.modules.processor import OCRProcessor, ProcessingConfig
 
 
 class FailingRedis:
@@ -40,6 +40,7 @@ def test_redis_get_failure_raises_idempotency_error():
                 contents=b"img",
                 filename="file.png",
                 content_type="image/png",
+                config=ProcessingConfig(),
             )
         )
 

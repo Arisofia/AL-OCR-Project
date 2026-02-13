@@ -6,6 +6,7 @@ import json
 import logging
 import mimetypes
 import time
+from dataclasses import dataclass
 from typing import Any, Optional, cast
 
 import redis.asyncio as redis  # pylint: disable=import-error
@@ -24,9 +25,21 @@ from ocr_service.utils.tracing import get_current_trace_id
 
 from .ocr_engine import IterativeOCREngine
 
-__all__ = ["OCRProcessor"]
+__all__ = ["OCRProcessor", "ProcessingConfig"]
 
 logger = logging.getLogger("ocr-service.processor")
+
+
+@dataclass
+class ProcessingConfig:
+    """Configuration for OCR processing operations."""
+    reconstruct: bool = False
+    advanced: bool = False
+    doc_type: str = "generic"
+    enable_reconstruction_config: bool = False
+    request_id: str = "N/A"
+    idempotency_key: Optional[str] = None
+    idempotency_ttl_seconds: int = 3600
 
 
 class _NoopRedis:
@@ -74,37 +87,29 @@ class OCRProcessor:
     async def process_file(
         self,
         file: UploadFile,
-        reconstruct: bool = False,
-        advanced: bool = False,
-        doc_type: str = "generic",
-        enable_reconstruction_config: bool = False,
-        request_id: str = "N/A",
+        config: Optional[ProcessingConfig] = None,
         redis_client: Optional[redis.Redis] = None,
-        idempotency_key: Optional[str] = None,
-        idempotency_ttl_seconds: int = 3600,
+        **kwargs
     ) -> dict[str, Any]:
         """Handles UploadFile objects from FastAPI."""
+        if config is None:
+            config = ProcessingConfig(**kwargs)
+
         inferred_type = file.content_type
         if not inferred_type and file.filename:
             inferred_type = (
                 mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
             )
 
-        self._validate_file_type(inferred_type or "", file.filename, request_id)
+        self._validate_file_type(inferred_type or "", file.filename, config.request_id)
         contents = await file.read()
 
         return await self.process_bytes(
             contents=contents,
             filename=file.filename or "unknown",
             content_type=inferred_type or "application/octet-stream",
-            reconstruct=reconstruct,
-            advanced=advanced,
-            doc_type=doc_type,
-            enable_reconstruction_config=enable_reconstruction_config,
-            request_id=request_id,
+            config=config,
             redis_client=redis_client,
-            idempotency_key=idempotency_key,
-            idempotency_ttl_seconds=idempotency_ttl_seconds,
         )
 
     async def process_bytes(
@@ -112,25 +117,22 @@ class OCRProcessor:
         contents: bytes,
         filename: str,
         content_type: str,
-        reconstruct: bool = False,
-        advanced: bool = False,
-        doc_type: str = "generic",
-        enable_reconstruction_config: bool = False,
-        request_id: str = "N/A",
+        config: Optional[ProcessingConfig] = None,
         redis_client: Optional[redis.Redis] = None,
-        idempotency_key: Optional[str] = None,
-        idempotency_ttl_seconds: int = 3600,
     ) -> dict[str, Any]:
         """Executes the full OCR pipeline on raw bytes."""
+        if config is None:
+            config = ProcessingConfig()
+
         start_time = time.time()
         redis_client = redis_client or self.redis_client
 
         cache_key = self._build_idempotency_key(
-            idempotency_key=idempotency_key,
+            idempotency_key=config.idempotency_key,
             filename=filename,
-            doc_type=doc_type,
-            reconstruct=reconstruct or enable_reconstruction_config,
-            advanced=advanced,
+            doc_type=config.doc_type,
+            reconstruct=config.reconstruct or config.enable_reconstruction_config,
+            advanced=config.advanced,
             contents=contents,
         )
 
@@ -146,7 +148,7 @@ class OCRProcessor:
                         phase="idempotency",
                         message="Request is already being processed",
                         status_code=409,
-                        correlation_id=request_id,
+                        correlation_id=config.request_id,
                         trace_id=get_current_trace_id(),
                         filename=filename,
                     )
@@ -157,17 +159,17 @@ class OCRProcessor:
             await self._write_cached_result(
                 redis_client,
                 cache_key,
-                {"status": JobStatus.PROCESSING, "request_id": request_id},
+                {"status": JobStatus.PROCESSING, "request_id": config.request_id},
                 120,
             )
 
             # 3. Execute OCR
-            use_recon = reconstruct or enable_reconstruction_config
+            use_recon = config.reconstruct or config.enable_reconstruction_config
             result = await self._execute_ocr_strategy(
                 contents,
-                advanced,
+                config.advanced,
                 use_recon,
-                doc_type,
+                config.doc_type,
             )
 
             if "error" in result:
@@ -175,7 +177,7 @@ class OCRProcessor:
                     phase="extraction",
                     message=f"Extraction failure: {result['error']}",
                     status_code=400,
-                    correlation_id=request_id,
+                    correlation_id=config.request_id,
                     trace_id=get_current_trace_id(),
                     filename=filename,
                 )
@@ -186,7 +188,7 @@ class OCRProcessor:
                 filename,
                 content_type,
                 result,
-                request_id,
+                config.request_id,
             )
 
             # 5. Finalize result
@@ -196,7 +198,7 @@ class OCRProcessor:
                     "filename": filename,
                     "processing_time": round(time.time() - start_time, 3),
                     "s3_key": s3_key,
-                    "request_id": request_id,
+                    "request_id": config.request_id,
                 }
             )
 
@@ -205,7 +207,7 @@ class OCRProcessor:
                 redis_client,
                 cache_key,
                 result,
-                idempotency_ttl_seconds,
+                config.idempotency_ttl_seconds,
             )
             return result
 
@@ -220,7 +222,7 @@ class OCRProcessor:
                 phase="orchestration",
                 message="Internal server error",
                 status_code=500,
-                correlation_id=request_id,
+                correlation_id=config.request_id,
                 trace_id=get_current_trace_id(),
                 filename=filename,
             ) from exc

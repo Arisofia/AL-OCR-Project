@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from ocr_service import metrics
 from ocr_service.exceptions import OCRPipelineError
-from ocr_service.modules.processor import OCRProcessor
+from ocr_service.modules.processor import OCRProcessor, ProcessingConfig
 
 
 class FailingRedis:
@@ -46,6 +46,7 @@ def test_metrics_increment_on_redis_get_failure():
                 contents=b"img",
                 filename="file.png",
                 content_type="image/png",
+                config=ProcessingConfig(),
             )
         )
 

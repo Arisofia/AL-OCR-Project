@@ -6,7 +6,7 @@ import pytest
 import redis.asyncio as redis
 
 from ocr_service.exceptions import OCRPipelineError
-from ocr_service.modules.processor import OCRProcessor
+from ocr_service.modules.processor import OCRProcessor, ProcessingConfig
 
 
 class FakeRedis:
@@ -59,6 +59,7 @@ def test_trace_id_propagation_on_extraction_error(monkeypatch, trace_val, expect
                 contents=b"img",
                 filename="file.png",
                 content_type="image/png",
+                config=ProcessingConfig(),
             )
         )
 

@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from fastapi import UploadFile
 
-from ocr_service.modules.processor import OCRProcessor
+from ocr_service.modules.processor import OCRProcessor, ProcessingConfig
 
 
 def test_processor_returns_request_id():
@@ -38,12 +38,15 @@ def test_processor_returns_request_id():
             return b"image-bytes"
 
     # Act
+    config = ProcessingConfig(
+        reconstruct=False,
+        advanced=False,
+        request_id="RID-123",
+    )
     res = asyncio.run(
         processor.process_file(
             cast(UploadFile, DummyFile()),
-            reconstruct=False,
-            advanced=False,
-            request_id="RID-123",
+            config=config,
         )
     )
 
