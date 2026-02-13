@@ -21,8 +21,9 @@ jobs:
   build-and-scan:
     runs-on: ubuntu-22.04
     env:
-      # TEST: temporarily enable to verify aggregated enforcement
-      FAIL_ON_SCAN: "true"
+      # Default to non-blocking scans; set repository variable FAIL_ON_SCAN=true
+      # when you want scan findings to fail the workflow.
+      FAIL_ON_SCAN: ${{ vars.FAIL_ON_SCAN || 'false' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
