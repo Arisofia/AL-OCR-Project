@@ -8,12 +8,8 @@ on:
     branches: ["main", "develop"]
 
 jobs:
-  test:
+  gitleaks:
     runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        python-version: ["3.9", "3.10", "3.11"]
-
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,16 +20,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Gitleaks Report
-        if: always()
-        uses: actions/upload-artifact@v6
+  test:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11"]
+
+    steps:
+      - uses: actions/checkout@v4
         with:
-          name: gitleaks-report-${{ matrix.python-version }}-${{ github.job }}-${{ github.run_id }}
-          path: |
-            gitleaks-results.sarif
-            results.sarif
-            *gitleaks*.sarif
-          if-no-files-found: warn
+          fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
