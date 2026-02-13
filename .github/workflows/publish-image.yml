@@ -15,6 +15,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Normalize GHCR owner
+        run: echo "GHCR_OWNER_LC=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -36,8 +39,8 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/al-ocr-project:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/al-ocr-project:latest
+            ghcr.io/${{ env.GHCR_OWNER_LC }}/al-ocr-project:${{ github.sha }}
+            ghcr.io/${{ env.GHCR_OWNER_LC }}/al-ocr-project:latest
           build-args: |
             PIP_EXTRA_INDEX_URL=""
 
