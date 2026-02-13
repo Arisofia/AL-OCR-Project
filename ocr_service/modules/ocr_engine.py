@@ -7,7 +7,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Optional, cast
 
 import cv2
 import httpx
@@ -51,12 +51,12 @@ class DocumentContext:
     doc_type: str = "generic"
     original_img: Optional[np.ndarray] = None
     current_img: Optional[np.ndarray] = None
-    layout_regions: List[Dict[str, Any]] = field(default_factory=list)
+    layout_regions: list[dict[str, Any]] = field(default_factory=list)
     layout_type: str = "unknown"
-    reconstruction_info: Optional[Dict[str, Any]] = None
+    reconstruction_info: Optional[dict[str, Any]] = None
     best_text: str = ""
     best_confidence: float = 0.0
-    iteration_history: List[Dict[str, Any]] = field(default_factory=list)
+    iteration_history: list[dict[str, Any]] = field(default_factory=list)
 
 
 class DocumentProcessor:
@@ -66,10 +66,12 @@ class DocumentProcessor:
         self,
         enhancer: ImageEnhancer,
         ocr_config: TesseractConfig,
+        engine_config: EngineConfig,
         reconstructor: Optional[PixelReconstructor] = None,
     ):
         self.enhancer = enhancer
         self.ocr_config = ocr_config
+        self.engine_config = engine_config
         self.reconstructor = reconstructor
 
     async def decode_and_validate(self, ctx: DocumentContext) -> bool:
@@ -78,7 +80,18 @@ class DocumentProcessor:
             ctx.original_img = await ImageToolkit.decode_image_async(ctx.image_bytes)
             if ctx.original_img is None:
                 return False
-            ctx.current_img = ctx.original_img.copy()
+
+            img = ctx.original_img
+
+            # Adaptive upscaling before any further enhancement.
+            if self.engine_config.max_upscale_factor > 1.0:
+                img = ImageToolkit.upscale_for_ocr(
+                    img,
+                    max_upscale_factor=self.engine_config.max_upscale_factor,
+                    max_long_side_px=self.engine_config.max_long_side_px,
+                )
+
+            ctx.current_img = img
             return True
         except ImageToolkitError as e:
             logger.error("Initial image decoding failed: %s", e)
@@ -117,7 +130,8 @@ class DocumentProcessor:
                     logger.info("Using high-fidelity reconstructed source")
                 except ImageToolkitError as e:
                     logger.warning(
-                        "Failed to decode reconstructed image; using original | error=%s",
+                        "Failed to decode reconstructed image; using original. "
+                        "Error: %s",
                         e,
                     )
                     OCR_ERROR_COUNT.labels(
@@ -150,7 +164,7 @@ class DocumentProcessor:
         return self.enhancer.apply_threshold(gray)
 
     async def extract_text(
-        self, img: np.ndarray, regions: Optional[List[Dict[str, Any]]] = None
+        self, img: np.ndarray, regions: Optional[list[dict[str, Any]]] = None
     ) -> str:
         """Performs OCR on the whole image or specific regions."""
         start_time = time.time()
@@ -176,7 +190,7 @@ class DocumentProcessor:
             OCR_EXTRACTION_LATENCY.labels(method=method, status=status).observe(latency)
 
     async def _extract_from_regions(
-        self, img: np.ndarray, regions: List[Dict[str, Any]]
+        self, img: np.ndarray, regions: list[dict[str, Any]]
     ) -> str:
         """Performs targeted extraction on ROIs."""
 
@@ -222,6 +236,7 @@ class IterativeOCREngine:
         self.processor = DocumentProcessor(
             enhancer=enhancer or ImageEnhancer(),
             ocr_config=ocr_config or TesseractConfig(),
+            engine_config=self.config,
             reconstructor=reconstructor
             or (
                 PixelReconstructor()
@@ -242,7 +257,7 @@ class IterativeOCREngine:
 
     async def process_image(
         self, image_bytes: bytes, use_reconstruction: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Entry point for standard iterative OCR pipeline."""
         start_time = time.time()
         status = "failure"
@@ -285,7 +300,7 @@ class IterativeOCREngine:
 
     async def process_image_advanced(
         self, image_bytes: bytes, doc_type: Optional[str] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """AI-driven pipeline with contextual learning."""
         start_time = time.time()
         status = "failure"
@@ -407,7 +422,7 @@ class IterativeOCREngine:
             logger.exception("Iteration %d failed", i + 1)
             ctx.iteration_history.append({"iteration": i + 1, "error": "failed"})
 
-    def _build_response(self, ctx: DocumentContext) -> Dict[str, Any]:
+    def _build_response(self, ctx: DocumentContext) -> dict[str, Any]:
         """Formats the final engine output."""
         resp = {
             "text": ctx.best_text,

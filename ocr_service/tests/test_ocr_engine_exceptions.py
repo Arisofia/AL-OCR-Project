@@ -21,6 +21,7 @@ async def test_reconstruction_logs_exception(caplog, monkeypatch):
     processor = DocumentProcessor(
         enhancer=engine_mod.ImageEnhancer(),
         ocr_config=engine_mod.TesseractConfig(),
+        engine_config=engine_mod.EngineConfig(),
         reconstructor=None,
     )
 

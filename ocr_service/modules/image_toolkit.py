@@ -104,3 +104,65 @@ class ImageToolkit:
             return cv2.detailEnhance(img, sigma_s=10, sigma_r=0.15)
 
         return await asyncio.to_thread(_enhance)
+
+    @staticmethod
+    def upscale_for_ocr(
+        img: np.ndarray,
+        max_upscale_factor: float,
+        max_long_side_px: int,
+    ) -> np.ndarray:
+        """
+        Upscale an image to improve OCR readability while respecting resource limits.
+
+        This function increases the effective resolution of the input image when it is
+        too small, but caps both the upscale factor and the maximum long-edge size
+        to avoid excessive memory and latency costs.
+
+        Args:
+            img: The input image as a NumPy array (H x W x C or H x W).
+            max_upscale_factor: The maximum factor by which to enlarge the image.
+            max_long_side_px: The maximum allowed size (in pixels) of the image's
+                longer edge after upscaling.
+
+        Returns:
+            The upscaled (or original) image as a NumPy array.
+        """
+        height, width = img.shape[:2]
+        long_side = max(height, width)
+
+        # If the image is already large enough, do nothing.
+        if long_side >= max_long_side_px:
+            return img
+
+        # Heuristic: upsample small images more aggressively.
+        # Example:
+        #   < 800px  -> try 2x
+        #   < 1500px -> try 1.5x
+        #   otherwise -> no upscaling
+        if long_side < 800:
+            desired_scale = 2.0
+        elif long_side < 1500:
+            desired_scale = 1.5
+        else:
+            desired_scale = 1.0
+
+        # Enforce configured max upscale factor.
+        scale = min(desired_scale, max_upscale_factor)
+        if scale <= 1.0:
+            return img
+
+        # Compute new size but cap by max_long_side_px.
+        new_width = int(width * scale)
+        new_height = int(height * scale)
+
+        long_after = max(new_height, new_width)
+        if long_after > max_long_side_px:
+            # Adjust scale so that the long side equals max_long_side_px.
+            cap_scale = max_long_side_px / float(long_side)
+            new_width = int(width * cap_scale)
+            new_height = int(height * cap_scale)
+
+        # Use bicubic interpolation for better text detail enlargement.
+        return cv2.resize(
+            img, (new_width, new_height), interpolation=cv2.INTER_CUBIC
+        )

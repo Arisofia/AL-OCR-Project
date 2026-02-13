@@ -23,6 +23,8 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          report-path: results-${{ matrix.python-version }}.sarif
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
