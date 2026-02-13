@@ -8,9 +8,9 @@ import mimetypes
 import time
 from typing import Any, Optional, cast
 
-import redis.asyncio as redis
-import redis.exceptions as redis_exceptions
-from fastapi import UploadFile
+import redis.asyncio as redis  # pylint: disable=import-error
+import redis.exceptions as redis_exceptions  # pylint: disable=import-error
+from fastapi import UploadFile  # pylint: disable=import-error
 
 from ocr_service.exceptions import OCRPipelineError
 from ocr_service.metrics import (
@@ -338,7 +338,7 @@ class OCRProcessor:
         """Remove cached result from Redis."""
         try:
             await redis_client.delete(cache_key)
-        except Exception:
+        except redis_exceptions.RedisError:
             OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="delete").inc()
             logger.exception("Redis delete failed")
 
@@ -387,6 +387,8 @@ class OCRProcessor:
 
             return s3_key
         except Exception as exc:
+            # Try to catch storage-specific errors if available,
+            # else fallback to Exception
             logger.error("Storage upload failed: %s", exc)
             raise OCRPipelineError(
                 phase="storage",

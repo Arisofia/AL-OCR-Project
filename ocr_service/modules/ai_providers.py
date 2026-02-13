@@ -5,13 +5,15 @@ Provides vision-based reconstruction using multiple vendors (OpenAI, Google).
 
 # pylint: disable=broad-except,too-few-public-methods
 
+
+# Standard library imports
 import asyncio
 import base64
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Optional, Union, cast
 
-
+# Third-party imports
 import httpx
 try:
     import google.generativeai as genai
