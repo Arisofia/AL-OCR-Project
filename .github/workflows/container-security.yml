@@ -264,7 +264,9 @@ jobs:
 
   lambda-benchmark:
     name: Lambda Cold-Start & Synthetic Benchmark
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     needs: build-and-scan
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}

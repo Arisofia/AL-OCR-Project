@@ -9,7 +9,8 @@ AWS_REGION=${AWS_REGION:?AWS_REGION is required}
 AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:?AWS_ACCOUNT_ID is required}
 ECR_REPOSITORY=${ECR_REPOSITORY:-al-ocr-service}
 DEFAULT_ECR_REPOSITORY="al-ocr-service"
-LAMBDA_FUNCTION_NAME=${LAMBDA_FUNCTION_NAME:-AL-OCR-Processor}
+DEFAULT_LAMBDA_FUNCTION_NAME="AL-OCR-Processor"
+LAMBDA_FUNCTION_NAME=${LAMBDA_FUNCTION_NAME:-$DEFAULT_LAMBDA_FUNCTION_NAME}
 AWS_LAMBDA_ROLE_ARN=${AWS_LAMBDA_ROLE_ARN:-}
 LAMBDA_TIMEOUT=${LAMBDA_TIMEOUT:-30}
 LAMBDA_MEMORY_SIZE=${LAMBDA_MEMORY_SIZE:-512}
@@ -35,15 +36,41 @@ warn_or_fail_lambda() {
   echo "Continuing because LAMBDA_DEPLOY_STRICT=$LAMBDA_DEPLOY_STRICT"
 }
 
+normalize_lambda_function_name() {
+  local raw="$1"
+
+  raw="${raw//$'\r'/}"
+  raw="${raw#"${raw%%[![:space:]]*}"}"
+  raw="${raw%"${raw##*[![:space:]]}"}"
+
+  if [[ "$raw" == \"*\" ]]; then
+    raw="${raw#\"}"
+    raw="${raw%\"}"
+  elif [[ "$raw" == \'*\' ]]; then
+    raw="${raw#\'}"
+    raw="${raw%\'}"
+  fi
+
+  if [[ "$raw" == arn:*:function:* ]]; then
+    raw="${raw##*:function:}"
+  fi
+
+  # Function qualifiers can be provided as "<name>:<alias>".
+  raw="${raw%%:*}"
+  echo "$raw"
+}
+
 # Normalize common secret input variants (e.g., full Lambda ARN with optional alias)
 # and ensure the final name is valid for create-function.
-if [[ "$LAMBDA_FUNCTION_NAME" == arn:*:function:* ]]; then
-  LAMBDA_FUNCTION_NAME="${LAMBDA_FUNCTION_NAME##*:function:}"
-  LAMBDA_FUNCTION_NAME="${LAMBDA_FUNCTION_NAME%%:*}"
-fi
+LAMBDA_FUNCTION_NAME="$(normalize_lambda_function_name "$LAMBDA_FUNCTION_NAME")"
 
 if [[ ! "$LAMBDA_FUNCTION_NAME" =~ ^[A-Za-z0-9_-]{1,64}$ ]]; then
   warn_or_fail_lambda "Invalid LAMBDA_FUNCTION_NAME value detected. Set AWS_LAMBDA_FUNCTION_NAME to a valid Lambda name."
+  LAMBDA_FUNCTION_NAME="$DEFAULT_LAMBDA_FUNCTION_NAME"
+fi
+
+if [[ ! "$LAMBDA_FUNCTION_NAME" =~ ^[A-Za-z0-9_-]{1,64}$ ]]; then
+  warn_or_fail_lambda "Unable to recover a valid Lambda name. Skipping Lambda update."
   SKIP_LAMBDA_UPDATE=1
 fi
 
