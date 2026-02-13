@@ -27,6 +27,9 @@ jobs:
 
       - name: Install system deps
         run: |
+          # Hosted runners can include transient Microsoft/Azure apt sources
+          # that intermittently return 403 and break apt index updates.
+          sudo rm -f /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.list || true
           sudo apt-get update
           # libgl1-mesa-glx may be unavailable on Ubuntu 24.04
           sudo apt-get install -y \
