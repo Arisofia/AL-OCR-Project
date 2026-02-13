@@ -1,5 +1,4 @@
 """Tests for ImageToolkit utilities."""
-
 import numpy as np
 
 from ocr_service.modules.image_toolkit import ImageToolkit
