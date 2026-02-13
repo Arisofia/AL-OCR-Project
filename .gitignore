@@ -54,6 +54,10 @@ docker-compose.override.yml
 
 # AWS CLI
 *.pem
+deploy_gha
+deploy_gha.pub
+.deploy-secrets.generated.env
+.deploy-secrets*.env
 
 
 # Local env files

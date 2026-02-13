@@ -60,6 +60,17 @@ Notes:
 - Generated values are written to `.deploy-secrets.generated.env` for local
   reuse and are ignored by git.
 
+You can also provision the remote Linux deploy user and authorize the key:
+
+```bash
+./scripts/provision_deploy_user.sh \
+  --host YOUR_SERVER_IP \
+  --admin-user YOUR_SUDO_USER \
+  --pubkey-file ./deploy_gha.pub \
+  --deploy-user deploy \
+  --port 22
+```
+
 Notes
 -----
 - Replace generic env names (`API_KEY`, `ACCESS_TOKEN`) in the workflow only if
