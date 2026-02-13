@@ -19,12 +19,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Clean old Gitleaks artifact
+        run: rm -f results-${{ matrix.python-version }}.sarif
+
       - name: Gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           report-path: results-${{ matrix.python-version }}.sarif
+
+      - name: Upload Gitleaks Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report-${{ matrix.python-version }}
+          path: results-${{ matrix.python-version }}.sarif
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
