@@ -31,22 +31,21 @@ jobs:
           node-version: "18"
 
       - name: Install frontend dependencies
-        run: npm install        working-directory: ./frontend
+        working-directory: ./frontend
+        run: npm install
 
       - name: Run npm audit (JS deps)
+        working-directory: ./frontend
         run: |
-                  npm install --package-lock-only
-                            npm audit --json > npm-audit-report.json
-                                    working-directory: ./frontend
+          npm install --package-lock-only
+          npm audit --json > npm-audit-report.json
       - name: Install gitleaks
         run: |
           curl -sSL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks-linux-amd64 -o gitleaks
           chmod +x gitleaks
 
       - name: Run gitleaks (Secret scan)
-        run:
-          ./gitleaks detect --source . --report-format json --report-path
-          gitleaks-report.json
+        run: ./gitleaks detect --source . --report-format json --report-path gitleaks-report.json
 
       - name: Upload security reports
         uses: actions/upload-artifact@v6
