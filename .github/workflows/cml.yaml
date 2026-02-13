@@ -48,7 +48,9 @@ jobs:
             echo "::warning ::AWS secrets not set. Skipping dvc pull."
           else
             # dvc remote modify storage url s3://custom-bucket/path if needed
-            dvc pull data/raw.dvc
+            if ! dvc pull data/raw.dvc; then
+              echo "::warning ::dvc pull failed. Continuing without remote data."
+            fi
           fi
 
       - name: Train Model
