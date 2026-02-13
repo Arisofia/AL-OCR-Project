@@ -22,4 +22,3 @@ def test_upscale_for_ocr_scales_small_image():
     assert out.shape[0] > img.shape[0] and out.shape[1] > img.shape[1]
 
     assert max(out.shape[:2]) <= 1000  # Cap enforced
-
