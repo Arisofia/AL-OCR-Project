@@ -1,3 +1,4 @@
+---
 name: Deploy to SSH host (Docker Compose)
 on:
   workflow_dispatch:

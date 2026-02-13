@@ -25,3 +25,5 @@ class EngineConfig(BaseModel):
     default_doc_type: str = "generic"
     enable_reconstruction: bool = False
     confidence_threshold: float = 0.5
+    max_upscale_factor: float = 2.0
+    max_long_side_px: int = 3000

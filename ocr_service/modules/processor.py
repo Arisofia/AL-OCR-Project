@@ -11,6 +11,7 @@ import time
 from typing import Any, Dict, Optional, cast
 
 import redis.asyncio as redis
+import redis.exceptions as redis_exceptions
 from fastapi import UploadFile
 
 from ocr_service.exceptions import OCRPipelineError
@@ -267,6 +268,13 @@ class OCRProcessor:
         try:
             raw = await redis_client.get(cache_key)
             return json.loads(raw) if raw else None
+        except redis_exceptions.RedisError as exc:
+            OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="get").inc()
+            logger.warning(
+                "Redis unavailable for idempotency read; continuing in degraded mode: %s",
+                exc,
+            )
+            return None
         except Exception as exc:
             OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="get").inc()
             logger.exception("Redis read failed")
@@ -286,6 +294,12 @@ class OCRProcessor:
     ) -> None:
         try:
             await self._redis_set_with_ttl(redis_client, cache_key, json.dumps(value), ttl)
+        except redis_exceptions.RedisError as exc:
+            OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="set").inc()
+            logger.warning(
+                "Redis unavailable for idempotency write; continuing in degraded mode: %s",
+                exc,
+            )
         except Exception as exc:
             OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="set").inc()
             logger.exception("Redis write failed")

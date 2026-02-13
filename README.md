@@ -19,6 +19,13 @@ The script will create a `.venv`, install dependencies, and run the tests.
 ### Fallback (Docker)
 If Python 3.11 is not available locally, the script automatically falls back to running tests inside a Docker container.
 
+### Full Repository Validation
+Run the production validation entrypoint to verify backend and frontend checks:
+
+```bash
+npm run validate:repo
+```
+
 
 ### Architecture Diagram
 

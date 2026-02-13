@@ -1,3 +1,5 @@
+
+---
 name: "Build and Deploy Docker Image"
 
 on:
@@ -42,7 +44,9 @@ jobs:
         if:
           ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         run: |
-          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+          aws ecr get-login-password --region us-east-1 | \
+            docker login --username AWS --password-stdin \
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
       - name: Build image
         run: |
           COMMIT_TAG=$(git rev-parse --short HEAD)
