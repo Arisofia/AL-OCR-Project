@@ -15,6 +15,7 @@ from typing import Any, Optional, Union, cast
 
 # Third-party imports
 import httpx
+
 try:
     import google.generativeai as genai
 except ImportError:
