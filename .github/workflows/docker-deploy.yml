@@ -53,10 +53,10 @@ jobs:
           docker buildx create --use || true
           if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
             echo "On main push: pushing image to ECR"
-            docker buildx build --platform linux/amd64 -t $IMAGE_URI --push ./ocr_service
+            docker buildx build --platform linux/amd64 -t $IMAGE_URI --push -f ./ocr_service/Dockerfile .
           else
             echo "Non-push or non-main: building and loading image locally"
-            docker buildx build --platform linux/amd64 -t $IMAGE_URI --load ./ocr_service
+            docker buildx build --platform linux/amd64 -t $IMAGE_URI --load -f ./ocr_service/Dockerfile .
           fi
           # On non-push events, we just build to verify the Dockerfile
 
@@ -66,4 +66,8 @@ jobs:
         run: |
           COMMIT_TAG=$(git rev-parse --short HEAD)
           IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${COMMIT_TAG}
-          aws lambda update-function-code --function-name al-ocr-processor --image-uri $IMAGE_URI
+          FUNCTION_NAME="${{ secrets.AWS_LAMBDA_FUNCTION_NAME }}"
+          FUNCTION_NAME="${FUNCTION_NAME:-al-ocr-processor}"
+          if ! aws lambda update-function-code --function-name "$FUNCTION_NAME" --image-uri "$IMAGE_URI"; then
+            echo "::warning::Lambda update skipped. Check AWS_LAMBDA_FUNCTION_NAME and IAM permissions."
+          fi

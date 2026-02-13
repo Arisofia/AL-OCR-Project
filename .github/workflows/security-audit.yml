@@ -40,13 +40,10 @@ jobs:
       - name: Run npm audit (JS deps)
         working-directory: ./frontend
         run: npm audit --audit-level=high --json > npm-audit-report.json
-      - name: Install gitleaks
-        run: |
-          curl -sSL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks-linux-amd64 -o gitleaks
-          chmod +x gitleaks
-
       - name: Run gitleaks (Secret scan)
-        run: ./gitleaks detect --source . --report-format json --report-path gitleaks-report.json
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload security reports
         uses: actions/upload-artifact@v6
@@ -54,4 +51,4 @@ jobs:
           name: security-reports
           path: |
             frontend/npm-audit-report.json
-            gitleaks-report.json
+          if-no-files-found: warn
