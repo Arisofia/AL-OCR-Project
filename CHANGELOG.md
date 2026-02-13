@@ -1,3 +1,17 @@
+## [1.2.0](https://github.com/Arisofia/AL-OCR-Project/compare/v1.1.2...v1.2.0) (2026-02-13)
+
+### Added
+
+- **Adaptive Image Upscaling for OCR:**
+  - Introduced `max_upscale_factor` and `max_long_side_px` to `EngineConfig` to control automatic upscaling of small/low-resolution images before OCR.
+  - New static method `ImageToolkit.upscale_for_ocr()` implements heuristic and capped upscaling based on image dimensions and config.
+  - `DocumentProcessor` now applies upscaling to input images in `decode_and_validate` prior to enhancement or recognition.
+
+### Fixed
+
+- **CI Artifact Conflict:**
+  - Matrix jobs in Python Tests workflow now generate and upload unique Gitleaks artifacts (SARIF reports), resolving 409 errors on parallel execution.
+
 ## [1.1.2](https://github.com/Arisofia/AL-OCR-Project/compare/v1.1.1...v1.1.2) (2026-01-18)
 
 
