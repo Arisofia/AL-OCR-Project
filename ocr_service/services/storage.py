@@ -156,13 +156,11 @@ class StorageService:
             return None
 
         s3_key = f"{prefix}/{uuid.uuid4()}-{filename}"
-        try:
-            self.put_object(s3_key, content, content_type)
+        success = self.put_object(s3_key, content, content_type)
+        if success:
             return s3_key
-        except StorageServiceError:
-            # The error is already logged in put_object
-            logger.error("upload_file failed for key: %s", s3_key)
-            return None
+        logger.error("upload_file failed for key: %s", s3_key)
+        return None
 
     def upload_json(
         self, data: Any, filename: str, prefix: str = "recon_meta"
@@ -181,14 +179,9 @@ class StorageService:
         """
         try:
             body = json.dumps(data).encode("utf-8")
-            self.put_object(key, body, "application/json")
-            return True
+            return self.put_object(key, body, "application/json")
         except (TypeError, ValueError) as e:
             logger.error("Failed to serialize JSON for key %s: %s", key, e)
-            return False
-        except StorageServiceError:
-            # The error is already logged in put_object
-            logger.error("save_json failed for key: %s", key)
             return False
 
     def put_object(self, key: str, body: bytes, content_type: str) -> bool:
@@ -229,4 +222,4 @@ class StorageService:
             logger.error(
                 "Exceeded S3 put_object retry attempts or encountered error: %s", e
             )
-            raise StorageServiceError from e
+            return False

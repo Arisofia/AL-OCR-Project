@@ -74,7 +74,7 @@ class RedisWorker:
                 "updated_at": time.time(),
                 "request_id": request_id,
             }
-            
+
             # Try to claim the job using SET NX
             claimed = await self.redis_client.set(
                 idempotency_key, json.dumps(initial_status), nx=True, ex=3600
@@ -89,7 +89,7 @@ class RedisWorker:
                     if status in [JobStatus.COMPLETED, JobStatus.PROCESSING]:
                         logger.info("Job %s is already %s, skipping", job_id, status)
                         return
-                
+
                 # If it's FAILED or missing, we can try to reclaim it (though NX prevented it above)
                 # For simplicity, we just return if we couldn't claim it.
                 return
@@ -102,10 +102,12 @@ class RedisWorker:
 
             job_data = json.loads(job_data_raw.decode("utf-8"))
             request_id = job_data.get("request_id", request_id)
-            
+
             # Update idempotency with correct request_id
             initial_status["request_id"] = request_id
-            await self.redis_client.set(idempotency_key, json.dumps(initial_status), ex=3600)
+            await self.redis_client.set(
+                idempotency_key, json.dumps(initial_status), ex=3600
+            )
 
             logger.info("Processing job | ID: %s | RID: %s", job_id, request_id)
 
@@ -131,14 +133,16 @@ class RedisWorker:
         except Exception as e:
             logger.exception("Job failed | ID: %s | RID: %s", job_id, request_id)
             await self._handle_job_failure(job_key, job_id, e, request_id)
-            
+
             error_status = {
                 "status": JobStatus.FAILED,
                 "error": str(e),
                 "request_id": request_id,
                 "failed_at": time.time(),
             }
-            await self.redis_client.set(idempotency_key, json.dumps(error_status), ex=300)
+            await self.redis_client.set(
+                idempotency_key, json.dumps(error_status), ex=300
+            )
 
     async def _execute_ocr(self, job_data: dict[str, Any]) -> dict[str, Any]:
         """Runs the actual OCR engine on the provided data."""
@@ -168,12 +172,14 @@ class RedisWorker:
             job_data_raw = await self.redis_client.get(job_key)
             if job_data_raw:
                 job_data = json.loads(job_data_raw.decode("utf-8"))
-                job_data.update({
-                    "status": JobStatus.FAILED,
-                    "error": str(error),
-                    "failed_at": time.time(),
-                    "request_id": request_id,
-                })
+                job_data.update(
+                    {
+                        "status": JobStatus.FAILED,
+                        "error": str(error),
+                        "failed_at": time.time(),
+                        "request_id": request_id,
+                    }
+                )
                 await self.redis_client.set(job_key, json.dumps(job_data))
         except Exception:
             logger.exception("Failed to record job failure for ID: %s", job_id)

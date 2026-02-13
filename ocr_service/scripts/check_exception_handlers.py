@@ -1,8 +1,11 @@
 """Scan for exception handlers without logging or re-raise."""
 
 import ast
+import logging
 import sys
 from pathlib import Path
+
+logger = logging.getLogger("exception-guard")
 
 
 def _has_logging_or_raise(node: ast.ExceptHandler, source_text: str) -> bool:
@@ -22,9 +25,7 @@ def main() -> int:
             tree = ast.parse(src)
         except Exception as e:
             # If we can't parse, skip and log at debug for audit
-            import logging as _logging
-
-            _logging.getLogger("exception-guard").debug("Failed to parse %s: %s", py, e)
+            logger.debug("Failed to parse %s: %s", py, e)
             continue
 
         for node in ast.walk(tree):
@@ -38,9 +39,7 @@ def main() -> int:
                         break
 
     if failures:
-        import logging as _logging
-
-        _logging.getLogger("exception-guard").error(
+        logger.error(
             "Found exception handlers without logging or re-raise in: %s",
             sorted(set(failures)),
         )

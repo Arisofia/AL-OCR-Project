@@ -102,7 +102,7 @@ class TextractService:
             return cast(dict[str, Any], _do_analyze())
         except (ClientError, BotoCoreError) as e:
             logger.error("Analyze document failed for %s/%s: %s", bucket, key, e)
-            raise TextractServiceError("Analyze document failed after retries") from e
+            raise RuntimeError("Max retry threshold reached") from e
 
     def get_job_results(self, job_id: str) -> dict[str, Any]:
         """Polls for asynchronous job completion and aggregates paginated results."""

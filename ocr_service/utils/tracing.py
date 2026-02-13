@@ -13,7 +13,7 @@ def _ensure_trace_module() -> ModuleType:
     trace_mod = getattr(opentelemetry_mod, "trace", None)
     if not isinstance(trace_mod, ModuleType):
         trace_mod = ModuleType("opentelemetry.trace")
-        setattr(opentelemetry_mod, "trace", trace_mod)
+        opentelemetry_mod.trace = trace_mod
         sys.modules["opentelemetry.trace"] = trace_mod
 
     if not hasattr(trace_mod, "get_current_span"):
@@ -22,12 +22,12 @@ def _ensure_trace_module() -> ModuleType:
     return trace_mod
 
 
+
 try:
     from opentelemetry import trace as _trace
 except ImportError:
-    trace = _ensure_trace_module()
-else:
-    trace = cast(Any, _trace)
+    _trace = _ensure_trace_module()
+trace = _trace
 
 
 def get_current_trace_id() -> Optional[str]:

@@ -1,4 +1,5 @@
 import logging
+
 from fastapi import HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -41,9 +42,9 @@ def _build_error_response(
         trace_id=trace_id,
         filename=request.headers.get("X-File-Name"),
     )
-    return JSONResponse(
-        status_code=status_code, content=payload.model_dump(exclude_none=True)
-    )
+    content = payload.model_dump(exclude_none=False)
+    content["detail"] = detail
+    return JSONResponse(status_code=status_code, content=content)
 
 
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
@@ -90,16 +91,20 @@ async def redis_init_exception_handler(
     )
 
 
-async def ocr_pipeline_error_handler(_request: Request, exc: OCRPipelineError) -> JSONResponse:
+async def ocr_pipeline_error_handler(
+    _request: Request, exc: OCRPipelineError
+) -> JSONResponse:
+    content = ErrorResponse(
+        phase=exc.phase,
+        message=exc.message,
+        correlation_id=exc.correlation_id,
+        trace_id=exc.trace_id,
+        filename=exc.filename,
+    ).model_dump(exclude_none=False)
+    content["detail"] = exc.message
     return JSONResponse(
         status_code=exc.status_code,
-        content=ErrorResponse(
-            phase=exc.phase,
-            message=exc.message,
-            correlation_id=exc.correlation_id,
-            trace_id=exc.trace_id,
-            filename=exc.filename,
-        ).model_dump(exclude_none=True),
+        content=content,
     )
 
 
@@ -120,9 +125,9 @@ async def generic_exception_handler(request: Request, _exc: Exception) -> JSONRe
         correlation_id=correlation_id or request_id,
         trace_id=trace_id,
     )
-    return JSONResponse(
-        status_code=500, content=payload.model_dump(exclude_none=True)
-    )
+    content = payload.model_dump(exclude_none=False)
+    content["detail"] = "Internal server error"
+    return JSONResponse(status_code=500, content=content)
 
 
 def register_handlers(app):
@@ -131,4 +136,6 @@ def register_handlers(app):
     app.add_exception_handler(RedisInitializationError, redis_init_exception_handler)
     app.add_exception_handler(OCRPipelineError, ocr_pipeline_error_handler)
     app.add_exception_handler(Exception, generic_exception_handler)
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler_with_logging)
+    app.add_exception_handler(
+        RateLimitExceeded, _rate_limit_exceeded_handler_with_logging
+    )

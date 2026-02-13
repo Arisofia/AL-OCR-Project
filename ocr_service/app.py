@@ -23,9 +23,9 @@ logger = logging.getLogger("ocr-service")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    settings = get_settings()
+    settings = getattr(app.state, "settings", None) or get_settings()
     app.state.redis_client = get_redis_client(settings)
-    
+
     try:
         redis_status = await verify_redis_connection(app.state.redis_client)
         app.state.redis_diagnostics = redis_status
@@ -64,7 +64,11 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     )
 
     # State
+    app.state.settings = settings
     app.state.limiter = limiter
+
+    # Ensure dependency-injected settings are consistent with app-level settings.
+    app.dependency_overrides[get_settings] = lambda: settings
 
     # Exception Handlers
     register_handlers(app)

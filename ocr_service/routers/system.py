@@ -1,23 +1,22 @@
+import logging
+import inspect
 import time
 
 from fastapi import APIRouter, Depends
 
 from ocr_service.config import Settings, get_settings
 from ocr_service.schemas import HealthResponse, ReconStatusResponse
+from ocr_service.services.storage import StorageService
 from ocr_service.utils.capabilities import CapabilityProvider
+from ocr_service.utils.redis_factory import get_redis_client, verify_redis_connection
 
 router = APIRouter()
+logger = logging.getLogger("ocr-service.routers.system")
 
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check() -> HealthResponse:
     """Service availability heartbeat with component checks."""
-    from ocr_service.services.storage import StorageService
-    from ocr_service.utils.redis_factory import (
-        get_redis_client,
-        verify_redis_connection,
-    )
-
     curr_settings = get_settings()
 
     components: dict = {}
@@ -25,9 +24,12 @@ async def health_check() -> HealthResponse:
     # Redis check
     try:
         redis_client = get_redis_client(curr_settings)
-        redis_res = await verify_redis_connection(redis_client)
+        redis_res = verify_redis_connection(redis_client)
+        if inspect.isawaitable(redis_res):
+            redis_res = await redis_res
         components["redis"] = redis_res
     except Exception as e:  # pragma: no cover - defensive
+        logger.exception("Health check redis dependency failed")
         components["redis"] = {"ok": False, "error": str(e)}
 
     # Storage (S3) check
@@ -37,6 +39,7 @@ async def health_check() -> HealthResponse:
         )
         components["s3"] = {"ok": storage_service.check_connection()}
     except Exception as e:  # pragma: no cover - defensive
+        logger.exception("Health check storage dependency failed")
         components["s3"] = {"ok": False, "error": str(e)}
 
     overall_ok = all(c.get("ok") for c in components.values())

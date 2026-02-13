@@ -68,4 +68,5 @@ async def verify_redis_connection(client: redis.Redis, timeout: float = 1.0) -> 
     except Exception as e:  # pragma: no cover - defensive
         latency = round(((_time.time() - start) * 1000), 2)
         logger.exception("Redis ping failed: %s", e)
-        return {"ok": False, "latency_ms": latency, "error": str(e)}
+        error_detail = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+        return {"ok": False, "latency_ms": latency, "error": error_detail}

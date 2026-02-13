@@ -1,7 +1,8 @@
 import logging
 import time
 import uuid
-from typing import Awaitable, Callable
+from collections.abc import Awaitable
+from typing import Callable
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -17,7 +18,7 @@ class ProcessTimeAndLoggingMiddleware(BaseHTTPMiddleware):
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         start_time = time.time()
-        
+
         request_id = get_request_id_from_scope(request.scope)
         correlation_id = (
             request.headers.get("X-Correlation-ID")

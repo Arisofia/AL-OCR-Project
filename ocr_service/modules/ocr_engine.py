@@ -7,7 +7,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional, cast, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, cast
 
 import cv2
 import httpx
@@ -179,7 +179,7 @@ class DocumentProcessor:
         self, img: np.ndarray, regions: List[Dict[str, Any]]
     ) -> str:
         """Performs targeted extraction on ROIs."""
-        
+
         async def _extract_one(region):
             x, y, w, h = region["bbox"]
             roi = img[y : y + h, x : x + w]
@@ -191,7 +191,9 @@ class DocumentProcessor:
                     pytesseract.image_to_string, roi, config=self.ocr_config.flags
                 )
             except Exception:
-                logger.exception("Region extraction failed | bbox=%s", region.get("bbox"))
+                logger.exception(
+                    "Region extraction failed | bbox=%s", region.get("bbox")
+                )
                 return ""
 
         results = await asyncio.gather(*[_extract_one(r) for r in regions])
@@ -348,10 +350,13 @@ class IterativeOCREngine:
             return {"error": str(e)}
         finally:
             latency = time.time() - start_time
-            OCR_ENGINE_PROCESS_IMAGE_ADVANCED_LATENCY.labels(status=status).observe(latency)
+            OCR_ENGINE_PROCESS_IMAGE_ADVANCED_LATENCY.labels(status=status).observe(
+                latency
+            )
 
     async def _analyze_layout(self, ctx: DocumentContext):
         """Analyzes document layout."""
+
         def _run():
             regions = DocumentLayoutAnalyzer.detect_regions(ctx.image_bytes)
             l_type = DocumentLayoutAnalyzer.classify_layout(regions)
@@ -384,19 +389,21 @@ class IterativeOCREngine:
             )
 
             confidence = self.confidence_scorer.calculate(text)
-            ctx.iteration_history.append({
-                "iteration": i + 1,
-                "text_length": len(text),
-                "confidence": confidence,
-                "method": "region-based" if use_regions else "full-page",
-                "preview_text": f"{text[:50]}..." if len(text) > 50 else text,
-            })
+            ctx.iteration_history.append(
+                {
+                    "iteration": i + 1,
+                    "text_length": len(text),
+                    "confidence": confidence,
+                    "method": "region-based" if use_regions else "full-page",
+                    "preview_text": f"{text[:50]}..." if len(text) > 50 else text,
+                }
+            )
 
             if confidence > ctx.best_confidence:
                 ctx.best_text, ctx.best_confidence = text, confidence
 
             ctx.current_img = await ImageToolkit.enhance_iteration(ctx.current_img)
-        except Exception as e:
+        except Exception:
             logger.exception("Iteration %d failed", i + 1)
             ctx.iteration_history.append({"iteration": i + 1, "error": "failed"})
 
@@ -432,8 +439,8 @@ class IterativeOCREngine:
                 exc = t.exception()
                 if exc:
                     logger.error("Background learning task failed: %s", exc)
-            except Exception:
-                pass
+            except Exception as cb_exc:
+                logger.debug("Background learning callback failed: %s", cb_exc)
             self._background_tasks.discard(t)
 
         task.add_done_callback(_log_task_error)

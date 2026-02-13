@@ -41,6 +41,7 @@ ignore_missing_imports = true
 testpaths = ["ocr_service/tests", "ocr_reconstruct/tests"]
 python_files = ["test_*.py"]
 addopts = "-v --cov=ocr_service --cov=ocr_reconstruct --cov-report=xml"
+asyncio_mode = "auto"
 markers = [
     "integration: marks tests as integration tests (slow, requires Tesseract)"
 ]
