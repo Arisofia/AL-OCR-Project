@@ -8,6 +8,7 @@ set -euo pipefail
 AWS_REGION=${AWS_REGION:?AWS_REGION is required}
 AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:?AWS_ACCOUNT_ID is required}
 ECR_REPOSITORY=${ECR_REPOSITORY:-al-ocr-service}
+DEFAULT_ECR_REPOSITORY="al-ocr-service"
 LAMBDA_FUNCTION_NAME=${LAMBDA_FUNCTION_NAME:-AL-OCR-Processor}
 AWS_LAMBDA_ROLE_ARN=${AWS_LAMBDA_ROLE_ARN:-}
 LAMBDA_TIMEOUT=${LAMBDA_TIMEOUT:-30}
@@ -22,18 +23,28 @@ aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS 
 
 # --- Build & Artifact Versioning ---
 COMMIT_TAG=$(git rev-parse --short HEAD || echo "local-$(date +%s)")
-IMAGE_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$COMMIT_TAG
 
 # --- Infrastructure Validation ---
 if ! aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1; then
   echo "ECR repository $ECR_REPOSITORY does not exist. Creating it now."
-  aws ecr create-repository \
+  if aws ecr create-repository \
     --repository-name "$ECR_REPOSITORY" \
     --region "$AWS_REGION" \
     --image-scanning-configuration scanOnPush=true \
-    --image-tag-mutability MUTABLE >/dev/null
-  echo "Created ECR repository: $ECR_REPOSITORY"
+    --image-tag-mutability MUTABLE >/dev/null 2>&1; then
+    echo "Created ECR repository: $ECR_REPOSITORY"
+  elif [[ "$ECR_REPOSITORY" != "$DEFAULT_ECR_REPOSITORY" ]] && \
+       aws ecr describe-repositories --repository-names "$DEFAULT_ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1; then
+    echo "Insufficient permission to create $ECR_REPOSITORY. Falling back to existing repository $DEFAULT_ECR_REPOSITORY."
+    ECR_REPOSITORY="$DEFAULT_ECR_REPOSITORY"
+  else
+    echo "Error: Unable to create ECR repository $ECR_REPOSITORY."
+    echo "Grant ecr:CreateRepository to the deployment role or set ECR_REPOSITORY to an existing repository."
+    exit 1
+  fi
 fi
+
+IMAGE_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$COMMIT_TAG
 
 # --- Container Image Construction ---
 echo "Building container image: $IMAGE_URI"

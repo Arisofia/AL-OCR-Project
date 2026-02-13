@@ -37,6 +37,8 @@ cd ocr_service
 Notes:
 
 - `deploy.sh` auto-creates the ECR repository if it is missing.
+- If IAM denies repository creation and `ECR_REPOSITORY` is not
+  `al-ocr-service`, `deploy.sh` falls back to `al-ocr-service` when available.
 - `deploy.sh` auto-creates the Lambda function when missing if
   `AWS_LAMBDA_ROLE_ARN` is set.
 - The Dockerfile uses the AWS Lambda base image and includes Tesseract and language packs.
