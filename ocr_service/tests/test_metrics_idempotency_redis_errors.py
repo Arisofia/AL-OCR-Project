@@ -1,4 +1,3 @@
-
 """Test metrics increment on Redis failure for idempotency logic."""
 
 # pylint: disable=protected-access
@@ -32,9 +31,7 @@ class FailingRedis:
 
 
 @pytest.mark.xfail(
-    reason=(
-        "Simulated Redis outage: expected failure for negative test scenario"
-    )
+    reason=("Simulated Redis outage: expected failure for negative test scenario")
 )
 def test_metrics_increment_on_redis_get_failure():
     """Test that metrics increment when Redis get fails (negative test)."""

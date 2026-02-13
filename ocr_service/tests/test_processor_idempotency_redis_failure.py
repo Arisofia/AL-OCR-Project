@@ -1,4 +1,3 @@
-
 """Test idempotency error handling when Redis fails in OCRProcessor."""
 
 import asyncio
@@ -29,9 +28,7 @@ class FailingRedis:
 
 
 @pytest.mark.xfail(
-    reason=(
-        "Simulated Redis outage: expected failure for negative test scenario"
-    )
+    reason=("Simulated Redis outage: expected failure for negative test scenario")
 )
 def test_redis_get_failure_raises_idempotency_error():
     """Test that idempotency error is raised when Redis get fails (negative test)."""
