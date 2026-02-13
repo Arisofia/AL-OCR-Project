@@ -34,9 +34,7 @@ async def health_check() -> HealthResponse:
 
     # Storage (S3) check
     try:
-        storage_service = StorageService(
-            bucket_name=getattr(curr_settings, "s3_bucket_name", None)
-        )
+        storage_service = StorageService()
         components["s3"] = {"ok": storage_service.check_connection()}
     except Exception as e:  # pragma: no cover - defensive
         logger.exception("Health check storage dependency failed")

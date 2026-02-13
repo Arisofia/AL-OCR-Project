@@ -161,7 +161,8 @@ class RedisWorker:
             }
 
         return await self.engine.process_image(
-            image_bytes, use_reconstruction=self.settings.enable_reconstruction
+            image_bytes,
+            self.settings.enable_reconstruction,
         )
 
     async def _handle_job_failure(

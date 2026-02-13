@@ -92,13 +92,26 @@ async def redis_init_exception_handler(
 
 
 async def ocr_pipeline_error_handler(
-    _request: Request, exc: OCRPipelineError
+    request: Request, exc: OCRPipelineError
 ) -> JSONResponse:
+    request_id = getattr(
+        request.state, "request_id", get_request_id_from_scope(request.scope)
+    )
+    correlation_id = exc.correlation_id or getattr(
+        request.state,
+        "correlation_id",
+        request.headers.get("X-Correlation-ID") or request_id,
+    )
+    trace_id = exc.trace_id or getattr(
+        request.state,
+        "trace_id",
+        request.headers.get("X-Trace-ID"),
+    )
     content = ErrorResponse(
         phase=exc.phase,
         message=exc.message,
-        correlation_id=exc.correlation_id,
-        trace_id=exc.trace_id,
+        correlation_id=correlation_id,
+        trace_id=trace_id,
         filename=exc.filename,
     ).model_dump(exclude_none=False)
     content["detail"] = exc.message

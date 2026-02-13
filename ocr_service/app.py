@@ -48,6 +48,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     """
     Application factory for creating and configuring the FastAPI instance.
     """
+    explicit_settings = settings is not None
     if settings is None:
         settings = get_settings()
 
@@ -67,8 +68,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.state.settings = settings
     app.state.limiter = limiter
 
-    # Ensure dependency-injected settings are consistent with app-level settings.
-    app.dependency_overrides[get_settings] = lambda: settings
+    # If explicit settings were provided (tests or custom embedding), preserve them.
+    if explicit_settings:
+        app.dependency_overrides[get_settings] = lambda: settings
 
     # Exception Handlers
     register_handlers(app)
