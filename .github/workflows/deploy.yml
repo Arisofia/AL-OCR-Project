@@ -23,22 +23,22 @@ jobs:
       - name: Copy deploy scripts to remote and run deploy
         uses: appleboy/ssh-action@v0.1.8
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: ${{ secrets.DEPLOY_PORT }}
+          host: "${{ secrets.DEPLOY_HOST }}"
+          username: "${{ secrets.DEPLOY_USER }}"
+          key: "${{ secrets.DEPLOY_SSH_KEY }}"
+          port: "${{ secrets.DEPLOY_PORT }}"
           script: |
             set -euo pipefail
             echo "Received deploy request for image: $IMAGE_NAME:$IMAGE_TAG"
             mkdir -p ~/deploy/al-ocr
             cat > ~/deploy/al-ocr/.env <<'EOF'
             API_IMAGE=$IMAGE_NAME:$IMAGE_TAG
-            REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
-            OCR_API_KEY=${{ secrets.OCR_API_KEY }}
-            AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
-            AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
-            AWS_REGION=${{ secrets.AWS_REGION }}
-            GHCR_PAT=${{ secrets.GHCR_PAT }}
+            REDIS_PASSWORD="${{ secrets.REDIS_PASSWORD }}"
+            OCR_API_KEY="${{ secrets.OCR_API_KEY }}"
+            AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}"
+            AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+            AWS_REGION="${{ secrets.AWS_REGION }}"
+            GHCR_PAT="${{ secrets.GHCR_PAT }}"
             EOF
             # copy docker-compose
             cat > ~/deploy/al-ocr/docker-compose.prod.yml <<'YAML'
