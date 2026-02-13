@@ -146,17 +146,29 @@ fi
 if [[ "$GENERATE_SSH_KEY" -eq 1 ]]; then
   require_cmd ssh-keygen
   if [[ -f "$SSH_KEY_PATH" || -f "$SSH_KEY_PATH.pub" ]]; then
-    echo "ERROR: SSH key path already exists: $SSH_KEY_PATH(.pub)" >&2
-    exit 1
+    if [[ "$SET_SSH_SECRET" -eq 1 && -f "$SSH_KEY_PATH" ]]; then
+      echo "SSH key path already exists: $SSH_KEY_PATH(.pub) - reusing existing private key"
+    else
+      echo "ERROR: SSH key path already exists: $SSH_KEY_PATH(.pub)" >&2
+      exit 1
+    fi
+  else
+    ssh-keygen -t ed25519 -f "$SSH_KEY_PATH" -N "" -C "gha-deploy@$REPO" >/dev/null
+    chmod 600 "$SSH_KEY_PATH"
+    chmod 644 "$SSH_KEY_PATH.pub"
+    echo "Generated SSH keypair:"
+    echo "  private: $SSH_KEY_PATH"
+    echo "  public : $SSH_KEY_PATH.pub"
   fi
-  ssh-keygen -t ed25519 -f "$SSH_KEY_PATH" -N "" -C "gha-deploy@$REPO" >/dev/null
-  chmod 600 "$SSH_KEY_PATH"
-  chmod 644 "$SSH_KEY_PATH.pub"
-  echo "Generated SSH keypair:"
-  echo "  private: $SSH_KEY_PATH"
-  echo "  public : $SSH_KEY_PATH.pub"
-  if [[ "$SET_SSH_SECRET" -eq 1 ]]; then
+fi
+
+if [[ "$SET_SSH_SECRET" -eq 1 && -z "${DEPLOY_SSH_KEY:-}" ]]; then
+  if [[ -f "$SSH_KEY_PATH" ]]; then
     export DEPLOY_SSH_KEY="$(cat "$SSH_KEY_PATH")"
+    echo "Loaded DEPLOY_SSH_KEY from: $SSH_KEY_PATH"
+  else
+    echo "ERROR: --set-ssh-secret requested but private key not found at $SSH_KEY_PATH" >&2
+    exit 1
   fi
 fi
 
