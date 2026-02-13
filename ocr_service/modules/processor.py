@@ -7,8 +7,9 @@ import asyncio
 import hashlib
 import json
 import logging
+import mimetypes
 import time
-from typing import Any, Dict, Optional, cast
+from typing import Any, Optional, cast
 
 import redis.asyncio as redis
 import redis.exceptions as redis_exceptions
@@ -81,12 +82,10 @@ class OCRProcessor:
         redis_client: Optional[redis.Redis] = None,
         idempotency_key: Optional[str] = None,
         idempotency_ttl_seconds: int = 3600,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Handles UploadFile objects from FastAPI."""
         inferred_type = file.content_type
         if not inferred_type and file.filename:
-            import mimetypes
-
             inferred_type = (
                 mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
             )
@@ -121,7 +120,7 @@ class OCRProcessor:
         redis_client: Optional[redis.Redis] = None,
         idempotency_key: Optional[str] = None,
         idempotency_ttl_seconds: int = 3600,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Executes the full OCR pipeline on raw bytes."""
         start_time = time.time()
         redis_client = redis_client or self.redis_client
@@ -141,7 +140,7 @@ class OCRProcessor:
             if cached:
                 OCR_IDEMPOTENCY_HIT_COUNT.inc()
                 if cached.get("status") == JobStatus.COMPLETED:
-                    return cast(Dict[str, Any], cached)
+                    return cast(dict[str, Any], cached)
                 if cached.get("status") == JobStatus.PROCESSING:
                     raise OCRPipelineError(
                         phase="idempotency",
@@ -211,7 +210,7 @@ class OCRProcessor:
             return result
 
         except OCRPipelineError as exc:
-            if not (exc.phase == "idempotency" and exc.status_code == 409):
+            if exc.phase != "idempotency" or exc.status_code != 409:
                 await self._delete_cached_result(redis_client, cache_key)
             raise
         except Exception as exc:
@@ -264,14 +263,15 @@ class OCRProcessor:
         self,
         redis_client: redis.Redis,
         cache_key: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         try:
             raw = await redis_client.get(cache_key)
             return json.loads(raw) if raw else None
         except redis_exceptions.RedisError as exc:
             OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="get").inc()
             logger.warning(
-                "Redis unavailable for idempotency read; continuing in degraded mode: %s",
+                "Redis unavailable for idempotency read; "
+                "continuing in degraded mode: %s",
                 exc,
             )
             return None
@@ -289,7 +289,7 @@ class OCRProcessor:
         self,
         redis_client: redis.Redis,
         cache_key: str,
-        value: Dict[str, Any],
+        value: dict[str, Any],
         ttl: int,
     ) -> None:
         try:
@@ -297,7 +297,8 @@ class OCRProcessor:
         except redis_exceptions.RedisError as exc:
             OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="set").inc()
             logger.warning(
-                "Redis unavailable for idempotency write; continuing in degraded mode: %s",
+                "Redis unavailable for idempotency write; "
+                "continuing in degraded mode: %s",
                 exc,
             )
         except Exception as exc:
@@ -340,7 +341,7 @@ class OCRProcessor:
         advanced: bool,
         use_recon: bool,
         doc_type: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         if advanced:
             return await self.ocr_engine.process_image_advanced(contents, doc_type=doc_type)
         return await self.ocr_engine.process_image(
@@ -353,7 +354,7 @@ class OCRProcessor:
         contents: bytes,
         filename: str,
         content_type: str,
-        result: Dict[str, Any],
+        result: dict[str, Any],
         request_id: str,
     ) -> Optional[str]:
         try:

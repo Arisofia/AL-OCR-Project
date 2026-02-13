@@ -1,6 +1,6 @@
 import sys
 from types import ModuleType
-from typing import Any, Optional, cast
+from typing import Optional
 
 
 def _ensure_trace_module() -> ModuleType:
