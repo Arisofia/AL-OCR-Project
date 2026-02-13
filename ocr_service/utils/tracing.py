@@ -1,6 +1,33 @@
-from typing import Optional
+import sys
+from types import ModuleType
+from typing import Any, Optional, cast
 
-from opentelemetry import trace
+
+def _ensure_trace_module() -> ModuleType:
+    """Return a trace module object, creating a lightweight fallback if needed."""
+    opentelemetry_mod = sys.modules.get("opentelemetry")
+    if opentelemetry_mod is None:
+        opentelemetry_mod = ModuleType("opentelemetry")
+        sys.modules["opentelemetry"] = opentelemetry_mod
+
+    trace_mod = getattr(opentelemetry_mod, "trace", None)
+    if not isinstance(trace_mod, ModuleType):
+        trace_mod = ModuleType("opentelemetry.trace")
+        setattr(opentelemetry_mod, "trace", trace_mod)
+        sys.modules["opentelemetry.trace"] = trace_mod
+
+    if not hasattr(trace_mod, "get_current_span"):
+        trace_mod.get_current_span = lambda: None  # type: ignore[attr-defined]
+
+    return trace_mod
+
+
+try:
+    from opentelemetry import trace as _trace
+except ImportError:
+    trace = _ensure_trace_module()
+else:
+    trace = cast(Any, _trace)
 
 
 def get_current_trace_id() -> Optional[str]:

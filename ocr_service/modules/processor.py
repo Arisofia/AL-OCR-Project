@@ -8,22 +8,20 @@ import hashlib
 import json
 import logging
 import time
-from typing import Any, Optional, cast, Dict
+from typing import Any, Dict, Optional, cast
 
 import redis.asyncio as redis
 from fastapi import UploadFile
-from opentelemetry import trace
 
 from ocr_service.exceptions import OCRPipelineError
-from ocr_service.services.storage import StorageService
 from ocr_service.models import JobStatus
+from ocr_service.services.storage import StorageService
 
 from .ocr_engine import IterativeOCREngine
 
 __all__ = ["OCRProcessor"]
 
 logger = logging.getLogger("ocr-service.processor")
-tracer = trace.get_tracer(__name__)
 
 
 class OCRProcessor:
