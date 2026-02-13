@@ -11,7 +11,12 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Optional, Union, cast
 
+
 import httpx
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
 
 __all__ = [
     "AIProviderError",
@@ -141,8 +146,8 @@ class BaseVisionProvider(VisionProvider, ABC):
         if resp is not None:
             try:
                 return resp.json()
-            except Exception as e:
-                logger.debug("Response body JSON parsing failed: %s", e)
+            except Exception as json_parse_exc:
+                logger.debug("Response body JSON parsing failed: %s", json_parse_exc)
                 try:
                     return resp.text
                 except Exception as text_exc:
@@ -230,9 +235,10 @@ class GeminiVisionProvider(BaseVisionProvider):
         """
         Sends an image to Gemini for reconstruction.
         """
+        if genai is None:
+            logger.error("google-generativeai package not installed")
+            raise ProviderConfigError("Gemini package missing")
         try:
-            import google.generativeai as genai
-
             genai.configure(api_key=self.api_key)
             model = genai.GenerativeModel("gemini-1.5-flash")
             image_part = {"mime_type": "image/jpeg", "data": image_bytes}
@@ -241,9 +247,6 @@ class GeminiVisionProvider(BaseVisionProvider):
                 [prompt, image_part]  # type: ignore[arg-type]
             )
             return {"text": response.text, "model": "gemini-1.5-flash"}
-        except ImportError as e:
-            logger.error("google-generativeai package not installed")
-            raise ProviderConfigError("Gemini package missing") from e
         except AttributeError as e:
             logger.error("Gemini Vision response parsing failed: %s", e)
             raise ProviderRuntimeError("Invalid response structure from Gemini") from e
