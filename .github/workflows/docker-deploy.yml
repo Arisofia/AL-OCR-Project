@@ -63,11 +63,27 @@ jobs:
       - name: Update Lambda image
         if:
           ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        env:
+          FUNCTION_NAME_SECRET: ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }}
         run: |
           COMMIT_TAG=$(git rev-parse --short HEAD)
           IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${COMMIT_TAG}
-          FUNCTION_NAME="${{ secrets.AWS_LAMBDA_FUNCTION_NAME }}"
-          FUNCTION_NAME="${FUNCTION_NAME:-al-ocr-processor}"
+
+          FUNCTION_NAME="${FUNCTION_NAME_SECRET:-al-ocr-processor}"
+          FUNCTION_NAME="${FUNCTION_NAME#"${FUNCTION_NAME%%[![:space:]]*}"}"
+          FUNCTION_NAME="${FUNCTION_NAME%"${FUNCTION_NAME##*[![:space:]]}"}"
+          FUNCTION_NAME="${FUNCTION_NAME#\"}"
+          FUNCTION_NAME="${FUNCTION_NAME%\"}"
+          if [[ "$FUNCTION_NAME" == arn:*:function:* ]]; then
+            FUNCTION_NAME="${FUNCTION_NAME##*:function:}"
+          fi
+          FUNCTION_NAME="${FUNCTION_NAME%%:*}"
+
+          if [[ ! "$FUNCTION_NAME" =~ ^[A-Za-z0-9_-]{1,64}$ ]]; then
+            echo "::warning::Lambda update skipped. Invalid AWS_LAMBDA_FUNCTION_NAME format."
+            exit 0
+          fi
+
           if ! aws lambda update-function-code --function-name "$FUNCTION_NAME" --image-uri "$IMAGE_URI"; then
             echo "::warning::Lambda update skipped. Check AWS_LAMBDA_FUNCTION_NAME and IAM permissions."
           fi
