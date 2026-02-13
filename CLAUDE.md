@@ -7,3 +7,4 @@ Robustness improvements in workflow artifact management are now in place (see wo
 Next recommendations (as CTO):
 Carefully monitor for performance or regression impacts during real-world usage (upscaling can increase compute cost for very large batches).
 Continue adding test coverage, especially for edge cases in upscaling logic.
+

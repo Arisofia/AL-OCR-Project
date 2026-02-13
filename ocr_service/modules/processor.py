@@ -295,7 +295,8 @@ class OCRProcessor:
     ) -> None:
         """Store OCR result in Redis with TTL."""
         try:
-            await self._redis_set_with_ttl(redis_client, cache_key, json.dumps(value), ttl)
+            serialized = json.dumps(value)
+            await self._redis_set_with_ttl(redis_client, cache_key, serialized, ttl)
         except redis_exceptions.RedisError as exc:
             OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="set").inc()
             logger.warning(
@@ -348,7 +349,9 @@ class OCRProcessor:
     ) -> dict[str, Any]:
         """Execute the appropriate OCR processing strategy."""
         if advanced:
-            return await self.ocr_engine.process_image_advanced(contents, doc_type=doc_type)
+            return await self.ocr_engine.process_image_advanced(
+                contents, doc_type=doc_type
+            )
         return await self.ocr_engine.process_image(
             contents,
             use_reconstruction=use_recon,

@@ -1,5 +1,5 @@
-import logging
 import inspect
+import logging
 import time
 
 from fastapi import APIRouter, Depends

@@ -91,7 +91,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.2.0] - 2026-01-15
+## [1.2.0, part 2] - 2026-01-15
 ### Added
 - **Structured JSON Logging**: Implemented `python-json-logger` for machine-readable logs across the service.
 - **Sentry Integration**: Added real-time error tracking and performance monitoring for FastAPI and AWS Lambda.
