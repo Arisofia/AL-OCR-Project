@@ -16,7 +16,7 @@ def decode_image(data: Union[str, bytes]) -> Optional[bytes]:
         if data.startswith("data:image"):
             data = data.split(",")[1]
         return base64.b64decode(data)
-    except (base64.binascii.Error, ValueError) as e:
+    except (IOError, ValueError) as e:
         logger.error("Failed to decode image data: %s", e)
         return None
 
@@ -26,6 +26,6 @@ def load_image_from_path(path: str) -> Optional[bytes]:
     try:
         with open(path, "rb") as f:
             return f.read()
-    except (OSError, IOError) as e:
+    except (IOError, ValueError) as e:
         logger.error("Failed to read image from path %s: %s", path, e)
         return None

@@ -211,7 +211,7 @@ class OCRProcessor:
             if exc.phase != "idempotency" or exc.status_code != 409:
                 await self._delete_cached_result(redis_client, cache_key)
             raise
-        except Exception as exc:
+        except (ValueError, TypeError) as exc:
             await self._delete_cached_result(redis_client, cache_key)
             logger.exception("Internal processing failure")
             raise OCRPipelineError(
@@ -320,6 +320,7 @@ class OCRProcessor:
         value: str,
         ttl: int,
     ) -> None:
+        """Set a key-value pair in Redis with expiration time."""
         try:
             await redis_client.set(key, value, ex=ttl)
         except TypeError:
@@ -331,6 +332,7 @@ class OCRProcessor:
         redis_client: redis.Redis,
         cache_key: str,
     ) -> None:
+        """Remove cached result from Redis."""
         try:
             await redis_client.delete(cache_key)
         except Exception:
@@ -344,6 +346,7 @@ class OCRProcessor:
         use_recon: bool,
         doc_type: str,
     ) -> dict[str, Any]:
+        """Execute the appropriate OCR processing strategy."""
         if advanced:
             return await self.ocr_engine.process_image_advanced(contents, doc_type=doc_type)
         return await self.ocr_engine.process_image(
@@ -359,6 +362,7 @@ class OCRProcessor:
         result: dict[str, Any],
         request_id: str,
     ) -> Optional[str]:
+        """Persist OCR results and original file to storage."""
         try:
             # Upload raw file
             s3_key = await asyncio.to_thread(
