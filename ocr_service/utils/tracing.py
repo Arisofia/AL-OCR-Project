@@ -1,4 +1,5 @@
 """Tracing utility functions."""
+
 import sys
 from types import ModuleType
 from typing import Optional
@@ -21,7 +22,6 @@ def _ensure_trace_module() -> ModuleType:
         trace_mod.get_current_span = lambda: None  # type: ignore[attr-defined]
 
     return trace_mod
-
 
 
 try:

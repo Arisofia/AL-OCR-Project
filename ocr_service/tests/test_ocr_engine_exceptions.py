@@ -42,7 +42,8 @@ async def test_document_processor_applies_upscaling():
     # Create a small test image
     small_img = np.zeros((200, 200, 3), dtype=np.uint8)
     import cv2
-    _, img_bytes = cv2.imencode('.png', small_img)
+
+    _, img_bytes = cv2.imencode(".png", small_img)
 
     config = engine_mod.EngineConfig(max_upscale_factor=2.0, max_long_side_px=600)
     processor = DocumentProcessor(

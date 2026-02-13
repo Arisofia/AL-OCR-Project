@@ -163,6 +163,4 @@ class ImageToolkit:
             new_height = int(height * cap_scale)
 
         # Use bicubic interpolation for better text detail enlargement.
-        return cv2.resize(
-            img, (new_width, new_height), interpolation=cv2.INTER_CUBIC
-        )
+        return cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_CUBIC)

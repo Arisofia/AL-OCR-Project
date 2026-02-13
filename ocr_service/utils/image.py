@@ -1,4 +1,5 @@
 """Image utility functions."""
+
 import base64
 import logging
 from typing import Optional, Union

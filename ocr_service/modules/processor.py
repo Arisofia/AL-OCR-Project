@@ -33,6 +33,7 @@ logger = logging.getLogger("ocr-service.processor")
 @dataclass
 class ProcessingConfig:
     """Configuration for OCR processing operations."""
+
     reconstruct: bool = False
     advanced: bool = False
     doc_type: str = "generic"
@@ -89,7 +90,7 @@ class OCRProcessor:
         file: UploadFile,
         config: Optional[ProcessingConfig] = None,
         redis_client: Optional[redis.Redis] = None,
-        **kwargs
+        **kwargs,
     ) -> dict[str, Any]:
         """Handles UploadFile objects from FastAPI."""
         if config is None:

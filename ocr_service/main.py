@@ -13,4 +13,6 @@ handler = Mangum(app)
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("ocr_service.main:app", host="0.0.0.0", port=8000, reload=True)  # nosec B104
+    uvicorn.run(
+        "ocr_service.main:app", host="0.0.0.0", port=8000, reload=True
+    )  # nosec B104
