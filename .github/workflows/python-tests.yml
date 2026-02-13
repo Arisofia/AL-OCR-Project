@@ -30,7 +30,7 @@ jobs:
           report-path: results-${{ matrix.python-version }}.sarif
 
       - name: Upload Gitleaks Report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: gitleaks-report-${{ matrix.python-version }}
           path: results-${{ matrix.python-version }}.sarif
@@ -80,7 +80,7 @@ jobs:
         run: pytest
 
       - name: Upload Coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: coverage-report-${{ matrix.python-version }}
           path: coverage.xml

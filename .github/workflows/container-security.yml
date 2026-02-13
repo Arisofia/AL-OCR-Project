@@ -229,7 +229,7 @@ jobs:
 
       - name: Upload scan artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: container-scans
           path: |
@@ -394,7 +394,7 @@ jobs:
           echo "result_file=$OUT_FILE" >> $GITHUB_OUTPUT
 
       - name: Upload benchmark artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: lambda-benchmark-results
           path: lambda_benchmark_results.txt
