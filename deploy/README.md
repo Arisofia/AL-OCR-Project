@@ -78,6 +78,8 @@ Notes
   does not exist.
 - If repository creation is denied by IAM and `ECR_REPOSITORY` is not
   `al-ocr-service`, deployment falls back to `al-ocr-service` when it exists.
+- `AWS_LAMBDA_FUNCTION_NAME` can be provided as a plain function name or a
+  full Lambda ARN; deployment normalizes it automatically.
 - If the Lambda function does not exist, deployment auto-creates it when
   `AWS_LAMBDA_ROLE_ARN` is available; otherwise deployment exits with a clear
   error.

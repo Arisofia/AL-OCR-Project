@@ -16,6 +16,18 @@ LAMBDA_MEMORY_SIZE=${LAMBDA_MEMORY_SIZE:-512}
 LAMBDA_ARCHITECTURES=${LAMBDA_ARCHITECTURES:-x86_64}
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# Normalize common secret input variants (e.g., full Lambda ARN with optional alias)
+# and ensure the final name is valid for create-function.
+if [[ "$LAMBDA_FUNCTION_NAME" == arn:*:function:* ]]; then
+  LAMBDA_FUNCTION_NAME="${LAMBDA_FUNCTION_NAME##*:function:}"
+  LAMBDA_FUNCTION_NAME="${LAMBDA_FUNCTION_NAME%%:*}"
+fi
+
+if [[ ! "$LAMBDA_FUNCTION_NAME" =~ ^[A-Za-z0-9_-]{1,64}$ ]]; then
+  echo "Invalid LAMBDA_FUNCTION_NAME value detected. Falling back to AL-OCR-Processor."
+  LAMBDA_FUNCTION_NAME="AL-OCR-Processor"
+fi
+
 echo "Initializing deployment for account: $AWS_ACCOUNT_ID in region: $AWS_REGION"
 
 # --- Authentication & Registry Access ---
