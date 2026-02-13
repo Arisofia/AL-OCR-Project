@@ -34,7 +34,6 @@ class _NoopRedis:
 
     async def get(self, _key: str) -> None:
         """Get method for compatibility."""
-        return None
 
     async def set(
         self,

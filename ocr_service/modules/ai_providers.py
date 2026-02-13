@@ -141,8 +141,8 @@ class BaseVisionProvider(VisionProvider, ABC):
         if resp is not None:
             try:
                 return resp.json()
-            except Exception as exc:
-                logger.debug("Response body JSON parsing failed: %s", exc)
+            except Exception as e:
+                logger.debug("Response body JSON parsing failed: %s", e)
                 try:
                     return resp.text
                 except Exception as text_exc:

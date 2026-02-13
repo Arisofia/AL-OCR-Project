@@ -90,7 +90,7 @@ class RedisWorker:
                         logger.info("Job %s is already %s, skipping", job_id, status)
                         return
 
-                # If it's FAILED or missing, we can try to reclaim it (though NX prevented it above)
+                # If FAILED or missing, try to reclaim (NX prevented above)
                 # For simplicity, we just return if we couldn't claim it.
                 return
 
