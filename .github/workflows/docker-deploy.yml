@@ -1,5 +1,5 @@
-
-name: "Build and Deploy Docker Image"
+---
+name: Docker Deploy
 
 on:
   push:

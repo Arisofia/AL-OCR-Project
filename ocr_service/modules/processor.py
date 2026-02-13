@@ -1,7 +1,4 @@
-"""
-Orchestration layer for document intelligence workflows.
-Coordinates OCR pipelines with automated S3 storage integration.
-"""
+"""Module for document/image processors."""
 
 import asyncio
 import hashlib
@@ -63,6 +60,7 @@ class OCRProcessor:
         storage_service: StorageService,
         redis_client: Optional[redis.Redis] = None,
     ):
+        """Initialize the OCR processor with engine and storage dependencies."""
         self.ocr_engine = ocr_engine
         self.storage_service = storage_service
         self.redis_client = redis_client or cast(redis.Redis, _NoopRedis())
@@ -231,6 +229,7 @@ class OCRProcessor:
         filename: Optional[str],
         request_id: str,
     ) -> None:
+        """Validate that the file is a supported image type."""
         if not content_type.startswith("image/"):
             raise OCRPipelineError(
                 phase="validation",
@@ -250,6 +249,7 @@ class OCRProcessor:
         advanced: bool,
         contents: bytes,
     ) -> str:
+        """Generate a unique key for idempotency based on request parameters."""
         if idempotency_key:
             return f"ocr:idempotency:{idempotency_key}"
 
@@ -264,6 +264,7 @@ class OCRProcessor:
         redis_client: redis.Redis,
         cache_key: str,
     ) -> Optional[dict[str, Any]]:
+        """Retrieve cached OCR result from Redis."""
         try:
             raw = await redis_client.get(cache_key)
             return json.loads(raw) if raw else None
@@ -275,7 +276,7 @@ class OCRProcessor:
                 exc,
             )
             return None
-        except Exception as exc:
+        except (json.JSONDecodeError, ValueError) as exc:
             OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="get").inc()
             logger.exception("Redis read failed")
             raise OCRPipelineError(
@@ -292,6 +293,7 @@ class OCRProcessor:
         value: dict[str, Any],
         ttl: int,
     ) -> None:
+        """Store OCR result in Redis with TTL."""
         try:
             await self._redis_set_with_ttl(redis_client, cache_key, json.dumps(value), ttl)
         except redis_exceptions.RedisError as exc:
@@ -301,7 +303,7 @@ class OCRProcessor:
                 "continuing in degraded mode: %s",
                 exc,
             )
-        except Exception as exc:
+        except (TypeError, ValueError) as exc:
             OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="set").inc()
             logger.exception("Redis write failed")
             raise OCRPipelineError(

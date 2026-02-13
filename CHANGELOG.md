@@ -17,7 +17,7 @@
 
 ### Bug Fixes
 
-* resolve github workflow diagnostics and update actions versions ([f49487c](https://github.com/Arisofia/AL-OCR-Project/commit/f49487c404ccd5a15e5ee2cd64ab19b3f3e29b26))
+ - resolve github workflow diagnostics and update actions versions ([f49487c](https://github.com/Arisofia/AL-OCR-Project/commit/f49487c404ccd5a15e5ee2cd64ab19b3f3e29b26))
 
 ## [1.1.1](https://github.com/Arisofia/AL-OCR-Project/compare/v1.1.0...v1.1.1) (2026-01-18)
 
@@ -33,7 +33,7 @@
 
 * **lambda:** include request_id in payload error warning for better observability and test expectations ([1064003](https://github.com/Arisofia/AL-OCR-Project/commit/10640036cfe8d3a55988ceb8e69852c08987db90))
 * log headers in mock post to resolve unused argument warning ([de047ea](https://github.com/Arisofia/AL-OCR-Project/commit/de047ea0327b8ec68b0c69bb944767661220e1a9))
-* typing for response body diagnostics; add mock test helper ([bc897a4](https://github.com/Arisofia/AL-OCR-Project/commit/bc897a4b73e3e2c3b4bb9ba4def6e50a1298c88f))
+ - typing for response body diagnostics; add mock test helper ([bc897a4](https://github.com/Arisofia/AL-OCR-Project/commit/bc897a4b73e3e2c3b4bb9ba4def6e50a1298c88f))
 
 
 ### Features
