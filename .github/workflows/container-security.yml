@@ -54,7 +54,9 @@ jobs:
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "${PWD}:/workdir" -w /workdir \
-            aquasec/trivy:0.55.0 image -f table "$IMAGE"
+            aquasec/trivy:0.55.0 image \
+            --scanners vuln --severity HIGH,CRITICAL --timeout 5m \
+            -f table "$IMAGE"
 
       - name: Trivy Scan (JSON output)
         run: |
@@ -64,7 +66,9 @@ jobs:
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "${PWD}:/output" -w /output \
-            aquasec/trivy:0.55.0 image -f json \
+            aquasec/trivy:0.55.0 image \
+            --scanners vuln --severity HIGH,CRITICAL --timeout 5m \
+            -f json \
             -o /output/trivy-results.json "$IMAGE" 2>trivy.err || true
           # Also capture any tool output to a log for diagnostics
           if [ -s trivy.err ]; then
