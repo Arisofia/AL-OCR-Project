@@ -79,7 +79,7 @@ jobs:
 
           echo "## Confusion Matrix" >> report.md
           if [ -f confusion_matrix.png ]; then
-            cml-publish confusion_matrix.png --md >> report.md
+            cml publish confusion_matrix.png --md >> report.md
           else
             echo "Confusion matrix image not found." >> report.md
           fi
