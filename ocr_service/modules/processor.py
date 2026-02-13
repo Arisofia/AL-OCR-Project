@@ -33,6 +33,7 @@ class _NoopRedis:
     """Fallback Redis-like client for local runs without idempotency storage."""
 
     async def get(self, _key: str) -> None:
+        """Get method for compatibility."""
         return None
 
     async def set(
@@ -42,10 +43,12 @@ class _NoopRedis:
         ex: Optional[int] = None,
         _ex: Optional[int] = None,
     ) -> bool:
+        """Set method for compatibility."""
         _ = ex, _ex
         return True
 
     async def delete(self, _key: str) -> int:
+        """Delete method for compatibility."""
         return 0
 
 

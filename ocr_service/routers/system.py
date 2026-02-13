@@ -1,3 +1,5 @@
+"""System health and status endpoints."""
+
 import inspect
 import logging
 import time
