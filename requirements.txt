@@ -6,6 +6,7 @@ boto3-stubs[textract,s3]==1.35.77
 grpcio>=1.62.2
 grpcio-status>=1.62.2
 dvc[s3]==3.59.0
+diskcache>=5.6.4
 evidently>=0.7.20
 fastapi>=0.120.1
 filelock==3.20.3; python_version >= "3.10"

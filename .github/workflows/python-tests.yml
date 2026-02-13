@@ -73,10 +73,12 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
           OCR_API_KEY: "test-key"
-        run: pytest
+        run: pytest --cov=./ --cov-report=term --cov-report=xml
 
       - name: Upload Coverage
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: coverage-report-${{ matrix.python-version }}
           path: coverage.xml
+          if-no-files-found: warn
