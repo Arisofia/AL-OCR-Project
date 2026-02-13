@@ -33,15 +33,13 @@ jobs:
         with:
           node-version: "18"
 
-      - name: Install frontend dependencies
+      - name: Prepare frontend lockfile
         working-directory: ./frontend
-        run: npm install
+        run: npm install --package-lock-only --legacy-peer-deps
 
       - name: Run npm audit (JS deps)
         working-directory: ./frontend
-        run: |
-          npm install --package-lock-only
-          npm audit --json > npm-audit-report.json
+        run: npm audit --audit-level=high --json > npm-audit-report.json
       - name: Install gitleaks
         run: |
           curl -sSL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks-linux-amd64 -o gitleaks

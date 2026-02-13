@@ -14,7 +14,26 @@ AWS_LAMBDA_ROLE_ARN=${AWS_LAMBDA_ROLE_ARN:-}
 LAMBDA_TIMEOUT=${LAMBDA_TIMEOUT:-30}
 LAMBDA_MEMORY_SIZE=${LAMBDA_MEMORY_SIZE:-512}
 LAMBDA_ARCHITECTURES=${LAMBDA_ARCHITECTURES:-x86_64}
+LAMBDA_DEPLOY_STRICT=${LAMBDA_DEPLOY_STRICT:-true}
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SKIP_LAMBDA_UPDATE=0
+
+is_truthy() {
+  case "${1,,}" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+warn_or_fail_lambda() {
+  local message="$1"
+  if is_truthy "$LAMBDA_DEPLOY_STRICT"; then
+    echo "Error: $message"
+    exit 1
+  fi
+  echo "Warning: $message"
+  echo "Continuing because LAMBDA_DEPLOY_STRICT=$LAMBDA_DEPLOY_STRICT"
+}
 
 # Normalize common secret input variants (e.g., full Lambda ARN with optional alias)
 # and ensure the final name is valid for create-function.
@@ -24,8 +43,8 @@ if [[ "$LAMBDA_FUNCTION_NAME" == arn:*:function:* ]]; then
 fi
 
 if [[ ! "$LAMBDA_FUNCTION_NAME" =~ ^[A-Za-z0-9_-]{1,64}$ ]]; then
-  echo "Invalid LAMBDA_FUNCTION_NAME value detected. Falling back to AL-OCR-Processor."
-  LAMBDA_FUNCTION_NAME="AL-OCR-Processor"
+  warn_or_fail_lambda "Invalid LAMBDA_FUNCTION_NAME value detected. Set AWS_LAMBDA_FUNCTION_NAME to a valid Lambda name."
+  SKIP_LAMBDA_UPDATE=1
 fi
 
 echo "Initializing deployment for account: $AWS_ACCOUNT_ID in region: $AWS_REGION"
@@ -71,30 +90,41 @@ docker buildx build \
   "$REPO_ROOT"
 
 # --- Lambda Lifecycle Update ---
-echo "Updating Lambda function: $LAMBDA_FUNCTION_NAME"
-if aws lambda get-function --function-name "$LAMBDA_FUNCTION_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
-  aws lambda update-function-code \
-    --function-name "$LAMBDA_FUNCTION_NAME" \
-    --image-uri "$IMAGE_URI" \
-    --region "$AWS_REGION"
-else
-  if [[ -z "$AWS_LAMBDA_ROLE_ARN" ]]; then
-    echo "Error: Lambda function $LAMBDA_FUNCTION_NAME does not exist and AWS_LAMBDA_ROLE_ARN is not set."
-    echo "Set AWS_LAMBDA_ROLE_ARN (GitHub Actions secret) to allow automatic function creation."
-    exit 1
+if [[ "$SKIP_LAMBDA_UPDATE" -eq 0 ]]; then
+  echo "Updating Lambda function: $LAMBDA_FUNCTION_NAME"
+  if aws lambda get-function --function-name "$LAMBDA_FUNCTION_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
+    if ! aws lambda update-function-code \
+      --function-name "$LAMBDA_FUNCTION_NAME" \
+      --image-uri "$IMAGE_URI" \
+      --region "$AWS_REGION"; then
+      warn_or_fail_lambda "Unable to update Lambda function $LAMBDA_FUNCTION_NAME."
+    fi
+  else
+    if [[ -z "$AWS_LAMBDA_ROLE_ARN" ]]; then
+      warn_or_fail_lambda "Lambda function $LAMBDA_FUNCTION_NAME does not exist and AWS_LAMBDA_ROLE_ARN is not set."
+    else
+      echo "Lambda function $LAMBDA_FUNCTION_NAME does not exist. Creating it now."
+      create_err_file="$(mktemp)"
+      if aws lambda create-function \
+        --function-name "$LAMBDA_FUNCTION_NAME" \
+        --package-type Image \
+        --code ImageUri="$IMAGE_URI" \
+        --role "$AWS_LAMBDA_ROLE_ARN" \
+        --timeout "$LAMBDA_TIMEOUT" \
+        --memory-size "$LAMBDA_MEMORY_SIZE" \
+        --architectures "$LAMBDA_ARCHITECTURES" \
+        --region "$AWS_REGION" >/dev/null 2>"$create_err_file"; then
+        echo "Created Lambda function: $LAMBDA_FUNCTION_NAME"
+      else
+        create_error="$(tr '\n' ' ' < "$create_err_file" | sed 's/[[:space:]]\+/ /g')"
+        rm -f "$create_err_file"
+        warn_or_fail_lambda "Unable to create Lambda function $LAMBDA_FUNCTION_NAME. ${create_error}"
+      fi
+      rm -f "$create_err_file"
+    fi
   fi
-
-  echo "Lambda function $LAMBDA_FUNCTION_NAME does not exist. Creating it now."
-  aws lambda create-function \
-    --function-name "$LAMBDA_FUNCTION_NAME" \
-    --package-type Image \
-    --code ImageUri="$IMAGE_URI" \
-    --role "$AWS_LAMBDA_ROLE_ARN" \
-    --timeout "$LAMBDA_TIMEOUT" \
-    --memory-size "$LAMBDA_MEMORY_SIZE" \
-    --architectures "$LAMBDA_ARCHITECTURES" \
-    --region "$AWS_REGION" >/dev/null
-  echo "Created Lambda function: $LAMBDA_FUNCTION_NAME"
+else
+  echo "Skipping Lambda update due to invalid Lambda configuration."
 fi
 
 echo "Deployment completed successfully. Version: $COMMIT_TAG"

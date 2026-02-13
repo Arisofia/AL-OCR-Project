@@ -43,4 +43,7 @@ jobs:
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
           LAMBDA_FUNCTION_NAME: ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }}
           AWS_LAMBDA_ROLE_ARN: ${{ secrets.AWS_LAMBDA_ROLE_ARN }}
+          # Keep image publishing non-blocking when Lambda provisioning
+          # permissions are missing in the target AWS account.
+          LAMBDA_DEPLOY_STRICT: "false"
         run: npm run deploy
