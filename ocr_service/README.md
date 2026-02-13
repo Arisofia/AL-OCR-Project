@@ -36,6 +36,9 @@ cd ocr_service
 
 Notes:
 
+- `deploy.sh` auto-creates the ECR repository if it is missing.
+- `deploy.sh` auto-creates the Lambda function when missing if
+  `AWS_LAMBDA_ROLE_ARN` is set.
 - The Dockerfile uses the AWS Lambda base image and includes Tesseract and language packs.
 - The Lambda container's entrypoint is `lambda_handler.handler` and supports S3 event triggers: PDF files use Textract async jobs, images use synchronous analyze_document.
 - Reconstruction preprocessor: You can enable the optional reconstruction preprocessor (integrates the `ocr_reconstruct` pipeline) by setting the environment variable `ENABLE_RECONSTRUCTION=true`. Control reconstruction iterations with `RECON_ITERATIONS`.

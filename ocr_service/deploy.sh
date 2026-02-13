@@ -9,21 +9,30 @@ AWS_REGION=${AWS_REGION:?AWS_REGION is required}
 AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:?AWS_ACCOUNT_ID is required}
 ECR_REPOSITORY=${ECR_REPOSITORY:-al-ocr-service}
 LAMBDA_FUNCTION_NAME=${LAMBDA_FUNCTION_NAME:-AL-OCR-Processor}
+AWS_LAMBDA_ROLE_ARN=${AWS_LAMBDA_ROLE_ARN:-}
+LAMBDA_TIMEOUT=${LAMBDA_TIMEOUT:-30}
+LAMBDA_MEMORY_SIZE=${LAMBDA_MEMORY_SIZE:-512}
+LAMBDA_ARCHITECTURES=${LAMBDA_ARCHITECTURES:-x86_64}
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "Initializing deployment for account: $AWS_ACCOUNT_ID in region: $AWS_REGION"
 
 # --- Authentication & Registry Access ---
-aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
 
 # --- Build & Artifact Versioning ---
 COMMIT_TAG=$(git rev-parse --short HEAD || echo "local-$(date +%s)")
 IMAGE_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$COMMIT_TAG
 
 # --- Infrastructure Validation ---
-if ! aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region $AWS_REGION >/dev/null 2>&1; then
-  echo "Error: ECR repository $ECR_REPOSITORY does not exist. Ensure infrastructure is provisioned via Terraform."
-  exit 1
+if ! aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1; then
+  echo "ECR repository $ECR_REPOSITORY does not exist. Creating it now."
+  aws ecr create-repository \
+    --repository-name "$ECR_REPOSITORY" \
+    --region "$AWS_REGION" \
+    --image-scanning-configuration scanOnPush=true \
+    --image-tag-mutability MUTABLE >/dev/null
+  echo "Created ECR repository: $ECR_REPOSITORY"
 fi
 
 # --- Container Image Construction ---
@@ -43,8 +52,29 @@ docker push $LATEST_TAG
 
 # --- Lambda Lifecycle Update ---
 echo "Updating Lambda function: $LAMBDA_FUNCTION_NAME"
-aws lambda update-function-code \
-    --function-name $LAMBDA_FUNCTION_NAME \
-    --image-uri $IMAGE_URI
+if aws lambda get-function --function-name "$LAMBDA_FUNCTION_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
+  aws lambda update-function-code \
+    --function-name "$LAMBDA_FUNCTION_NAME" \
+    --image-uri "$IMAGE_URI" \
+    --region "$AWS_REGION"
+else
+  if [[ -z "$AWS_LAMBDA_ROLE_ARN" ]]; then
+    echo "Error: Lambda function $LAMBDA_FUNCTION_NAME does not exist and AWS_LAMBDA_ROLE_ARN is not set."
+    echo "Set AWS_LAMBDA_ROLE_ARN (GitHub Actions secret) to allow automatic function creation."
+    exit 1
+  fi
+
+  echo "Lambda function $LAMBDA_FUNCTION_NAME does not exist. Creating it now."
+  aws lambda create-function \
+    --function-name "$LAMBDA_FUNCTION_NAME" \
+    --package-type Image \
+    --code ImageUri="$IMAGE_URI" \
+    --role "$AWS_LAMBDA_ROLE_ARN" \
+    --timeout "$LAMBDA_TIMEOUT" \
+    --memory-size "$LAMBDA_MEMORY_SIZE" \
+    --architectures "$LAMBDA_ARCHITECTURES" \
+    --region "$AWS_REGION" >/dev/null
+  echo "Created Lambda function: $LAMBDA_FUNCTION_NAME"
+fi
 
 echo "Deployment completed successfully. Version: $COMMIT_TAG"

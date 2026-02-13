@@ -28,6 +28,7 @@ Optional secrets (recommended depending on environment):
 
 - `ECR_REPOSITORY`
 - `AWS_LAMBDA_FUNCTION_NAME`
+- `AWS_LAMBDA_ROLE_ARN` (used to auto-create Lambda if function is missing)
 - `STAGING_API_KEY`
 - `NETLIFY_AUTH_TOKEN`
 
@@ -73,6 +74,11 @@ You can also provision the remote Linux deploy user and authorize the key:
 
 Notes
 -----
+- `ocr_service/deploy.sh` now auto-creates the target ECR repository when it
+  does not exist.
+- If the Lambda function does not exist, deployment auto-creates it when
+  `AWS_LAMBDA_ROLE_ARN` is available; otherwise deployment exits with a clear
+  error.
 - Replace generic env names (`API_KEY`, `ACCESS_TOKEN`) in the workflow only if
   your deployment command expects different variable names.
 - Keep secrets in GitHub Actions; never hardcode credentials in the repository.
