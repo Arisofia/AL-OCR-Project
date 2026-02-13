@@ -38,6 +38,13 @@ crash.log
 logs/
 *.log
 
+# Python mypy cache
+.mypy_cache/
+ocr_reconstruct/.mypy_cache/
+
+# Trunk logs
+.trunk/logs/
+
 # Docker
 docker-compose.override.yml
 
