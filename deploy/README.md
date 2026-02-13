@@ -14,6 +14,14 @@ Secrets to add in GitHub repository settings (under Settings → Secrets → Act
 - OCR_API_KEY: API key for the OCR service
 - AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION (if you use S3)
 
+You can validate secret presence from your local environment before deployment:
+
+```bash
+npm run check:deploy-secrets
+# strict mode (fails when required vars are missing)
+./tools/check_deploy_secrets.sh --strict
+```
+
 Generating keys
 ----------------
 Run:

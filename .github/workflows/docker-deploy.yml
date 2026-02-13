@@ -6,14 +6,14 @@ on:
     branches:
       - main
     paths:
-      - "ocr-service/**"
+      - "ocr_service/**"
       - "ocr_reconstruct/**"
       - ".github/workflows/docker-deploy.yml"
   pull_request:
     branches:
       - main
     paths:
-      - "ocr-service/**"
+      - "ocr_service/**"
       - "ocr_reconstruct/**"
       - ".github/workflows/docker-deploy.yml"
 
@@ -53,10 +53,10 @@ jobs:
           docker buildx create --use || true
           if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
             echo "On main push: pushing image to ECR"
-            docker buildx build --platform linux/amd64 -t $IMAGE_URI --push ./ocr-service
+            docker buildx build --platform linux/amd64 -t $IMAGE_URI --push ./ocr_service
           else
             echo "Non-push or non-main: building and loading image locally"
-            docker buildx build --platform linux/amd64 -t $IMAGE_URI --load ./ocr-service
+            docker buildx build --platform linux/amd64 -t $IMAGE_URI --load ./ocr_service
           fi
           # On non-push events, we just build to verify the Dockerfile
 

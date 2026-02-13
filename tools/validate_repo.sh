@@ -15,6 +15,9 @@ fi
 echo "[validate] Running backend exception guard"
 python3 -m ocr_service.scripts.check_exception_handlers
 
+echo "[validate] Verifying CI/CD workflow configuration"
+./tools/verify_cicd.sh
+
 echo "[validate] Running backend tests"
 python3 -m pytest "${PYTEST_ARGS[@]}"
 
@@ -23,5 +26,8 @@ npm run frontend:lint
 
 echo "[validate] Running frontend production build"
 npm run frontend:build
+
+echo "[validate] Checking deploy secret configuration (non-strict)"
+./tools/check_deploy_secrets.sh
 
 echo "[validate] Repository validation complete"

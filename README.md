@@ -26,6 +26,13 @@ Run the production validation entrypoint to verify backend and frontend checks:
 npm run validate:repo
 ```
 
+CI/CD and deploy preflight checks can also be run directly:
+
+```bash
+npm run verify:cicd
+npm run check:deploy-secrets
+```
+
 
 ### Architecture Diagram
 
