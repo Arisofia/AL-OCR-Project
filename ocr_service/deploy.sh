@@ -49,17 +49,14 @@ IMAGE_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$COM
 # --- Container Image Construction ---
 echo "Building container image: $IMAGE_URI"
 docker buildx create --use || true
+LATEST_TAG="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest"
 docker buildx build \
   --platform linux/amd64 \
   -t "$IMAGE_URI" \
+  -t "$LATEST_TAG" \
   --push \
   -f "$REPO_ROOT/ocr_service/Dockerfile" \
   "$REPO_ROOT"
-
-# --- Alias Management (Latest) ---
-LATEST_TAG="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest"
-docker tag $IMAGE_URI $LATEST_TAG
-docker push $LATEST_TAG
 
 # --- Lambda Lifecycle Update ---
 echo "Updating Lambda function: $LAMBDA_FUNCTION_NAME"
