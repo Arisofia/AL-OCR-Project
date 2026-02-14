@@ -11,10 +11,12 @@ from dataclasses import dataclass, field
 from io import BytesIO
 from typing import Any, Optional, cast
 
+import boto3
 import cv2
 import httpx
 import numpy as np
 import pytesseract  # type: ignore
+from botocore.exceptions import BotoCoreError, ClientError
 from PIL import Image, UnidentifiedImageError
 
 from ocr_reconstruct import process_bytes as recon_process_bytes
@@ -148,6 +150,9 @@ class DocumentProcessor:
             OCR_ERROR_COUNT.labels(
                 phase="direct_fallback_tesseract", error_type=type(e).__name__
             ).inc()
+            textract_text = await self.extract_text_textract(image_bytes)
+            if textract_text:
+                return textract_text
             return ""
         except UnidentifiedImageError as e:
             logger.error("Direct fallback could not open image bytes: %s", e)
@@ -159,6 +164,40 @@ class DocumentProcessor:
             logger.exception("Direct fallback OCR failed")
             OCR_ERROR_COUNT.labels(
                 phase="direct_fallback_ocr", error_type=type(e).__name__
+            ).inc()
+            textract_text = await self.extract_text_textract(image_bytes)
+            if textract_text:
+                return textract_text
+            return ""
+
+    async def extract_text_textract(self, image_bytes: bytes) -> str:
+        """Secondary fallback using AWS Textract synchronous byte analysis."""
+
+        def _detect_lines() -> str:
+            client = boto3.client("textract")
+            response = client.detect_document_text(Document={"Bytes": image_bytes})
+            lines = [
+                block.get("Text", "").strip()
+                for block in response.get("Blocks", [])
+                if block.get("BlockType") == "LINE" and block.get("Text")
+            ]
+            return "\n".join(line for line in lines if line).strip()
+
+        try:
+            text = await asyncio.to_thread(_detect_lines)
+            if text:
+                logger.info("Direct fallback OCR succeeded via AWS Textract")
+            return text
+        except (ClientError, BotoCoreError) as e:
+            logger.error("Textract fallback OCR failed: %s", e)
+            OCR_ERROR_COUNT.labels(
+                phase="direct_fallback_textract", error_type=type(e).__name__
+            ).inc()
+            return ""
+        except Exception as e:
+            logger.exception("Unexpected Textract fallback OCR failure")
+            OCR_ERROR_COUNT.labels(
+                phase="direct_fallback_textract", error_type=type(e).__name__
             ).inc()
             return ""
 
