@@ -28,27 +28,18 @@ FROM public.ecr.aws/lambda/python:3.11
 
 WORKDIR /var/task
 
-RUN yum update -y && yum install -y \
+RUN yum update -y && \
+    if ! command -v amazon-linux-extras >/dev/null 2>&1; then \
+      yum install -y amazon-linux-extras; \
+    fi && \
+    amazon-linux-extras install -y epel && \
+    yum install -y \
+    tesseract \
+    tesseract-langpack-eng \
+    tesseract-langpack-spa \
     mesa-libGL \
-    shadow-utils \
-    curl \
-    libjpeg \
-    libpng \
-    libtiff \
-    zlib \
-    libwebp \
-    giflib \
-    openjpeg2 \
-    libcurl \
-    libarchive && \
-    curl -fsSL -o /tmp/tesseract.rpm \
-      "https://api.opensuse.org/public/source/home:chethanuk/tesseract5/tesseract-ocr-5.3.1-1.amzn2023.leptonica1.80.0.x86_64.rpm" && \
-    yum localinstall -y /tmp/tesseract.rpm && \
-    mkdir -p /usr/local/share/tessdata && \
-    curl -fsSL -o /usr/local/share/tessdata/spa.traineddata \
-      "https://github.com/tesseract-ocr/tessdata/raw/main/spa.traineddata" && \
-    /usr/local/bin/tesseract --version && \
-    rm -f /tmp/tesseract.rpm && \
+    shadow-utils && \
+    /usr/bin/tesseract --version && \
     yum clean all && \
     rm -rf /var/cache/yum
 
@@ -63,9 +54,7 @@ COPY --chown=appuser:appuser ocr_service/ /var/task/ocr_service/
 COPY --chown=appuser:appuser ocr_reconstruct/ /var/task/ocr_reconstruct/
 
 ENV PYTHONPATH=/var/task
-ENV PATH=/usr/local/bin:${PATH}
-ENV TESSERACT_CMD=/usr/local/bin/tesseract
-ENV TESSDATA_PREFIX=/usr/local/share/tessdata
+ENV TESSERACT_CMD=/usr/bin/tesseract
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD [ "echo", "ok" ]
