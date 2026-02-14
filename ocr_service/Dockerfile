@@ -30,7 +30,8 @@ WORKDIR /var/task
 
 RUN yum update -y && \
     yum install -y python2 amazon-linux-extras && \
-    python2 /usr/bin/amazon-linux-extras install -y epel && \
+    ln -sf /usr/bin/python2 /usr/bin/python && \
+    amazon-linux-extras install -y epel && \
     yum install -y \
     tesseract \
     tesseract-langpack-eng \
