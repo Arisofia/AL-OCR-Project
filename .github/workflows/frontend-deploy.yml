@@ -17,8 +17,9 @@ jobs:
   deploy-frontend:
     runs-on: ubuntu-22.04
     env:
-      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-      NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       OCR_API_KEY: ${{ secrets.OCR_API_KEY }}
       OCR_BACKEND_URL:
         ${{ vars.OCR_BACKEND_URL || 'https://e2bb7336nub3gwutziiz355cbm0geswv.lambda-url.us-east-1.on.aws' }}
@@ -28,7 +29,7 @@ jobs:
 
       - name: Validate required secrets
         run: |
-          for v in NETLIFY_AUTH_TOKEN OCR_API_KEY; do
+          for v in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID OCR_API_KEY; do
             if [ -z "${!v}" ]; then
               echo "Missing required secret: $v"
               exit 1
@@ -52,62 +53,28 @@ jobs:
           VITE_API_BASE: /api
         run: npm run build
 
-      - name: Create server-side proxy runtime config
+      - name: Link Vercel project (CI)
         run: |
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          import os
+          mkdir -p frontend/.vercel
+          cat > frontend/.vercel/project.json <<EOF
+          {"orgId":"$VERCEL_ORG_ID","projectId":"$VERCEL_PROJECT_ID"}
+          EOF
 
-          cfg = {
-              "OCR_API_KEY": os.environ["OCR_API_KEY"],
-              "OCR_BACKEND_URL": os.environ["OCR_BACKEND_URL"],
-          }
-          out = Path("frontend/netlify/functions/proxy.runtime.json")
-          out.parent.mkdir(parents=True, exist_ok=True)
-          out.write_text(json.dumps(cfg), encoding="utf-8")
-          print(f"Wrote {out}")
-          PY
-
-      - name: Deploy frontend to Netlify (production)
-        id: netlify_deploy
+      - name: Deploy frontend to Vercel (production)
+        id: vercel_deploy
         working-directory: ./frontend
         run: |
-          set +e
-          if [ -n "${NETLIFY_SITE_ID:-}" ]; then
-            npx -y netlify-cli deploy \
-              --dir=dist \
+          DEPLOY_URL="$(
+            npx -y vercel deploy . \
               --prod \
-              --json \
-              --site="$NETLIFY_SITE_ID" \
-              --auth="$NETLIFY_AUTH_TOKEN" > netlify-prod-deploy.json
-            DEPLOY_EXIT=$?
-          else
-            DEPLOY_EXIT=1
-          fi
-
-          if [ "$DEPLOY_EXIT" -ne 0 ]; then
-            echo "Primary deploy with NETLIFY_SITE_ID failed. Falling back to --create-site."
-            npx -y netlify-cli deploy \
-              --dir=dist \
-              --prod \
-              --json \
-              --create-site \
-              --auth="$NETLIFY_AUTH_TOKEN" > netlify-prod-deploy.json
-            DEPLOY_EXIT=$?
-          fi
-          set -e
-
-          if [ "$DEPLOY_EXIT" -ne 0 ]; then
-            echo "Netlify deploy failed"
-            cat netlify-prod-deploy.json || true
-            exit 1
-          fi
-
-          DEPLOY_URL=$(jq -r '.url // .deploy_url // empty' netlify-prod-deploy.json)
+              --yes \
+              --token "$VERCEL_TOKEN" \
+              -b VITE_API_BASE=/api \
+              -e OCR_API_KEY="$OCR_API_KEY" \
+              -e OCR_BACKEND_URL="$OCR_BACKEND_URL" | tail -n 1 | tr -d '\r'
+          )"
           if [ -z "$DEPLOY_URL" ]; then
-            echo "Failed to resolve deploy URL from Netlify output"
-            cat netlify-prod-deploy.json
+            echo "Failed to resolve deploy URL from Vercel output"
             exit 1
           fi
           echo "deploy_url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
@@ -115,6 +82,6 @@ jobs:
 
       - name: Smoke check frontend proxy health
         run: |
-          URL="${{ steps.netlify_deploy.outputs.deploy_url }}/api/health"
+          URL="${{ steps.vercel_deploy.outputs.deploy_url }}/api/health"
           echo "Checking $URL"
           curl -fsS "$URL"

@@ -81,6 +81,7 @@ __azurite_db_*.json
 
 # Netlify local/runtime generated proxy config
 frontend/netlify/functions/proxy.runtime.json
+frontend/.vercel/
 
 # Coverage & Quality
 .coverage

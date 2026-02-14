@@ -26,15 +26,13 @@ Example: copy `frontend/.env.development.example` to `frontend/.env.development`
 
 ## Production (no API key in browser)
 
-Production deploy uses a Netlify server-side proxy (`/api/*`) implemented in
-`netlify/functions/proxy.cjs`. The browser calls `/api/ocr`; the function adds
-`X-API-KEY` from server-side configuration only.
+Production deploy uses a Vercel server-side proxy route (`/api/*`) implemented
+in `api/[...path].js`. The browser calls `/api/ocr`; the function adds
+`X-API-KEY` from server-side environment values only:
 
-In CI, the `Frontend Deploy` workflow writes
-`netlify/functions/proxy.runtime.json` at deploy time using repository
-secrets/vars (`OCR_API_KEY` and `OCR_BACKEND_URL`). This file is not committed
-to git.
+- `OCR_API_KEY`
+- `OCR_BACKEND_URL`
 
-The `Frontend Deploy` GitHub Actions workflow sets these values and deploys the
-frontend with `VITE_API_BASE=/api`, so `VITE_API_KEY` is not needed in
+The `Frontend Deploy` GitHub Actions workflow deploys to Vercel and injects
+those runtime variables per deployment, so `VITE_API_KEY` is not needed in
 production bundles.
