@@ -107,3 +107,28 @@ async def test_process_image_uses_direct_fallback_when_decode_fails(monkeypatch)
     assert result.get("success") is True
     assert result.get("method") == "pillow-direct-fallback"
     assert result.get("text") == "fallback OCR text"
+
+
+@pytest.mark.asyncio
+async def test_extract_text_falls_back_to_textract_when_tesseract_missing(monkeypatch):
+    processor = DocumentProcessor(
+        enhancer=engine_mod.ImageEnhancer(),
+        ocr_config=engine_mod.TesseractConfig(),
+        engine_config=engine_mod.EngineConfig(),
+        reconstructor=None,
+    )
+
+    def _raise_tesseract_missing(*_args, **_kwargs):
+        raise engine_mod.pytesseract.pytesseract.TesseractNotFoundError()
+
+    async def _fake_textract(_self, _image_bytes):
+        return "textract fallback text"
+
+    monkeypatch.setattr(
+        engine_mod.pytesseract, "image_to_string", _raise_tesseract_missing
+    )
+    monkeypatch.setattr(DocumentProcessor, "extract_text_textract", _fake_textract)
+
+    img = np.zeros((16, 16, 3), dtype=np.uint8)
+    text = await processor.extract_text(img)
+    assert text == "textract fallback text"

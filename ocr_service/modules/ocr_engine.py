@@ -280,6 +280,31 @@ class DocumentProcessor:
                 )
             status = "success"
             return text
+        except pytesseract.pytesseract.TesseractNotFoundError as e:
+            logger.error(
+                "Tesseract binary unavailable during OCR extraction "
+                "(configured=%s): %s",
+                _TESSERACT_CMD or "auto",
+                e,
+            )
+            OCR_ERROR_COUNT.labels(
+                phase="extraction_tesseract_missing",
+                error_type=type(e).__name__,
+            ).inc()
+            try:
+                ok, encoded = cv2.imencode(".png", img)
+                if not ok:
+                    return ""
+                return await self.extract_text_textract(encoded.tobytes())
+            except Exception:
+                logger.exception(
+                    "Textract fallback failed after missing tesseract binary"
+                )
+                OCR_ERROR_COUNT.labels(
+                    phase="extraction_tesseract_missing_fallback",
+                    error_type="TextractFallbackFailure",
+                ).inc()
+                return ""
         except Exception as e:
             logger.exception("OCR extraction failed | method=%s", method)
             OCR_ERROR_COUNT.labels(

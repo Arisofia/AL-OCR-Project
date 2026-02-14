@@ -29,16 +29,21 @@ FROM public.ecr.aws/lambda/python:3.11
 WORKDIR /var/task
 
 RUN yum update -y && \
-    yum install -y python2 amazon-linux-extras && \
-    ln -sf /usr/bin/python2 /usr/bin/python && \
-    amazon-linux-extras install -y epel && \
-    yum install -y \
-    tesseract \
-    tesseract-langpack-eng \
-    tesseract-langpack-spa \
-    mesa-libGL \
-    shadow-utils && \
-    /usr/bin/tesseract --version && \
+    if yum -q list available tesseract >/dev/null 2>&1; then \
+      echo "Installing tesseract from available repositories"; \
+      yum install -y \
+        tesseract \
+        tesseract-langpack-eng \
+        tesseract-langpack-spa \
+        mesa-libGL \
+        shadow-utils; \
+      /usr/bin/tesseract --version || true; \
+    else \
+      echo "tesseract package unavailable on Lambda base; continuing with Textract fallback mode"; \
+      yum install -y \
+        mesa-libGL \
+        shadow-utils; \
+    fi && \
     yum clean all && \
     rm -rf /var/cache/yum
 

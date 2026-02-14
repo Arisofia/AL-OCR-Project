@@ -69,7 +69,8 @@ jobs:
           COMMIT_TAG=$(git rev-parse --short HEAD)
           IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/al-ocr-service:${COMMIT_TAG}
 
-          FUNCTION_NAME="${FUNCTION_NAME_SECRET:-al-ocr-processor}"
+          DEFAULT_FUNCTION_NAME="AL-OCR-Upload-API"
+          FUNCTION_NAME="${FUNCTION_NAME_SECRET:-$DEFAULT_FUNCTION_NAME}"
           FUNCTION_NAME="${FUNCTION_NAME#"${FUNCTION_NAME%%[![:space:]]*}"}"
           FUNCTION_NAME="${FUNCTION_NAME%"${FUNCTION_NAME##*[![:space:]]}"}"
           FUNCTION_NAME="${FUNCTION_NAME#\"}"
@@ -80,7 +81,12 @@ jobs:
           FUNCTION_NAME="${FUNCTION_NAME%%:*}"
 
           if [[ ! "$FUNCTION_NAME" =~ ^[A-Za-z0-9_-]{1,64}$ ]]; then
-            echo "::warning::Lambda update skipped. Invalid AWS_LAMBDA_FUNCTION_NAME format."
+            echo "::warning::Invalid AWS_LAMBDA_FUNCTION_NAME; falling back to ${DEFAULT_FUNCTION_NAME}."
+            FUNCTION_NAME="$DEFAULT_FUNCTION_NAME"
+          fi
+
+          if [[ ! "$FUNCTION_NAME" =~ ^[A-Za-z0-9_-]{1,64}$ ]]; then
+            echo "::warning::Lambda update skipped. No valid function name available."
             exit 0
           fi
 
