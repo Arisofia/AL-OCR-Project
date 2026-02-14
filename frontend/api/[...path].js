@@ -29,9 +29,21 @@ export default async function handler(req, res) {
       .json({ detail: "Server misconfiguration: OCR_BACKEND_URL is not set" });
   }
 
-  const pathParts = Array.isArray(req.query.path)
+  // Vercel Node functions usually provide catch-all params in `req.query`,
+  // but we've observed cases where the first segment includes "api".
+  // Make routing resilient by stripping an accidental leading "api" segment.
+  let pathParts = Array.isArray(req.query?.path)
     ? req.query.path
-    : [req.query.path].filter(Boolean);
+    : [req.query?.path].filter(Boolean);
+  if (pathParts[0] === "api") pathParts = pathParts.slice(1);
+
+  // Fallback for runtimes that don't populate `req.query.path`.
+  if (pathParts.length === 0) {
+    const requestUrl = new URL(req.url || "/", "http://localhost");
+    const rawPath = requestUrl.pathname.replace(/^\/+/, "");
+    const normalized = rawPath.startsWith("api/") ? rawPath.slice(4) : rawPath;
+    pathParts = normalized ? normalized.split("/").filter(Boolean) : [];
+  }
   const upstreamPath = pathParts.join("/");
   const upstream = new URL(`${backendBase}/${upstreamPath}`);
 
