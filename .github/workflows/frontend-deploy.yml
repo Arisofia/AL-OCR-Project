@@ -60,19 +60,46 @@ jobs:
           {"orgId":"$VERCEL_ORG_ID","projectId":"$VERCEL_PROJECT_ID"}
           EOF
 
+      - name: Resolve Vercel deploy user (CI)
+        id: vercel_whoami
+        run: |
+          set -euo pipefail
+          user_json="$(curl -fsS -H "Authorization: Bearer $VERCEL_TOKEN" https://api.vercel.com/v2/user)"
+          email="$(echo "$user_json" | jq -r '.user.email // empty')"
+          username="$(echo "$user_json" | jq -r '.user.username // empty')"
+          if [ -z "$email" ] || [ -z "$username" ]; then
+            echo "Failed to resolve Vercel user identity from API response"
+            exit 1
+          fi
+          echo "email=$email" >> "$GITHUB_OUTPUT"
+          echo "username=$username" >> "$GITHUB_OUTPUT"
+
       - name: Deploy frontend to Vercel (production)
         id: vercel_deploy
         working-directory: ./frontend
         run: |
-          DEPLOY_URL="$(
+          set -euo pipefail
+
+          # Vercel can block deployments when the Git commit author email doesn't belong to a member of
+          # the target team. We override the commit author metadata to the token's user.
+          out="$(
             npx -y vercel deploy . \
               --prod \
               --yes \
               --token "$VERCEL_TOKEN" \
+              -m githubCommitSha="$GITHUB_SHA" \
+              -m githubCommitRef="$GITHUB_REF_NAME" \
+              -m githubCommitAuthorEmail="${{ steps.vercel_whoami.outputs.email }}" \
+              -m githubCommitAuthorLogin="${{ steps.vercel_whoami.outputs.username }}" \
               -b VITE_API_BASE=/api \
               -e OCR_API_KEY="$OCR_API_KEY" \
-              -e OCR_BACKEND_URL="$OCR_BACKEND_URL" | tail -n 1 | tr -d '\r'
+              -e OCR_BACKEND_URL="$OCR_BACKEND_URL" 2>&1 | tee /dev/stderr
           )"
+
+          DEPLOY_URL="$(printf '%s\n' "$out" | awk '/^Production: /{print $2}' | tail -n 1)"
+          if [ -z "$DEPLOY_URL" ]; then
+            DEPLOY_URL="$(printf '%s\n' "$out" | grep -Eo 'https://[^[:space:]]+' | tail -n 1)"
+          fi
           if [ -z "$DEPLOY_URL" ]; then
             echo "Failed to resolve deploy URL from Vercel output"
             exit 1
