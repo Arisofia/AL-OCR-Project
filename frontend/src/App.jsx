@@ -16,7 +16,8 @@ function App() {
     const checkHealth = async () => {
       try {
         const response = await api.get('/health')
-        if (response.data.status === 'healthy') {
+        const status = String(response?.data?.status || '').toLowerCase()
+        if (status === 'healthy' || status === 'ok' || status === 'degraded') {
           setHealth('healthy')
         } else {
           setHealth('unhealthy')

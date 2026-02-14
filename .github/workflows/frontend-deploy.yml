@@ -1,0 +1,82 @@
+---
+name: Frontend Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-deploy.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-frontend:
+    runs-on: ubuntu-22.04
+    env:
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+      OCR_API_KEY: ${{ secrets.OCR_API_KEY }}
+      OCR_BACKEND_URL: ${{ vars.OCR_BACKEND_URL || 'https://e2bb7336nub3gwutziiz355cbm0geswv.lambda-url.us-east-1.on.aws' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        run: |
+          for v in NETLIFY_AUTH_TOKEN NETLIFY_SITE_ID OCR_API_KEY; do
+            if [ -z "${!v}" ]; then
+              echo "Missing required secret: $v"
+              exit 1
+            fi
+          done
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "frontend/package-lock.json"
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Build frontend (production)
+        working-directory: ./frontend
+        env:
+          VITE_API_BASE: /api
+        run: npm run build
+
+      - name: Configure Netlify runtime env for proxy
+        run: |
+          npx -y netlify-cli env:set OCR_API_KEY "$OCR_API_KEY" --context production --site "$NETLIFY_SITE_ID"
+          npx -y netlify-cli env:set OCR_BACKEND_URL "$OCR_BACKEND_URL" --context production --site "$NETLIFY_SITE_ID"
+
+      - name: Deploy frontend to Netlify (production)
+        id: netlify_deploy
+        working-directory: ./frontend
+        run: |
+          npx -y netlify-cli deploy \
+            --dir=dist \
+            --prod \
+            --json \
+            --site="$NETLIFY_SITE_ID" \
+            --auth="$NETLIFY_AUTH_TOKEN" > netlify-prod-deploy.json
+          DEPLOY_URL=$(jq -r '.url // .deploy_url // empty' netlify-prod-deploy.json)
+          if [ -z "$DEPLOY_URL" ]; then
+            echo "Failed to resolve deploy URL from Netlify output"
+            cat netlify-prod-deploy.json
+            exit 1
+          fi
+          echo "deploy_url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
+          echo "Deployed production frontend URL: $DEPLOY_URL"
+
+      - name: Smoke check frontend proxy health
+        run: |
+          URL="${{ steps.netlify_deploy.outputs.deploy_url }}/api/health"
+          echo "Checking $URL"
+          curl -fsS "$URL"

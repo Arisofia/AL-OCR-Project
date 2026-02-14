@@ -1,7 +1,8 @@
 import axios from 'axios'
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
-const IS_DEV = import.meta.env.MODE === 'development'
+const API_BASE =
+  import.meta.env.VITE_API_BASE ||
+  (import.meta.env.MODE === 'development' ? 'http://localhost:8000' : '/api')
 const API_KEY = import.meta.env.VITE_API_KEY
 
 const apiHeaders = {
