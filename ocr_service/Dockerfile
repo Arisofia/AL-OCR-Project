@@ -47,12 +47,12 @@ RUN set -eux; \
         fi; \
       fi; \
     done; \
+    # Create lib64 directory structure first to avoid overlay conflicts
+    mkdir -p /opt/tesseract-root/usr/lib64; \
     for lib in /usr/lib64/libtesseract.so* /usr/lib64/liblept.so*; do \
-      [ -e "$lib" ] || continue; \
-      mkdir -p "/opt/tesseract-root$(dirname "$lib")"; \
-      cp -a "$lib" "/opt/tesseract-root$lib"; \
+        [ -e "$lib" ] || continue; \
+        cp -a "$lib" /opt/tesseract-root/usr/lib64/; \
     done
-
 # Stage 1: Build stage for compiling heavy dependencies
 FROM public.ecr.aws/lambda/python:3.11 AS builder
 
