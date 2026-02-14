@@ -280,15 +280,23 @@ class DocumentProcessor:
                 )
             status = "success"
             return text
-        except pytesseract.pytesseract.TesseractNotFoundError as e:
+        except (
+            pytesseract.pytesseract.TesseractNotFoundError,
+            pytesseract.pytesseract.TesseractError,
+        ) as e:
+            phase = (
+                "extraction_tesseract_missing"
+                if isinstance(e, pytesseract.pytesseract.TesseractNotFoundError)
+                else "extraction_tesseract_runtime"
+            )
             logger.error(
-                "Tesseract binary unavailable during OCR extraction "
+                "Tesseract unavailable/error during OCR extraction "
                 "(configured=%s): %s",
                 _TESSERACT_CMD or "auto",
                 e,
             )
             OCR_ERROR_COUNT.labels(
-                phase="extraction_tesseract_missing",
+                phase=phase,
                 error_type=type(e).__name__,
             ).inc()
             try:

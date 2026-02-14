@@ -53,10 +53,24 @@ jobs:
           docker buildx create --use || true
           if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
             echo "On main push: pushing image to ECR"
-            docker buildx build --platform linux/amd64 -t $IMAGE_URI --push -f ./ocr_service/Dockerfile .
+            docker buildx build \
+              --platform linux/amd64 \
+              --provenance=false \
+              --sbom=false \
+              -t $IMAGE_URI \
+              --push \
+              -f ./ocr_service/Dockerfile \
+              .
           else
             echo "Non-push or non-main: building and loading image locally"
-            docker buildx build --platform linux/amd64 -t $IMAGE_URI --load -f ./ocr_service/Dockerfile .
+            docker buildx build \
+              --platform linux/amd64 \
+              --provenance=false \
+              --sbom=false \
+              -t $IMAGE_URI \
+              --load \
+              -f ./ocr_service/Dockerfile \
+              .
           fi
           # On non-push events, we just build to verify the Dockerfile
 

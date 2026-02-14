@@ -132,3 +132,30 @@ async def test_extract_text_falls_back_to_textract_when_tesseract_missing(monkey
     img = np.zeros((16, 16, 3), dtype=np.uint8)
     text = await processor.extract_text(img)
     assert text == "textract fallback text"
+
+
+@pytest.mark.asyncio
+async def test_extract_text_falls_back_to_textract_on_tesseract_runtime_error(
+    monkeypatch,
+):
+    processor = DocumentProcessor(
+        enhancer=engine_mod.ImageEnhancer(),
+        ocr_config=engine_mod.TesseractConfig(),
+        engine_config=engine_mod.EngineConfig(),
+        reconstructor=None,
+    )
+
+    def _raise_tesseract_runtime(*_args, **_kwargs):
+        raise engine_mod.pytesseract.pytesseract.TesseractError(1, "runtime failure")
+
+    async def _fake_textract(_self, _image_bytes):
+        return "textract runtime fallback"
+
+    monkeypatch.setattr(
+        engine_mod.pytesseract, "image_to_string", _raise_tesseract_runtime
+    )
+    monkeypatch.setattr(DocumentProcessor, "extract_text_textract", _fake_textract)
+
+    img = np.zeros((16, 16, 3), dtype=np.uint8)
+    text = await processor.extract_text(img)
+    assert text == "textract runtime fallback"

@@ -110,6 +110,8 @@ docker buildx create --use || true
 LATEST_TAG="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest"
 docker buildx build \
   --platform linux/amd64 \
+  --provenance=false \
+  --sbom=false \
   -t "$IMAGE_URI" \
   -t "$LATEST_TAG" \
   --push \
