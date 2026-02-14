@@ -1,6 +1,9 @@
 """Tests for ImageToolkit utilities."""
 
+from io import BytesIO
+
 import numpy as np
+from PIL import Image
 
 from ocr_service.modules.image_toolkit import ImageToolkit
 
@@ -23,3 +26,17 @@ def test_upscale_for_ocr_scales_small_image():
     assert out.shape[0] > img.shape[0] and out.shape[1] > img.shape[1]
 
     assert max(out.shape[:2]) <= 1000  # Cap enforced
+
+
+def test_decode_image_uses_pillow_fallback_when_cv2_imdecode_fails(monkeypatch):
+    """Fallback decoder should work when OpenCV cannot decode raw bytes."""
+    pil_img = Image.new("RGB", (32, 16), color="white")
+    buf = BytesIO()
+    pil_img.save(buf, format="PNG")
+    payload = buf.getvalue()
+
+    monkeypatch.setattr("ocr_service.modules.image_toolkit.cv2.imdecode", lambda *_: None)
+
+    decoded = ImageToolkit.decode_image(payload)
+    assert decoded is not None
+    assert decoded.shape[0] == 16 and decoded.shape[1] == 32

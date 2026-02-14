@@ -6,11 +6,13 @@ import asyncio
 import base64
 import binascii
 import logging
+from io import BytesIO
 from typing import Any, Optional
 
 # pylint: disable=no-member
 import cv2
 import numpy as np
+from PIL import Image
 
 __all__ = ["ImageToolkit"]
 
@@ -56,10 +58,21 @@ class ImageToolkit:
             nparr = np.frombuffer(image_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             if img is None:
-                logger.error("Failed to decode image bytes: imdecode returned None")
-                raise ImageToolkitError(
-                    "Failed to decode image: imdecode returned None"
+                logger.warning(
+                    "cv2.imdecode returned None; attempting Pillow fallback decoder"
                 )
+                try:
+                    with Image.open(BytesIO(image_bytes)) as pil_img:
+                        rgb = pil_img.convert("RGB")
+                        img = cv2.cvtColor(np.array(rgb), cv2.COLOR_RGB2BGR)
+                except Exception as pil_exc:
+                    logger.error(
+                        "Pillow fallback decoder failed after cv2 failure: %s",
+                        pil_exc,
+                    )
+                    raise ImageToolkitError(
+                        "Failed to decode image: cv2 and Pillow decoders failed"
+                    ) from pil_exc
             return img
         except Exception as e:
             logger.error("Error decoding image: %s", e)
