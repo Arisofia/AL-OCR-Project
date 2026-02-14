@@ -33,7 +33,7 @@ RUN set -eux; \
       exit 1; \
     fi; \
     cp -a "$TESSDATA_SRC/." /opt/tesseract-root/usr/share/tessdata/; \
-    ldd /usr/bin/tesseract | awk '/=> \\/(usr|lib64|lib)\\// {print $3} /^\\/lib64\\// {print $1} /^\\/lib\\// {print $1}' | sort -u | \
+    ldd /usr/bin/tesseract | tr -s ' ' | grep -Eo '/(usr/)?lib(64)?/[^ ]+' | sort -u | \
     while read -r lib; do \
       [ -n "$lib" ] || continue; \
       [ -e "$lib" ] || continue; \
@@ -46,6 +46,11 @@ RUN set -eux; \
           cp -a "$real_lib" "/opt/tesseract-root$real_lib"; \
         fi; \
       fi; \
+    done; \
+    for lib in /usr/lib64/libtesseract.so* /usr/lib64/liblept.so* /lib64/libtesseract.so* /lib64/liblept.so*; do \
+      [ -e "$lib" ] || continue; \
+      mkdir -p "/opt/tesseract-root$(dirname "$lib")"; \
+      cp -a "$lib" "/opt/tesseract-root$lib"; \
     done
 
 # Stage 1: Build stage for compiling heavy dependencies
@@ -102,6 +107,7 @@ RUN /usr/bin/tesseract --version
 ENV PYTHONPATH=/var/task
 ENV TESSERACT_CMD=/usr/bin/tesseract
 ENV TESSDATA_PREFIX=/usr/share/tessdata
+ENV LD_LIBRARY_PATH=/usr/lib64:/lib64:/usr/lib:/lib
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD [ "echo", "ok" ]
