@@ -1,4 +1,4 @@
-import { Upload, Loader2, Zap } from 'lucide-react'
+import { Upload, Loader2, Zap, FileText } from 'lucide-react'
 import { motion as Motion } from 'framer-motion'
 
 const UploadCard = ({ file, preview, loading, health, onFileChange, onUpload }) => {
@@ -6,7 +6,7 @@ const UploadCard = ({ file, preview, loading, health, onFileChange, onUpload }) 
     <section className="upload-section">
       <div className="upload-card">
         <div className="dropzone">
-          <input type="file" onChange={onFileChange} accept="image/*" />
+          <input type="file" onChange={onFileChange} accept="image/*,application/pdf" />
           <div className="dropzone-content">
             {preview ? (
               <Motion.img
@@ -16,13 +16,21 @@ const UploadCard = ({ file, preview, loading, health, onFileChange, onUpload }) 
                 className="preview-image"
                 alt="Preview"
               />
+            ) : file ? (
+              <>
+                <div className="icon-circle">
+                  <FileText size={32} />
+                </div>
+                <p><strong>{file.name}</strong></p>
+                <span>Ready to extract</span>
+              </>
             ) : (
               <>
                 <div className="icon-circle">
                   <Upload size={32} />
                 </div>
                 <p><strong>Click to upload</strong> or drag and drop</p>
-                <span>Financial documents, receipts, or IDs</span>
+                <span>Financial documents, receipts, or IDs (images or PDF)</span>
               </>
             )}
           </div>

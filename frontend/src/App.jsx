@@ -31,13 +31,16 @@ function App() {
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0]
-    if (selectedFile && selectedFile.type.startsWith('image/')) {
+    const isImage = Boolean(selectedFile?.type?.startsWith('image/'))
+    const isPdf = selectedFile?.type === 'application/pdf'
+
+    if (selectedFile && (isImage || isPdf)) {
       setFile(selectedFile)
       if (preview) URL.revokeObjectURL(preview)
-      setPreview(URL.createObjectURL(selectedFile))
+      setPreview(isImage ? URL.createObjectURL(selectedFile) : null)
       setResult(null)
     } else if (selectedFile) {
-      alert('Please select a valid image file.')
+      alert('Please select a valid image or PDF file.')
     }
   }
 
