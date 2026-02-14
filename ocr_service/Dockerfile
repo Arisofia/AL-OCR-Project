@@ -12,12 +12,31 @@ RUN yum update -y && \
     yum clean all && \
     rm -rf /var/cache/yum
 
-RUN mkdir -p /opt/tesseract-root/usr/bin /opt/tesseract-root/usr/share && \
-    cp -a /usr/bin/tesseract /opt/tesseract-root/usr/bin/ && \
-    cp -a /usr/share/tessdata /opt/tesseract-root/usr/share/ && \
-    ldd /usr/bin/tesseract | awk '/=> \\/(usr|lib64|lib)\\// {print $3}' | sort -u | \
+RUN set -eux; \
+    mkdir -p /opt/tesseract-root/usr/bin /opt/tesseract-root/usr/share/tessdata; \
+    cp -a /usr/bin/tesseract /opt/tesseract-root/usr/bin/; \
+    TESSDATA_SRC=""; \
+    for p in \
+      /usr/share/tessdata \
+      /usr/share/tesseract/tessdata \
+      /usr/share/tesseract-ocr/tessdata \
+      /usr/share/tesseract/4.00/tessdata \
+      /usr/share/tesseract-ocr/4.00/tessdata; do \
+      if [ -d "$p" ]; then \
+        TESSDATA_SRC="$p"; \
+        break; \
+      fi; \
+    done; \
+    if [ -z "$TESSDATA_SRC" ]; then \
+      echo "Could not locate tessdata directory" >&2; \
+      find /usr/share -maxdepth 5 -type d -name tessdata -print >&2; \
+      exit 1; \
+    fi; \
+    cp -a "$TESSDATA_SRC/." /opt/tesseract-root/usr/share/tessdata/; \
+    ldd /usr/bin/tesseract | awk '/=> \\/(usr|lib64|lib)\\// {print $3} /^\\/lib64\\// {print $1} /^\\/lib\\// {print $1}' | sort -u | \
     while read -r lib; do \
       [ -n "$lib" ] || continue; \
+      [ -e "$lib" ] || continue; \
       mkdir -p "/opt/tesseract-root$(dirname "$lib")"; \
       cp -a "$lib" "/opt/tesseract-root$lib"; \
     done

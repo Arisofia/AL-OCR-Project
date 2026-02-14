@@ -36,7 +36,11 @@ jobs:
           pip install --no-cache-dir -r requirements.txt
 
       - name: Set up CML
+        id: setup_cml
         uses: iterative/setup-cml@v2
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pull data from DVC
         env:
@@ -57,11 +61,20 @@ jobs:
         env:
           REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          CML_AVAILABLE=false
+          if command -v cml >/dev/null 2>&1; then
+            CML_AVAILABLE=true
+          else
+            echo "::warning::cml CLI unavailable; report comment publishing will be skipped."
+          fi
+
           # If src/train.py is missing, this will fail gracefully with clear error
           if [ ! -f src/train.py ]; then
             echo "## Training Error" > report.md
             echo "File \`src/train.py\` not found. Skipping training." >> report.md
-            cml send-comment report.md
+            if [ "$CML_AVAILABLE" = true ]; then
+              cml send-comment report.md
+            fi
             exit 1
           fi
 
@@ -79,9 +92,15 @@ jobs:
 
           echo "## Confusion Matrix" >> report.md
           if [ -f confusion_matrix.png ]; then
-            cml publish confusion_matrix.png --md >> report.md
+            if [ "$CML_AVAILABLE" = true ]; then
+              cml publish confusion_matrix.png --md >> report.md
+            else
+              echo "Confusion matrix image generated: confusion_matrix.png" >> report.md
+            fi
           else
             echo "Confusion matrix image not found." >> report.md
           fi
 
-          cml send-comment report.md
+          if [ "$CML_AVAILABLE" = true ]; then
+            cml send-comment report.md
+          fi
