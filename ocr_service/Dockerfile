@@ -1,3 +1,27 @@
+# Stage 0: Build a portable Tesseract runtime on Amazon Linux 2
+FROM amazonlinux:2 AS tesseract
+
+RUN yum update -y && \
+    yum install -y yum-utils amazon-linux-extras && \
+    amazon-linux-extras install -y epel && \
+    yum install -y \
+      tesseract \
+      tesseract-langpack-eng \
+      tesseract-langpack-spa && \
+    /usr/bin/tesseract --version && \
+    yum clean all && \
+    rm -rf /var/cache/yum
+
+RUN mkdir -p /opt/tesseract-root/usr/bin /opt/tesseract-root/usr/share && \
+    cp -a /usr/bin/tesseract /opt/tesseract-root/usr/bin/ && \
+    cp -a /usr/share/tessdata /opt/tesseract-root/usr/share/ && \
+    ldd /usr/bin/tesseract | awk '/=> \\/(usr|lib64|lib)\\// {print $3}' | sort -u | \
+    while read -r lib; do \
+      [ -n "$lib" ] || continue; \
+      mkdir -p "/opt/tesseract-root$(dirname "$lib")"; \
+      cp -a "$lib" "/opt/tesseract-root$lib"; \
+    done
+
 # Stage 1: Build stage for compiling heavy dependencies
 FROM public.ecr.aws/lambda/python:3.11 AS builder
 
@@ -29,26 +53,16 @@ FROM public.ecr.aws/lambda/python:3.11
 WORKDIR /var/task
 
 RUN yum update -y && \
-    if yum -q list available tesseract >/dev/null 2>&1; then \
-      echo "Installing tesseract from available repositories"; \
-      yum install -y \
-        tesseract \
-        tesseract-langpack-eng \
-        tesseract-langpack-spa \
-        mesa-libGL \
-        shadow-utils; \
-      /usr/bin/tesseract --version || true; \
-    else \
-      echo "tesseract package unavailable on Lambda base; continuing with Textract fallback mode"; \
-      yum install -y \
-        mesa-libGL \
-        shadow-utils; \
-    fi && \
+    yum install -y \
+    mesa-libGL \
+    shadow-utils && \
     yum clean all && \
     rm -rf /var/cache/yum
 
 # Remove setuid/setgid bits for security compliance
 RUN find /usr/bin /usr/sbin /bin /sbin -type f -perm /6000 -exec chmod u-s,g-s {} + || true
+
+COPY --from=tesseract /opt/tesseract-root/ /
 
 COPY --from=builder /install /var/lang
 
@@ -57,8 +71,11 @@ RUN /usr/sbin/useradd -m appuser && chown -R appuser:appuser /var/task
 COPY --chown=appuser:appuser ocr_service/ /var/task/ocr_service/
 COPY --chown=appuser:appuser ocr_reconstruct/ /var/task/ocr_reconstruct/
 
+RUN /usr/bin/tesseract --version
+
 ENV PYTHONPATH=/var/task
 ENV TESSERACT_CMD=/usr/bin/tesseract
+ENV TESSDATA_PREFIX=/usr/share/tessdata
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD [ "echo", "ok" ]
