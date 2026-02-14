@@ -20,7 +20,8 @@ jobs:
       NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
       NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
       OCR_API_KEY: ${{ secrets.OCR_API_KEY }}
-      OCR_BACKEND_URL: ${{ vars.OCR_BACKEND_URL || 'https://e2bb7336nub3gwutziiz355cbm0geswv.lambda-url.us-east-1.on.aws' }}
+      OCR_BACKEND_URL:
+        ${{ vars.OCR_BACKEND_URL || 'https://e2bb7336nub3gwutziiz355cbm0geswv.lambda-url.us-east-1.on.aws' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -53,8 +54,14 @@ jobs:
 
       - name: Configure Netlify runtime env for proxy
         run: |
-          npx -y netlify-cli env:set OCR_API_KEY "$OCR_API_KEY" --context production --site "$NETLIFY_SITE_ID"
-          npx -y netlify-cli env:set OCR_BACKEND_URL "$OCR_BACKEND_URL" --context production --site "$NETLIFY_SITE_ID"
+          npx -y netlify-cli env:set OCR_API_KEY "$OCR_API_KEY" \
+            --auth "$NETLIFY_AUTH_TOKEN" \
+            --context production \
+            --scope functions runtime
+          npx -y netlify-cli env:set OCR_BACKEND_URL "$OCR_BACKEND_URL" \
+            --auth "$NETLIFY_AUTH_TOKEN" \
+            --context production \
+            --scope functions runtime
 
       - name: Deploy frontend to Netlify (production)
         id: netlify_deploy
