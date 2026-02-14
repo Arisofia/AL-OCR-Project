@@ -28,7 +28,7 @@ jobs:
 
       - name: Validate required secrets
         run: |
-          for v in NETLIFY_AUTH_TOKEN NETLIFY_SITE_ID OCR_API_KEY; do
+          for v in NETLIFY_AUTH_TOKEN OCR_API_KEY; do
             if [ -z "${!v}" ]; then
               echo "Missing required secret: $v"
               exit 1
@@ -73,12 +73,37 @@ jobs:
         id: netlify_deploy
         working-directory: ./frontend
         run: |
-          npx -y netlify-cli deploy \
-            --dir=dist \
-            --prod \
-            --json \
-            --site="$NETLIFY_SITE_ID" \
-            --auth="$NETLIFY_AUTH_TOKEN" > netlify-prod-deploy.json
+          set +e
+          if [ -n "${NETLIFY_SITE_ID:-}" ]; then
+            npx -y netlify-cli deploy \
+              --dir=dist \
+              --prod \
+              --json \
+              --site="$NETLIFY_SITE_ID" \
+              --auth="$NETLIFY_AUTH_TOKEN" > netlify-prod-deploy.json
+            DEPLOY_EXIT=$?
+          else
+            DEPLOY_EXIT=1
+          fi
+
+          if [ "$DEPLOY_EXIT" -ne 0 ]; then
+            echo "Primary deploy with NETLIFY_SITE_ID failed. Falling back to --create-site."
+            npx -y netlify-cli deploy \
+              --dir=dist \
+              --prod \
+              --json \
+              --create-site \
+              --auth="$NETLIFY_AUTH_TOKEN" > netlify-prod-deploy.json
+            DEPLOY_EXIT=$?
+          fi
+          set -e
+
+          if [ "$DEPLOY_EXIT" -ne 0 ]; then
+            echo "Netlify deploy failed"
+            cat netlify-prod-deploy.json || true
+            exit 1
+          fi
+
           DEPLOY_URL=$(jq -r '.url // .deploy_url // empty' netlify-prod-deploy.json)
           if [ -z "$DEPLOY_URL" ]; then
             echo "Failed to resolve deploy URL from Netlify output"
