@@ -1,4 +1,6 @@
 # AL-OCR-Project
+[![Netlify Status](https://api.netlify.com/api/v1/badges/e6ae51a6-31d8-41d9-85a5-e5d6e57474cd/deploy-status)](https://app.netlify.com/projects/al-ocr-project/deploys)
+
 Sophisticated Fintech OCR System for financial document intelligence, built with FastAPI, React, and AWS (S3/Textract). Features automated infrastructure via Terraform and CI/CD.
 
 **Related:** Background on image inpainting techniques — see `docs/inpainting.md`.
