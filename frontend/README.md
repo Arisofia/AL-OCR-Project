@@ -28,10 +28,12 @@ Example: copy `frontend/.env.development.example` to `frontend/.env.development`
 
 Production deploy uses a Netlify server-side proxy (`/api/*`) implemented in
 `netlify/functions/proxy.cjs`. The browser calls `/api/ocr`; the function adds
-`X-API-KEY` using Netlify runtime environment variables:
+`X-API-KEY` from server-side configuration only.
 
-- `OCR_API_KEY` (required)
-- `OCR_BACKEND_URL` (required, e.g. the Lambda URL base)
+In CI, the `Frontend Deploy` workflow writes
+`netlify/functions/proxy.runtime.json` at deploy time using repository
+secrets/vars (`OCR_API_KEY` and `OCR_BACKEND_URL`). This file is not committed
+to git.
 
 The `Frontend Deploy` GitHub Actions workflow sets these values and deploys the
 frontend with `VITE_API_BASE=/api`, so `VITE_API_KEY` is not needed in

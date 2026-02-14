@@ -79,6 +79,9 @@ pip_audit_results.json
 # Azurite local emulator state
 __azurite_db_*.json
 
+# Netlify local/runtime generated proxy config
+frontend/netlify/functions/proxy.runtime.json
+
 # Coverage & Quality
 .coverage
 coverage.xml

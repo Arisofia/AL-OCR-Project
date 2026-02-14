@@ -52,23 +52,22 @@ jobs:
           VITE_API_BASE: /api
         run: npm run build
 
-      - name: Link Netlify site
-        working-directory: ./frontend
+      - name: Create server-side proxy runtime config
         run: |
-          npx -y netlify-cli link \
-            --id "$NETLIFY_SITE_ID" \
-            --auth "$NETLIFY_AUTH_TOKEN"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          import os
 
-      - name: Configure Netlify runtime env for proxy
-        run: |
-          npx -y netlify-cli env:set OCR_API_KEY "$OCR_API_KEY" \
-            --auth "$NETLIFY_AUTH_TOKEN" \
-            --context production \
-            --scope functions runtime
-          npx -y netlify-cli env:set OCR_BACKEND_URL "$OCR_BACKEND_URL" \
-            --auth "$NETLIFY_AUTH_TOKEN" \
-            --context production \
-            --scope functions runtime
+          cfg = {
+              "OCR_API_KEY": os.environ["OCR_API_KEY"],
+              "OCR_BACKEND_URL": os.environ["OCR_BACKEND_URL"],
+          }
+          out = Path("frontend/netlify/functions/proxy.runtime.json")
+          out.parent.mkdir(parents=True, exist_ok=True)
+          out.write_text(json.dumps(cfg), encoding="utf-8")
+          print(f"Wrote {out}")
+          PY
 
       - name: Deploy frontend to Netlify (production)
         id: netlify_deploy

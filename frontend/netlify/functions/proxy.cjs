@@ -1,10 +1,25 @@
 const DEFAULT_TIMEOUT_MS = 30000;
+const fs = require("fs");
+const path = require("path");
 
 const stripTrailingSlash = (value) => String(value || "").replace(/\/+$/, "");
 
+const readRuntimeConfig = () => {
+  try {
+    const file = path.join(__dirname, "proxy.runtime.json");
+    if (!fs.existsSync(file)) return {};
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return {};
+  }
+};
+
 exports.handler = async (event) => {
-  const backendBase = stripTrailingSlash(process.env.OCR_BACKEND_URL);
-  const apiKey = process.env.OCR_API_KEY;
+  const runtimeConfig = readRuntimeConfig();
+  const backendBase = stripTrailingSlash(
+    process.env.OCR_BACKEND_URL || runtimeConfig.OCR_BACKEND_URL
+  );
+  const apiKey = process.env.OCR_API_KEY || runtimeConfig.OCR_API_KEY;
 
   if (!backendBase) {
     return {
