@@ -29,10 +29,8 @@ FROM public.ecr.aws/lambda/python:3.11
 WORKDIR /var/task
 
 RUN yum update -y && \
-    if ! command -v amazon-linux-extras >/dev/null 2>&1; then \
-      yum install -y amazon-linux-extras; \
-    fi && \
-    amazon-linux-extras install -y epel && \
+    yum install -y \
+      "https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm" && \
     yum install -y \
     tesseract \
     tesseract-langpack-eng \

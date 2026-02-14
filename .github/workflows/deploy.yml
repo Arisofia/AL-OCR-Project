@@ -40,8 +40,9 @@ jobs:
           ACCESS_TOKEN: ${{ secrets.GHCR_PAT }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
-          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-          LAMBDA_FUNCTION_NAME: ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }}
+          # Fall back to production defaults when optional secrets are missing.
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY || 'al-ocr-service' }}
+          LAMBDA_FUNCTION_NAME: ${{ secrets.AWS_LAMBDA_FUNCTION_NAME || 'AL-OCR-Upload-API' }}
           AWS_LAMBDA_ROLE_ARN: ${{ secrets.AWS_LAMBDA_ROLE_ARN }}
           # Keep image publishing non-blocking when Lambda provisioning
           # permissions are missing in the target AWS account.
