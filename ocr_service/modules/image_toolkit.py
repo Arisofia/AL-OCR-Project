@@ -55,8 +55,16 @@ class ImageToolkit:
         Synchronous helper for use within threads.
         """
         try:
-            nparr = np.frombuffer(image_bytes, np.uint8)
-            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            img: Optional[np.ndarray] = None
+            try:
+                nparr = np.frombuffer(image_bytes, np.uint8)
+                img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            except Exception as cv_exc:
+                logger.warning(
+                    "cv2.imdecode raised an exception; attempting Pillow fallback: %s",
+                    cv_exc,
+                )
+
             if img is None:
                 logger.warning(
                     "cv2.imdecode returned None; attempting Pillow fallback decoder"

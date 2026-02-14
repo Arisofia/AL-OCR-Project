@@ -35,7 +35,27 @@ def test_decode_image_uses_pillow_fallback_when_cv2_imdecode_fails(monkeypatch):
     pil_img.save(buf, format="PNG")
     payload = buf.getvalue()
 
-    monkeypatch.setattr("ocr_service.modules.image_toolkit.cv2.imdecode", lambda *_: None)
+    monkeypatch.setattr(
+        "ocr_service.modules.image_toolkit.cv2.imdecode",
+        lambda *_: None,
+    )
+
+    decoded = ImageToolkit.decode_image(payload)
+    assert decoded is not None
+    assert decoded.shape[0] == 16 and decoded.shape[1] == 32
+
+
+def test_decode_image_uses_pillow_fallback_when_cv2_raises(monkeypatch):
+    """Fallback decoder should also work when OpenCV raises an exception."""
+    pil_img = Image.new("RGB", (32, 16), color="white")
+    buf = BytesIO()
+    pil_img.save(buf, format="PNG")
+    payload = buf.getvalue()
+
+    def _raise(*_args, **_kwargs):
+        raise RuntimeError("simulated cv2 failure")
+
+    monkeypatch.setattr("ocr_service.modules.image_toolkit.cv2.imdecode", _raise)
 
     decoded = ImageToolkit.decode_image(payload)
     assert decoded is not None
