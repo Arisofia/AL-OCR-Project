@@ -7,12 +7,14 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
+from io import BytesIO
 from typing import Any, Optional, cast
 
 import cv2
 import httpx
 import numpy as np
 import pytesseract  # type: ignore
+from PIL import Image, UnidentifiedImageError
 
 from ocr_reconstruct import process_bytes as recon_process_bytes
 from ocr_reconstruct.modules.enhance import ImageEnhancer
@@ -99,6 +101,34 @@ class DocumentProcessor:
                 phase="decode_and_validate", error_type=type(e).__name__
             ).inc()
             return False
+
+    async def extract_text_direct(self, image_bytes: bytes) -> str:
+        """
+        OpenCV-independent fallback OCR path using Pillow + Tesseract.
+
+        This path is used when decoding/preprocessing fails in runtime
+        environments with OpenCV binary incompatibilities.
+        """
+        try:
+            with Image.open(BytesIO(image_bytes)) as pil_img:
+                normalized = pil_img.convert("RGB")
+                return await asyncio.to_thread(
+                    pytesseract.image_to_string,
+                    normalized,
+                    config=self.ocr_config.flags,
+                )
+        except (UnidentifiedImageError, OSError) as e:
+            logger.error("Direct fallback could not open image bytes: %s", e)
+            OCR_ERROR_COUNT.labels(
+                phase="direct_fallback_open", error_type=type(e).__name__
+            ).inc()
+            return ""
+        except Exception as e:
+            logger.exception("Direct fallback OCR failed")
+            OCR_ERROR_COUNT.labels(
+                phase="direct_fallback_ocr", error_type=type(e).__name__
+            ).inc()
+            return ""
 
     async def run_reconstruction(self, ctx: DocumentContext, max_iterations: int):
         """Executes reconstruction preprocessor if enabled."""
@@ -273,6 +303,31 @@ class IterativeOCREngine:
             )
 
             if not await self.processor.decode_and_validate(ctx):
+                logger.warning(
+                    "Decode/validation failed; attempting direct Pillow OCR fallback"
+                )
+                fallback_text = (
+                    await self.processor.extract_text_direct(image_bytes)
+                ).strip()
+                if fallback_text:
+                    fallback_confidence = self.confidence_scorer.calculate(
+                        fallback_text
+                    )
+                    status = "success"
+                    return {
+                        "text": fallback_text,
+                        "confidence": fallback_confidence,
+                        "iterations": [
+                            {
+                                "iteration": 0,
+                                "method": "pillow-direct-fallback",
+                                "text_length": len(fallback_text),
+                                "confidence": fallback_confidence,
+                            }
+                        ],
+                        "success": True,
+                        "method": "pillow-direct-fallback",
+                    }
                 return {"error": "Corrupted or unsupported image format"}
 
             # Parallel initialization: Layout + Reconstruction

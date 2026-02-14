@@ -72,7 +72,9 @@ class ImageToolkit:
                 try:
                     with Image.open(BytesIO(image_bytes)) as pil_img:
                         rgb = pil_img.convert("RGB")
-                        img = cv2.cvtColor(np.array(rgb), cv2.COLOR_RGB2BGR)
+                        # Avoid cv2 color conversion in fallback path because some
+                        # Lambda/OpenCV builds fail ndarray type checks.
+                        img = np.array(rgb)[:, :, ::-1].copy()
                 except Exception as pil_exc:
                     logger.error(
                         "Pillow fallback decoder failed after cv2 failure: %s",

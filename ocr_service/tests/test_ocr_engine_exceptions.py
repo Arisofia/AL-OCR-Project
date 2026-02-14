@@ -60,3 +60,24 @@ async def test_document_processor_applies_upscaling():
     success = await processor.decode_and_validate(ctx)
     assert success
     assert ctx.current_img.shape[0] > 200  # Should be upscaled
+
+
+@pytest.mark.asyncio
+async def test_process_image_uses_direct_fallback_when_decode_fails(monkeypatch):
+    """Engine should use Pillow direct fallback if OpenCV decode path is unavailable."""
+
+    async def _decode_fail(_self, _ctx):
+        return False
+
+    async def _direct_text(_self, _image_bytes):
+        return "fallback OCR text"
+
+    monkeypatch.setattr(DocumentProcessor, "decode_and_validate", _decode_fail)
+    monkeypatch.setattr(DocumentProcessor, "extract_text_direct", _direct_text)
+
+    engine = engine_mod.IterativeOCREngine()
+    result = await engine.process_image(b"not-empty")
+
+    assert result.get("success") is True
+    assert result.get("method") == "pillow-direct-fallback"
+    assert result.get("text") == "fallback OCR text"
