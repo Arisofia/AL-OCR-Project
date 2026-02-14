@@ -33,7 +33,7 @@ RUN set -eux; \
       exit 1; \
     fi; \
     cp -a "$TESSDATA_SRC/." /opt/tesseract-root/usr/share/tessdata/; \
-    ldd /usr/bin/tesseract | tr -s ' ' | grep -Eo '/(usr/)?lib(64)?/[^ ]+' | sort -u | \
+    ldd /usr/bin/tesseract | tr -s ' ' | grep -Eo '/(usr/)?lib(64)?/[^ ]+' | sed -E 's#^/lib64/#/usr/lib64/#; s#^/lib/#/usr/lib/#' | sort -u | \
     while read -r lib; do \
       [ -n "$lib" ] || continue; \
       [ -e "$lib" ] || continue; \
@@ -47,7 +47,7 @@ RUN set -eux; \
         fi; \
       fi; \
     done; \
-    for lib in /usr/lib64/libtesseract.so* /usr/lib64/liblept.so* /lib64/libtesseract.so* /lib64/liblept.so*; do \
+    for lib in /usr/lib64/libtesseract.so* /usr/lib64/liblept.so*; do \
       [ -e "$lib" ] || continue; \
       mkdir -p "/opt/tesseract-root$(dirname "$lib")"; \
       cp -a "$lib" "/opt/tesseract-root$lib"; \
