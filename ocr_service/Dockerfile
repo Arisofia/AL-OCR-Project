@@ -55,6 +55,7 @@ COPY --chown=appuser:appuser ocr_service/ /var/task/ocr_service/
 COPY --chown=appuser:appuser ocr_reconstruct/ /var/task/ocr_reconstruct/
 
 ENV PYTHONPATH=/var/task
+ENV TESSERACT_CMD=/usr/bin/tesseract
 
 # Healthcheck for Dockle/CIS compliance
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \

@@ -5,6 +5,7 @@ Refactored into modular components for better maintainability and performance.
 
 import asyncio
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from io import BytesIO
@@ -39,6 +40,26 @@ from .ocr_config import EngineConfig, TesseractConfig
 __all__ = ["DocumentContext", "DocumentProcessor", "IterativeOCREngine"]
 
 logger = logging.getLogger("ocr-service.engine")
+
+
+def _configure_tesseract_cmd() -> Optional[str]:
+    """Resolve a runnable tesseract binary path for Lambda/container runtimes."""
+    candidates = [
+        os.getenv("TESSERACT_CMD"),
+        "/usr/bin/tesseract",
+        "/opt/bin/tesseract",
+        "/bin/tesseract",
+    ]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            pytesseract.pytesseract.tesseract_cmd = candidate
+            return candidate
+    return None
+
+
+_TESSERACT_CMD = _configure_tesseract_cmd()
 
 
 @dataclass
@@ -117,7 +138,18 @@ class DocumentProcessor:
                     normalized,
                     config=self.ocr_config.flags,
                 )
-        except (UnidentifiedImageError, OSError) as e:
+        except pytesseract.pytesseract.TesseractNotFoundError as e:
+            logger.error(
+                "Direct fallback OCR cannot run: tesseract binary unavailable "
+                "(configured=%s): %s",
+                _TESSERACT_CMD or "auto",
+                e,
+            )
+            OCR_ERROR_COUNT.labels(
+                phase="direct_fallback_tesseract", error_type=type(e).__name__
+            ).inc()
+            return ""
+        except UnidentifiedImageError as e:
             logger.error("Direct fallback could not open image bytes: %s", e)
             OCR_ERROR_COUNT.labels(
                 phase="direct_fallback_open", error_type=type(e).__name__
