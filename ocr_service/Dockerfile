@@ -39,6 +39,13 @@ RUN set -eux; \
       [ -e "$lib" ] || continue; \
       mkdir -p "/opt/tesseract-root$(dirname "$lib")"; \
       cp -a "$lib" "/opt/tesseract-root$lib"; \
+      if [ -L "$lib" ]; then \
+        real_lib="$(readlink -f "$lib")"; \
+        if [ -n "$real_lib" ] && [ -e "$real_lib" ]; then \
+          mkdir -p "/opt/tesseract-root$(dirname "$real_lib")"; \
+          cp -a "$real_lib" "/opt/tesseract-root$real_lib"; \
+        fi; \
+      fi; \
     done
 
 # Stage 1: Build stage for compiling heavy dependencies
