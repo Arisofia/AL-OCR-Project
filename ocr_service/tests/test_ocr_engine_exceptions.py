@@ -63,6 +63,32 @@ async def test_document_processor_applies_upscaling():
 
 
 @pytest.mark.asyncio
+async def test_decode_and_validate_handles_unexpected_preprocess_error(monkeypatch):
+    """Unexpected preprocessing errors should return False, not raise."""
+    processor = DocumentProcessor(
+        enhancer=engine_mod.ImageEnhancer(),
+        ocr_config=engine_mod.TesseractConfig(),
+        engine_config=engine_mod.EngineConfig(max_upscale_factor=2.0),
+        reconstructor=None,
+    )
+    ctx = DocumentContext(
+        image_bytes=b"valid-bytes", use_reconstruction=False, doc_type="generic"
+    )
+
+    async def _decode_ok(_bytes):
+        return np.zeros((10, 10, 3), dtype=np.uint8)
+
+    def _upscale_fail(*_args, **_kwargs):
+        raise RuntimeError("simulated resize failure")
+
+    monkeypatch.setattr(engine_mod.ImageToolkit, "decode_image_async", _decode_ok)
+    monkeypatch.setattr(engine_mod.ImageToolkit, "upscale_for_ocr", _upscale_fail)
+
+    success = await processor.decode_and_validate(ctx)
+    assert success is False
+
+
+@pytest.mark.asyncio
 async def test_process_image_uses_direct_fallback_when_decode_fails(monkeypatch):
     """Engine should use Pillow direct fallback if OpenCV decode path is unavailable."""
 

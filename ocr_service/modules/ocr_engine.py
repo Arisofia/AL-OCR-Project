@@ -95,8 +95,8 @@ class DocumentProcessor:
 
             ctx.current_img = img
             return True
-        except ImageToolkitError as e:
-            logger.error("Initial image decoding failed: %s", e)
+        except Exception as e:
+            logger.error("Initial image decode/preprocess failed: %s", e)
             OCR_ERROR_COUNT.labels(
                 phase="decode_and_validate", error_type=type(e).__name__
             ).inc()
