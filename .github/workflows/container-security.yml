@@ -317,23 +317,24 @@ jobs:
             aws ecr create-repository --repository-name "$ECR_REPOSITORY" || true
           fi
 
-      - name: Build Docker image for benchmark
+      - name: Build and push benchmark image (Lambda compatible)
         run: |
-          IMAGE="al-ocr-service:ci"
-          if docker image inspect "$IMAGE" >/dev/null 2>&1; then
-            echo "Using existing local image: $IMAGE"
-          else
-            echo "Building local image for benchmark push: $IMAGE"
-            docker build -t "$IMAGE" -f ocr_service/Dockerfile .
-          fi
+          set -euo pipefail
 
-      - name: Tag and push image to ECR
-        run: |
           REGISTRY="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
           IMAGE_TAG="${REGISTRY}/${ECR_REPOSITORY}:ci-${{ github.run_id }}"
-          docker tag al-ocr-service:ci "$IMAGE_TAG"
-          docker push "$IMAGE_TAG"
           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+
+          # Build with buildx to ensure a Lambda-compatible manifest/layers.
+          docker buildx create --use || true
+          docker buildx build \
+            --platform linux/amd64 \
+            --provenance=false \
+            --sbom=false \
+            -t "$IMAGE_TAG" \
+            --push \
+            -f ocr_service/Dockerfile \
+            .
 
       - name: Capture previous Lambda image (if exists)
         id: prev_image
