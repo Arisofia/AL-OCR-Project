@@ -112,16 +112,31 @@ print(json.dumps({"Variables": merged}))
 PY
 
   echo "Syncing Lambda environment variables (merge) for: $fn"
-  if ! aws lambda update-function-configuration \
+  # Lambda will often be in a transient "updating" state right after `update-function-code`.
+  # Wait briefly and retry to avoid flaky ResourceConflict errors in CI.
+  aws lambda wait function-updated \
     --function-name "$fn" \
-    --region "$region" \
-    --environment "file://$env_file" >/dev/null; then
-    rm -f "$env_file"
-    warn_or_fail_lambda "Unable to update Lambda environment variables for $fn."
-    return 0
-  fi
+    --region "$region" >/dev/null 2>&1 || true
+
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if aws lambda update-function-configuration \
+      --function-name "$fn" \
+      --region "$region" \
+      --environment "file://$env_file" >/dev/null; then
+      rm -f "$env_file"
+      return 0
+    fi
+
+    if [ "$attempt" -lt 5 ]; then
+      sleep $((attempt * 2))
+    fi
+  done
 
   rm -f "$env_file"
+  warn_or_fail_lambda "Unable to update Lambda environment variables for $fn."
+  return 0
+
 }
 
 normalize_lambda_function_name() {
