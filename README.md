@@ -7,7 +7,6 @@ Sophisticated Fintech OCR System for financial document intelligence, built with
 **Related:** Background on image inpainting techniques — see `docs/inpainting.md`.
 
 **Operational Playbook:** Fintech-grade CTO execution protocol — see `docs/elite_cto_execution_prompt.md`.
-
 ## Testing & Local Development
 
 This repository includes an automated script to create a reproducible Python 3.11 test environment and run the test-suite.
