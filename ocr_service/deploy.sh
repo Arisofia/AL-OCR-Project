@@ -36,6 +36,94 @@ warn_or_fail_lambda() {
   echo "Continuing because LAMBDA_DEPLOY_STRICT=$LAMBDA_DEPLOY_STRICT"
 }
 
+sync_lambda_env_vars() {
+  local fn="$1"
+  local region="$2"
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    warn_or_fail_lambda "python3 not available; skipping Lambda environment sync."
+    return 0
+  fi
+
+  # Only propagate the minimum set of application env vars required for runtime.
+  # Do NOT forward AWS/GitHub credentials into Lambda.
+  local desired_json
+  desired_json="$(python3 - <<'PY'
+import json, os
+
+keys = [
+    "OCR_API_KEY",
+    "S3_BUCKET_NAME",
+]
+
+desired = {k: os.environ.get(k) for k in keys if os.environ.get(k)}
+print(json.dumps(desired, separators=(",", ":")))
+PY
+)"
+
+  if [[ "$desired_json" == "{}" ]]; then
+    echo "No runtime env vars provided for Lambda; skipping environment sync."
+    return 0
+  fi
+
+  local current_json
+  current_json="$(aws lambda get-function-configuration \
+    --function-name "$fn" \
+    --region "$region" \
+    --query 'Environment.Variables' \
+    --output json 2>/dev/null || echo '{}')"
+
+  # Merge current vars with desired overrides.
+  local merged_json
+  merged_json="$(CURRENT_JSON="$current_json" DESIRED_JSON="$desired_json" python3 - <<'PY'
+import json, os, sys
+
+current_raw = os.environ.get("CURRENT_JSON") or "{}"
+desired_raw = os.environ.get("DESIRED_JSON") or "{}"
+
+try:
+    current = json.loads(current_raw)
+except json.JSONDecodeError:
+    current = {}
+
+try:
+    desired = json.loads(desired_raw)
+except json.JSONDecodeError:
+    desired = {}
+
+if current is None:
+    current = {}
+if desired is None:
+    desired = {}
+
+merged = dict(current)
+merged.update(desired)
+print(json.dumps(merged, separators=(",", ":")))
+PY
+)"
+
+  local env_file
+  env_file="$(mktemp)"
+  MERGED_JSON="$merged_json" python3 - <<'PY' >"$env_file"
+import json, os
+
+merged = json.loads(os.environ.get("MERGED_JSON", "{}"))
+print(json.dumps({"Variables": merged}))
+PY
+
+  echo "Syncing Lambda environment variables (merge) for: $fn"
+  if ! aws lambda update-function-configuration \
+    --function-name "$fn" \
+    --region "$region" \
+    --environment "file://$env_file" >/dev/null; then
+    rm -f "$env_file"
+    warn_or_fail_lambda "Unable to update Lambda environment variables for $fn."
+    return 0
+  fi
+
+  rm -f "$env_file"
+}
+
 normalize_lambda_function_name() {
   local raw="$1"
 
@@ -152,6 +240,9 @@ if [[ "$SKIP_LAMBDA_UPDATE" -eq 0 ]]; then
       rm -f "$create_err_file"
     fi
   fi
+
+  # Keep runtime configuration in sync with CI secrets without wiping existing env vars.
+  sync_lambda_env_vars "$LAMBDA_FUNCTION_NAME" "$AWS_REGION"
 else
   echo "Skipping Lambda update due to invalid Lambda configuration."
 fi

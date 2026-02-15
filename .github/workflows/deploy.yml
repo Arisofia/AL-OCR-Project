@@ -40,6 +40,7 @@ jobs:
           ACCESS_TOKEN: ${{ secrets.GHCR_PAT }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
           # Fall back to production defaults when optional secrets are missing.
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY || 'al-ocr-service' }}
           LAMBDA_FUNCTION_NAME: ${{ secrets.AWS_LAMBDA_FUNCTION_NAME || 'AL-OCR-Upload-API' }}

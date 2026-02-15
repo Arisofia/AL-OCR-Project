@@ -38,6 +38,7 @@ check_var AWS_REGION required
 # Optional deploy/build settings
 check_var ECR_REPOSITORY optional
 check_var AWS_LAMBDA_FUNCTION_NAME optional
+check_var S3_BUCKET_NAME optional
 
 # Legacy and extended workflows
 check_var DEPLOY_HOST optional
