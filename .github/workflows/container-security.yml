@@ -268,16 +268,19 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     needs: build-and-scan
+    permissions:
+      contents: read
+      id-token: write
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-      LAMBDA_FUNCTION_NAME: ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }}
+      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY || 'al-ocr-service' }}
+      # Use a dedicated function for benchmarks to avoid mutating production.
+      LAMBDA_FUNCTION_NAME: "al-ocr-benchmark-function"
       LAMBDA_ROLE_ARN: ${{ secrets.AWS_LAMBDA_ROLE_ARN }}
       ENABLE_LAMBDA_ROLLBACK: ${{ secrets.ENABLE_LAMBDA_ROLLBACK }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -285,7 +288,7 @@ jobs:
       - name: Validate required secrets
         run: |
           missing=""
-          VARS="AWS_REGION AWS_ACCOUNT_ID ECR_REPOSITORY LAMBDA_FUNCTION_NAME AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY"
+          VARS="AWS_REGION AWS_ACCOUNT_ID ECR_REPOSITORY AWS_ROLE_TO_ASSUME"
           for var in $VARS; do
             if [ -z "${!var:-}" ]; then
               missing="$missing $var"
@@ -299,8 +302,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
@@ -376,12 +378,6 @@ jobs:
           FN="$LAMBDA_FUNCTION_NAME"
           OUT_FILE=./lambda_benchmark_results.txt
           echo "Lambda Benchmark Results" > $OUT_FILE
-
-          # Trigger cold start by updating environment
-          aws lambda update-function-configuration \
-            --function-name "$FN" \
-            --environment "Variables={CI_RUN_ID=${{ github.run_id }}}" || true
-          sleep 5
 
           # first invocation (cold start)
           START=$(date +%s%3N)
