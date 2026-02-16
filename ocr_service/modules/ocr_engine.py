@@ -175,10 +175,46 @@ class DocumentProcessor:
             return ""
 
     async def extract_text_textract(self, image_bytes: bytes) -> str:
-        """
-        Secondary fallback using AWS Textract asynchronous analysis for complete
-        document processing.
-        """
+        """Secondary fallback using AWS Textract - sync for small docs, async for large/complex docs."""
+
+        # Use sync API for smaller documents (< 5MB), async for larger ones
+        if len(image_bytes) < 5 * 1024 * 1024:  # 5MB threshold
+            return await self._extract_text_textract_sync(image_bytes)
+        else:
+            return await self._extract_text_textract_async(image_bytes)
+
+    async def _extract_text_textract_sync(self, image_bytes: bytes) -> str:
+        """Synchronous Textract for smaller documents."""
+        def _detect_lines() -> str:
+            client = boto3.client("textract")
+            response = client.detect_document_text(Document={"Bytes": image_bytes})
+            lines = [
+                block.get("Text", "").strip()
+                for block in response.get("Blocks", [])
+                if block.get("BlockType") == "LINE" and block.get("Text")
+            ]
+            return "\n".join(line for line in lines if line).strip()
+
+        try:
+            text = await asyncio.to_thread(_detect_lines)
+            if text:
+                logger.info("Sync Textract OCR succeeded - extracted %d characters", len(text))
+            return text
+        except (ClientError, BotoCoreError) as e:
+            logger.error("Sync Textract OCR failed: %s", e)
+            OCR_ERROR_COUNT.labels(
+                phase="sync_fallback_textract", error_type=type(e).__name__
+            ).inc()
+            return ""
+        except Exception as e:
+            logger.exception("Unexpected sync Textract OCR failure")
+            OCR_ERROR_COUNT.labels(
+                phase="sync_fallback_textract", error_type=type(e).__name__
+            ).inc()
+            return ""
+
+    async def _extract_text_textract_async(self, image_bytes: bytes) -> str:
+        """Asynchronous Textract for large/complex documents."""
 
         def _start_async_detection() -> str:
             client = boto3.client("textract")
@@ -190,13 +226,18 @@ class DocumentProcessor:
             job_id = response["JobId"]
             logger.info("Started Textract async job: %s", job_id)
 
-            # Poll for completion (with timeout)
-            max_attempts = 30  # 5 minutes max (30 * 10s)
+            # Poll for completion (with optimized timeout)
+            max_attempts = 60  # 5 minutes max with variable intervals
             attempt = 0
 
             while attempt < max_attempts:
                 attempt += 1
-                time.sleep(10)  # Wait 10 seconds between checks
+
+                # Poll more frequently at first (every 5s for first 2 minutes), then every 10s
+                if attempt <= 24:  # First 2 minutes
+                    time.sleep(5)
+                else:
+                    time.sleep(10)
 
                 status_response = client.get_document_text_detection(JobId=job_id)
                 status = status_response.get("JobStatus")
@@ -261,10 +302,7 @@ class DocumentProcessor:
         try:
             text = await asyncio.to_thread(_start_async_detection)
             if text:
-                logger.info(
-                    "Async Textract OCR succeeded - extracted %d characters",
-                    len(text),
-                )
+                logger.info("Async Textract OCR succeeded - extracted %d characters", len(text))
             return text
         except (ClientError, BotoCoreError) as e:
             logger.error("Async Textract OCR failed: %s", e)
