@@ -130,7 +130,8 @@ async def test_extract_text_falls_back_to_textract_when_tesseract_missing(monkey
     monkeypatch.setattr(DocumentProcessor, "extract_text_textract", _fake_textract)
 
     img = np.zeros((16, 16, 3), dtype=np.uint8)
-    text = await processor.extract_text(img)
+    original_bytes = b"fake image bytes"
+    text = await processor.extract_text(img, original_bytes=original_bytes)
     assert text == "textract fallback text"
 
 
@@ -157,5 +158,6 @@ async def test_extract_text_falls_back_to_textract_on_tesseract_runtime_error(
     monkeypatch.setattr(DocumentProcessor, "extract_text_textract", _fake_textract)
 
     img = np.zeros((16, 16, 3), dtype=np.uint8)
-    text = await processor.extract_text(img)
+    original_bytes = b"fake image bytes"
+    text = await processor.extract_text(img, original_bytes=original_bytes)
     assert text == "textract runtime fallback"

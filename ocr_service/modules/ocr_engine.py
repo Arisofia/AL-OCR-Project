@@ -175,13 +175,15 @@ class DocumentProcessor:
             return ""
 
     async def extract_text_textract(self, image_bytes: bytes) -> str:
-        """Secondary fallback using AWS Textract - sync for small docs, async for large/complex docs."""
+        """
+        Secondary fallback using AWS Textract:
+        sync for small docs, async for large/complex docs.
+        """
 
         # Use sync API for smaller documents (< 5MB), async for larger ones
         if len(image_bytes) < 5 * 1024 * 1024:  # 5MB threshold
             return await self._extract_text_textract_sync(image_bytes)
-        else:
-            return await self._extract_text_textract_async(image_bytes)
+        return await self._extract_text_textract_async(image_bytes)
 
     async def _extract_text_textract_sync(self, image_bytes: bytes) -> str:
         """Synchronous Textract for smaller documents."""
@@ -198,7 +200,10 @@ class DocumentProcessor:
         try:
             text = await asyncio.to_thread(_detect_lines)
             if text:
-                logger.info("Sync Textract OCR succeeded - extracted %d characters", len(text))
+                logger.info(
+                    "Sync Textract OCR succeeded - extracted %d characters",
+                    len(text),
+                )
             return text
         except (ClientError, BotoCoreError) as e:
             logger.error("Sync Textract OCR failed: %s", e)
@@ -233,7 +238,8 @@ class DocumentProcessor:
             while attempt < max_attempts:
                 attempt += 1
 
-                # Poll more frequently at first (every 5s for first 2 minutes), then every 10s
+                # Poll more frequently at first (every 5s for first 2 minutes),
+                # then every 10s.
                 if attempt <= 24:  # First 2 minutes
                     time.sleep(5)
                 else:
@@ -302,7 +308,10 @@ class DocumentProcessor:
         try:
             text = await asyncio.to_thread(_start_async_detection)
             if text:
-                logger.info("Async Textract OCR succeeded - extracted %d characters", len(text))
+                logger.info(
+                    "Async Textract OCR succeeded - extracted %d characters",
+                    len(text),
+                )
             return text
         except (ClientError, BotoCoreError) as e:
             logger.error("Async Textract OCR failed: %s", e)
@@ -386,7 +395,10 @@ class DocumentProcessor:
         return self.enhancer.apply_threshold(gray)
 
     async def extract_text(
-        self, img: np.ndarray, regions: Optional[list[dict[str, Any]]] = None
+        self,
+        img: np.ndarray,
+        regions: Optional[list[dict[str, Any]]] = None,
+        original_bytes: Optional[bytes] = None,
     ) -> str:
         """Performs OCR on the whole image or specific regions."""
         start_time = time.time()
@@ -421,6 +433,10 @@ class DocumentProcessor:
                 error_type=type(e).__name__,
             ).inc()
             try:
+                if original_bytes:
+                    return await self.extract_text_textract(original_bytes)
+                # Fallback: encode processed image when original bytes are not
+                # available.
                 ok, encoded = cv2.imencode(".png", img)  # pylint: disable=no-member
                 if not ok:
                     return ""
@@ -680,7 +696,7 @@ class IterativeOCREngine:
                 and len(ctx.layout_regions) > 1
             )
             text = await self.processor.extract_text(
-                thresh, ctx.layout_regions if use_regions else None
+                thresh, ctx.layout_regions if use_regions else None, ctx.image_bytes
             )
 
             confidence = self.confidence_scorer.calculate(text)
