@@ -199,11 +199,16 @@ class DocumentProcessor:
 
         try:
             text = await asyncio.to_thread(_detect_lines)
+            logger.info(
+                "Sync Textract OCR completed - extracted %d characters from %d blocks",
+                len(text), len([b for b in response.get("Blocks", []) if b.get("BlockType") == "LINE"])
+            )
             if text:
-                logger.info(
-                    "Sync Textract OCR succeeded - extracted %d characters",
-                    len(text),
-                )
+                logger.info("Sync Textract OCR succeeded - text preview: %s", text[:100])
+            else:
+                logger.warning("Sync Textract OCR returned empty text - response blocks: %d total, %d LINE blocks",
+                              len(response.get("Blocks", [])),
+                              len([b for b in response.get("Blocks", []) if b.get("BlockType") == "LINE"]))
             return text
         except (ClientError, BotoCoreError) as e:
             logger.error("Sync Textract OCR failed: %s", e)
@@ -309,9 +314,11 @@ class DocumentProcessor:
             text = await asyncio.to_thread(_start_async_detection)
             if text:
                 logger.info(
-                    "Async Textract OCR succeeded - extracted %d characters",
-                    len(text),
+                    "Async Textract OCR succeeded - extracted %d characters, text preview: %s",
+                    len(text), text[:100]
                 )
+            else:
+                logger.warning("Async Textract OCR returned empty text")
             return text
         except (ClientError, BotoCoreError) as e:
             logger.error("Async Textract OCR failed: %s", e)
@@ -406,11 +413,14 @@ class DocumentProcessor:
         method = "regions" if regions else "full_page"
         try:
             if regions:
+                logger.info("Extracting text from %d regions", len(regions))
                 text = await self._extract_from_regions(img, regions)
             else:
+                logger.info("Starting Tesseract OCR on full page (shape: %s)", img.shape)
                 text = await asyncio.to_thread(
                     pytesseract.image_to_string, img, config=self.ocr_config.flags
                 )
+                logger.info("Tesseract completed - extracted %d characters", len(text))
             status = "success"
             return text
         except (
