@@ -4,6 +4,8 @@ on: [push]
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   run:
@@ -61,9 +63,11 @@ jobs:
         env:
           REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          CML_AVAILABLE=false
+          ENABLE_CML_COMMENT=false
           if command -v cml >/dev/null 2>&1; then
-            CML_AVAILABLE=true
+            if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+              ENABLE_CML_COMMENT=true
+            fi
           else
             echo "::warning::cml CLI unavailable; report comment publishing will be skipped."
           fi
@@ -72,8 +76,9 @@ jobs:
           if [ ! -f src/train.py ]; then
             echo "## Training Error" > report.md
             echo "File \`src/train.py\` not found. Skipping training." >> report.md
-            if [ "$CML_AVAILABLE" = true ]; then
-              cml send-comment report.md
+            if [ "$ENABLE_CML_COMMENT" = true ]; then
+              cml comment create report.md || \
+                echo "::warning::Failed to publish CML report comment."
             fi
             exit 1
           fi
@@ -92,15 +97,12 @@ jobs:
 
           echo "## Confusion Matrix" >> report.md
           if [ -f confusion_matrix.png ]; then
-            if [ "$CML_AVAILABLE" = true ]; then
-              cml publish confusion_matrix.png --md >> report.md
-            else
-              echo "Confusion matrix image generated: confusion_matrix.png" >> report.md
-            fi
+            echo "![Confusion matrix](./confusion_matrix.png)" >> report.md
           else
             echo "Confusion matrix image not found." >> report.md
           fi
 
-          if [ "$CML_AVAILABLE" = true ]; then
-            cml send-comment report.md
+          if [ "$ENABLE_CML_COMMENT" = true ]; then
+            cml comment create report.md || \
+              echo "::warning::Failed to publish CML report comment."
           fi
