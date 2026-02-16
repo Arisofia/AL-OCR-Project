@@ -190,12 +190,17 @@ class DocumentProcessor:
         def _detect_lines() -> str:
             client = boto3.client("textract")
             response = client.detect_document_text(Document={"Bytes": image_bytes})
-            lines = [
-                block.get("Text", "").strip()
-                for block in response.get("Blocks", [])
-                if block.get("BlockType") == "LINE" and block.get("Text")
-            ]
-            return "\n".join(line for line in lines if line).strip()
+            lines = []
+            for block in response.get("Blocks", []):
+                if block.get("BlockType") == "LINE" and block.get("Text"):
+                    text = block.get("Text", "").strip()
+                    if text:
+                        lines.append(text)
+                        logger.debug("Textract LINE block: '%s'", text)
+
+            result = "\n".join(lines).strip()
+            logger.info("Textract final result: '%s' (length: %d)", result, len(result))
+            return result
 
         try:
             text = await asyncio.to_thread(_detect_lines)
@@ -267,11 +272,13 @@ class DocumentProcessor:
                             result_response = status_response
 
                         blocks = result_response.get("Blocks", [])
-                        page_text = [
-                            block.get("Text", "").strip()
-                            for block in blocks
-                            if block.get("BlockType") == "LINE" and block.get("Text")
-                        ]
+                        page_text = []
+                        for block in blocks:
+                            if block.get("BlockType") == "LINE" and block.get("Text"):
+                                text = block.get("Text", "").strip()
+                                if text:
+                                    page_text.append(text)
+                                    logger.debug("Async Textract LINE block: '%s'", text)
                         all_text.extend(page_text)
 
                         next_token = result_response.get("NextToken")
@@ -280,9 +287,11 @@ class DocumentProcessor:
 
                     final_text = "\n".join(line for line in all_text if line).strip()
                     logger.info(
-                        "Async Textract completed: extracted %d lines from %s",
+                        "Async Textract completed: extracted %d lines from %s, final text: '%s' (length: %d)",
                         len(all_text),
                         job_id,
+                        final_text,
+                        len(final_text)
                     )
                     return final_text
 
