@@ -3,6 +3,10 @@ Core OCR Orchestration Engine for high-fidelity document intelligence.
 Refactored into modular components for better maintainability and performance.
 """
 
+# This engine intentionally catches broad exceptions at API and provider boundaries
+# to preserve fallback behavior and service availability.
+# pylint: disable=broad-exception-caught
+
 import asyncio
 import logging
 import os
@@ -171,7 +175,10 @@ class DocumentProcessor:
             return ""
 
     async def extract_text_textract(self, image_bytes: bytes) -> str:
-        """Secondary fallback using AWS Textract asynchronous analysis for complete document processing."""
+        """
+        Secondary fallback using AWS Textract asynchronous analysis for complete
+        document processing.
+        """
 
         def _start_async_detection() -> str:
             client = boto3.client("textract")
@@ -189,7 +196,6 @@ class DocumentProcessor:
 
             while attempt < max_attempts:
                 attempt += 1
-                import time
                 time.sleep(10)  # Wait 10 seconds between checks
 
                 status_response = client.get_document_text_detection(JobId=job_id)
@@ -221,29 +227,44 @@ class DocumentProcessor:
                             break
 
                     final_text = "\n".join(line for line in all_text if line).strip()
-                    logger.info("Async Textract completed: extracted %d lines from %s",
-                              len(all_text), job_id)
+                    logger.info(
+                        "Async Textract completed: extracted %d lines from %s",
+                        len(all_text),
+                        job_id,
+                    )
                     return final_text
 
-                elif status == "FAILED":
-                    error_message = status_response.get("StatusMessage", "Unknown error")
+                if status == "FAILED":
+                    error_message = status_response.get(
+                        "StatusMessage",
+                        "Unknown error",
+                    )
                     logger.error("Textract async job failed: %s", error_message)
-                    raise Exception(f"Textract job failed: {error_message}")
+                    raise RuntimeError(f"Textract job failed: {error_message}")
 
-                elif status in ["PARTIAL_SUCCESS", "IN_PROGRESS"]:
-                    logger.info("Textract job %s: %s (attempt %d/%d)",
-                              job_id, status, attempt, max_attempts)
+                if status in ["PARTIAL_SUCCESS", "IN_PROGRESS"]:
+                    logger.info(
+                        "Textract job %s: %s (attempt %d/%d)",
+                        job_id,
+                        status,
+                        attempt,
+                        max_attempts,
+                    )
                     continue
 
-                else:
-                    logger.warning("Unexpected Textract status: %s", status)
+                logger.warning("Unexpected Textract status: %s", status)
 
-            raise Exception(f"Textract job timeout after {max_attempts * 10} seconds")
+            raise RuntimeError(
+                f"Textract job timeout after {max_attempts * 10} seconds"
+            )
 
         try:
             text = await asyncio.to_thread(_start_async_detection)
             if text:
-                logger.info("Async Textract OCR succeeded - extracted %d characters", len(text))
+                logger.info(
+                    "Async Textract OCR succeeded - extracted %d characters",
+                    len(text),
+                )
             return text
         except (ClientError, BotoCoreError) as e:
             logger.error("Async Textract OCR failed: %s", e)
@@ -316,7 +337,12 @@ class DocumentProcessor:
             enhanced = self.reconstructor.remove_color_overlay(rectified)
 
         if len(enhanced.shape) == 3:
-            gray = cast(np.ndarray, cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY))
+            gray = cast(
+                np.ndarray,
+                cv2.cvtColor(  # pylint: disable=no-member
+                    enhanced, cv2.COLOR_BGR2GRAY  # pylint: disable=no-member
+                ),
+            )
         else:
             gray = enhanced
         return self.enhancer.apply_threshold(gray)
@@ -357,7 +383,7 @@ class DocumentProcessor:
                 error_type=type(e).__name__,
             ).inc()
             try:
-                ok, encoded = cv2.imencode(".png", img)
+                ok, encoded = cv2.imencode(".png", img)  # pylint: disable=no-member
                 if not ok:
                     return ""
                 return await self.extract_text_textract(encoded.tobytes())
