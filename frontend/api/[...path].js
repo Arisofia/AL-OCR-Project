@@ -7,7 +7,7 @@ export const config = {
   },
 };
 
-const DEFAULT_TIMEOUT_MS = 30000;
+const DEFAULT_TIMEOUT_MS = 600000; // 10 minutes for async Textract processing
 
 const stripTrailingSlash = (value) => String(value || "").replace(/\/+$/, "");
 

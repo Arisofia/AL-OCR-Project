@@ -171,33 +171,90 @@ class DocumentProcessor:
             return ""
 
     async def extract_text_textract(self, image_bytes: bytes) -> str:
-        """Secondary fallback using AWS Textract synchronous byte analysis."""
+        """Secondary fallback using AWS Textract asynchronous analysis for complete document processing."""
 
-        def _detect_lines() -> str:
+        def _start_async_detection() -> str:
             client = boto3.client("textract")
-            response = client.detect_document_text(Document={"Bytes": image_bytes})
-            lines = [
-                block.get("Text", "").strip()
-                for block in response.get("Blocks", [])
-                if block.get("BlockType") == "LINE" and block.get("Text")
-            ]
-            return "\n".join(line for line in lines if line).strip()
+
+            # Start asynchronous document text detection
+            response = client.start_document_text_detection(
+                Document={"Bytes": image_bytes}
+            )
+            job_id = response["JobId"]
+            logger.info("Started Textract async job: %s", job_id)
+
+            # Poll for completion (with timeout)
+            max_attempts = 30  # 5 minutes max (30 * 10s)
+            attempt = 0
+
+            while attempt < max_attempts:
+                attempt += 1
+                import time
+                time.sleep(10)  # Wait 10 seconds between checks
+
+                status_response = client.get_document_text_detection(JobId=job_id)
+                status = status_response.get("JobStatus")
+
+                if status == "SUCCEEDED":
+                    # Collect all text from all pages
+                    all_text = []
+                    next_token = None
+
+                    while True:
+                        if next_token:
+                            result_response = client.get_document_text_detection(
+                                JobId=job_id, NextToken=next_token
+                            )
+                        else:
+                            result_response = status_response
+
+                        blocks = result_response.get("Blocks", [])
+                        page_text = [
+                            block.get("Text", "").strip()
+                            for block in blocks
+                            if block.get("BlockType") == "LINE" and block.get("Text")
+                        ]
+                        all_text.extend(page_text)
+
+                        next_token = result_response.get("NextToken")
+                        if not next_token:
+                            break
+
+                    final_text = "\n".join(line for line in all_text if line).strip()
+                    logger.info("Async Textract completed: extracted %d lines from %s",
+                              len(all_text), job_id)
+                    return final_text
+
+                elif status == "FAILED":
+                    error_message = status_response.get("StatusMessage", "Unknown error")
+                    logger.error("Textract async job failed: %s", error_message)
+                    raise Exception(f"Textract job failed: {error_message}")
+
+                elif status in ["PARTIAL_SUCCESS", "IN_PROGRESS"]:
+                    logger.info("Textract job %s: %s (attempt %d/%d)",
+                              job_id, status, attempt, max_attempts)
+                    continue
+
+                else:
+                    logger.warning("Unexpected Textract status: %s", status)
+
+            raise Exception(f"Textract job timeout after {max_attempts * 10} seconds")
 
         try:
-            text = await asyncio.to_thread(_detect_lines)
+            text = await asyncio.to_thread(_start_async_detection)
             if text:
-                logger.info("Direct fallback OCR succeeded via AWS Textract")
+                logger.info("Async Textract OCR succeeded - extracted %d characters", len(text))
             return text
         except (ClientError, BotoCoreError) as e:
-            logger.error("Textract fallback OCR failed: %s", e)
+            logger.error("Async Textract OCR failed: %s", e)
             OCR_ERROR_COUNT.labels(
-                phase="direct_fallback_textract", error_type=type(e).__name__
+                phase="async_fallback_textract", error_type=type(e).__name__
             ).inc()
             return ""
         except Exception as e:
-            logger.exception("Unexpected Textract fallback OCR failure")
+            logger.exception("Unexpected async Textract OCR failure")
             OCR_ERROR_COUNT.labels(
-                phase="direct_fallback_textract", error_type=type(e).__name__
+                phase="async_fallback_textract", error_type=type(e).__name__
             ).inc()
             return ""
 
