@@ -105,6 +105,21 @@ class DocumentProcessor:
         self.ocr_config = ocr_config
         self.engine_config = engine_config
         self.reconstructor = reconstructor
+        self.active_doc_type = "generic"
+
+    def set_active_doc_type(self, doc_type: Optional[str]) -> None:
+        """Set active document type to adjust OCR strategy dynamically."""
+        normalized = (doc_type or "generic").strip().lower()
+        self.active_doc_type = normalized or "generic"
+
+    def _is_card_doc_type(self) -> bool:
+        """Return True when active OCR strategy should use card-specific tuning."""
+        return self.active_doc_type in {
+            "bank_card",
+            "card",
+            "credit_card",
+            "debit_card",
+        }
 
     async def decode_and_validate(self, ctx: DocumentContext) -> bool:
         """Decodes image and performs initial validation."""
@@ -400,7 +415,12 @@ class DocumentProcessor:
             return " ".join(grouped).strip()
         return " ".join(digits[i : i + 4] for i in range(0, len(digits), 4)).strip()
 
-    def _char_box_digit_rescue(self, focus_img: np.ndarray, base_text: str) -> str:
+    def _char_box_digit_rescue(
+        self,
+        focus_img: np.ndarray,
+        base_text: str,
+        allow_digit_drop: bool = False,
+    ) -> str:
         """
         Pixel-level character rescue:
         re-read ambiguous boxes as single numeric glyphs.
@@ -453,6 +473,13 @@ class DocumentProcessor:
         compact = "".join(recovered)
         base_digits = self._digit_count(base_text)
         if len(compact) < base_digits:
+            if not allow_digit_drop:
+                return ""
+            # Card mode can drop up to one dubious trailing glyph if re-reading
+            # indicates it was likely OCR noise.
+            if len(compact) < max(8, base_digits - 1):
+                return ""
+        if len(compact) < 8:
             return ""
         return self._format_digits_like_base(compact, base_text)
 
@@ -842,6 +869,138 @@ class DocumentProcessor:
         denoised = self.enhancer.denoise(upscaled)
         return self.enhancer.apply_threshold(denoised)
 
+    def _card_ocr_configs(self) -> list[str]:
+        """Build Tesseract configs tuned for payment card documents."""
+        return [
+            (
+                f"--oem {self.ocr_config.oem} --psm 6 -l eng "
+                "-c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ/- "
+                "-c classify_bln_numeric_mode=1"
+            ),
+            (
+                f"--oem {self.ocr_config.oem} --psm 7 -l eng "
+                "-c tessedit_char_whitelist=0123456789/- "
+                "-c classify_bln_numeric_mode=1"
+            ),
+            (
+                f"--oem {self.ocr_config.oem} --psm 11 -l eng "
+                "-c tessedit_char_whitelist=0123456789/- "
+                "-c classify_bln_numeric_mode=1"
+            ),
+        ]
+
+    @staticmethod
+    def _last_group_is_truncated(text: str) -> bool:
+        """
+        Return True when the last numeric group looks like a partial capture
+        (1-3 digits), common in cropped card snapshots.
+        """
+        groups = re.findall(r"\d+", text or "")
+        if not groups:
+            return False
+        return len(groups[-1]) in {1, 2, 3}
+
+    def _score_card_text(self, text: str) -> tuple[int, int, int, int, int, int]:
+        """Score card OCR candidates preferring valid Luhn and cleaner digits."""
+        analysis = DocumentIntelligence.analyze(text)
+        card_analysis = analysis.get("card_analysis", {}) if analysis else {}
+        candidates = card_analysis.get("candidates", [])
+        plausible_count = sum(1 for row in candidates if row.get("length", 0) >= 13)
+        max_len = max((row.get("length", 0) for row in candidates), default=0)
+        valid_count = card_analysis.get("luhn_valid_count", 0)
+        truncated_bonus = (
+            1 if max_len < 13 and self._last_group_is_truncated(text) else 0
+        )
+        digit_count = self._digit_count(text)
+        noise = sum((not char.isdigit()) and (not char.isspace()) for char in text)
+        return (
+            valid_count,
+            plausible_count,
+            truncated_bonus,
+            max_len,
+            digit_count,
+            -noise,
+        )
+
+    async def _extract_text_card_mode(self, img: np.ndarray) -> str:
+        """
+        Card-specific OCR strategy:
+        run multiple numeric-focused passes and pick the best validated output.
+        """
+        candidates: list[tuple[str, str]] = []
+        focus_img: Optional[np.ndarray] = None
+        try:
+            focus_img = await asyncio.to_thread(self._prepare_digit_focus_image, img)
+        except Exception as e:
+            logger.debug("Card-mode focus preprocessing failed: %s", e)
+
+        async def _add_candidate(label: str, candidate_text: str) -> None:
+            if not candidate_text:
+                return
+            candidates.append((label, candidate_text))
+            if focus_img is None:
+                return
+            try:
+                boxed_candidate = await asyncio.to_thread(
+                    self._char_box_digit_rescue,
+                    focus_img,
+                    candidate_text,
+                    True,
+                )
+            except Exception as exc:
+                logger.debug("Card OCR box rescue failed for %s: %s", label, exc)
+                return
+            if boxed_candidate and boxed_candidate != candidate_text:
+                candidates.append((f"{label}-box", boxed_candidate))
+
+        base_text = await asyncio.to_thread(
+            pytesseract.image_to_string,
+            img,
+            config=self.ocr_config.flags,
+        )
+        base_text = self.sanitize_text(base_text)
+        if base_text:
+            base_text = await self._rescue_ambiguous_digits(img, base_text)
+            await _add_candidate("default", base_text)
+
+        for idx, config in enumerate(self._card_ocr_configs(), start=1):
+            try:
+                candidate_text = await asyncio.to_thread(
+                    pytesseract.image_to_string,
+                    img,
+                    config=config,
+                )
+            except (
+                pytesseract.pytesseract.TesseractNotFoundError,
+                pytesseract.pytesseract.TesseractError,
+            ):
+                raise
+            except Exception as e:
+                logger.debug("Card OCR pass %d failed: %s", idx, e)
+                continue
+
+            candidate_text = self.sanitize_text(candidate_text)
+            if not candidate_text:
+                continue
+            candidate_text = await self._rescue_ambiguous_digits(img, candidate_text)
+            if candidate_text:
+                await _add_candidate(f"card-pass-{idx}", candidate_text)
+
+        if not candidates:
+            return ""
+
+        method, selected = max(
+            candidates,
+            key=lambda item: self._score_card_text(item[1]),
+        )
+        logger.info(
+            "Card OCR strategy selected %s (len=%d, score=%s)",
+            method,
+            len(selected),
+            self._score_card_text(selected),
+        )
+        return selected
+
     async def extract_text(
         self,
         img: np.ndarray,
@@ -861,12 +1020,17 @@ class DocumentProcessor:
                     "Starting Tesseract OCR on full page (shape: %s)",
                     img.shape,
                 )
-                text = await asyncio.to_thread(
-                    pytesseract.image_to_string, img, config=self.ocr_config.flags
-                )
-                # Sanitize Tesseract output
-                text = self.sanitize_text(text)
-                text = await self._rescue_ambiguous_digits(img, text)
+                if self._is_card_doc_type():
+                    text = await self._extract_text_card_mode(img)
+                else:
+                    text = await asyncio.to_thread(
+                        pytesseract.image_to_string,
+                        img,
+                        config=self.ocr_config.flags,
+                    )
+                    # Sanitize Tesseract output
+                    text = self.sanitize_text(text)
+                    text = await self._rescue_ambiguous_digits(img, text)
                 logger.info("Tesseract completed - extracted %d characters", len(text))
             status = "success"
             return text
@@ -929,8 +1093,13 @@ class DocumentProcessor:
                 return ""
             roi = ImageToolkit.prepare_roi(roi)
             try:
+                if self._is_card_doc_type():
+                    return await self._extract_text_card_mode(roi)
+
                 extracted = await asyncio.to_thread(
-                    pytesseract.image_to_string, roi, config=self.ocr_config.flags
+                    pytesseract.image_to_string,
+                    roi,
+                    config=self.ocr_config.flags,
                 )
                 cleaned = self.sanitize_text(extracted)
                 return await self._rescue_ambiguous_digits(roi, cleaned)
@@ -986,7 +1155,10 @@ class IterativeOCREngine:
         await self.advanced_reconstructor.close()
 
     async def process_image(
-        self, image_bytes: bytes, use_reconstruction: bool = False
+        self,
+        image_bytes: bytes,
+        use_reconstruction: bool = False,
+        doc_type: Optional[str] = None,
     ) -> dict[str, Any]:
         """Entry point for standard iterative OCR pipeline."""
         start_time = time.time()
@@ -999,8 +1171,11 @@ class IterativeOCREngine:
                 return {"error": validation_error}
 
             ctx = DocumentContext(
-                image_bytes=image_bytes, use_reconstruction=use_reconstruction
+                image_bytes=image_bytes,
+                use_reconstruction=use_reconstruction,
+                doc_type=doc_type or self.config.default_doc_type,
             )
+            self.processor.set_active_doc_type(ctx.doc_type)
 
             if not await self.processor.decode_and_validate(ctx):
                 logger.warning(
@@ -1095,7 +1270,11 @@ class IterativeOCREngine:
 
             if "error" in ai_result:
                 logger.warning("AI reconstruction failed | Triggering fallback")
-                return await self.process_image(image_bytes, use_reconstruction=True)
+                return await self.process_image(
+                    image_bytes,
+                    use_reconstruction=True,
+                    doc_type=ctx.doc_type,
+                )
 
             extracted_text = ai_result.get("text", "")
             confidence = self.confidence_scorer.calculate(extracted_text)
@@ -1154,6 +1333,8 @@ class IterativeOCREngine:
             if ctx.current_img is None:
                 raise ValueError("Context image is missing")
 
+            self.processor.set_active_doc_type(ctx.doc_type)
+
             thresh = self.processor.preprocess_frame(
                 ctx.current_img, i, ctx.use_reconstruction
             )
@@ -1175,8 +1356,23 @@ class IterativeOCREngine:
                     "confidence": confidence,
                     "method": "region-based" if use_regions else "full-page",
                     "preview_text": f"{text[:50]}..." if len(text) > 50 else text,
+                    "doc_type": ctx.doc_type,
                 }
             )
+
+            if ctx.doc_type in {"generic", "unknown"}:
+                detected_type = DocumentIntelligence.analyze(
+                    text,
+                    layout_type=ctx.layout_type,
+                ).get("document_type", "generic")
+                if detected_type == "bank_card":
+                    ctx.doc_type = "bank_card"
+                    self.processor.set_active_doc_type(ctx.doc_type)
+                    ctx.iteration_history[-1]["doc_type"] = ctx.doc_type
+                    logger.info(
+                        "Auto-detected document type as bank_card at iteration %d",
+                        i + 1,
+                    )
 
             if confidence > ctx.best_confidence:
                 ctx.best_text, ctx.best_confidence = text, confidence

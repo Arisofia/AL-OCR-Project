@@ -357,10 +357,20 @@ class OCRProcessor:
             return await self.ocr_engine.process_image_advanced(
                 contents, doc_type=doc_type
             )
-        return await self.ocr_engine.process_image(
-            contents,
-            use_reconstruction=use_recon,
-        )
+        try:
+            return await self.ocr_engine.process_image(
+                contents,
+                use_reconstruction=use_recon,
+                doc_type=doc_type,
+            )
+        except TypeError as exc:
+            # Backward compatibility for test doubles that do not accept doc_type.
+            if "unexpected keyword argument 'doc_type'" not in str(exc):
+                raise
+            return await self.ocr_engine.process_image(
+                contents,
+                use_reconstruction=use_recon,
+            )
 
     async def _persist_results(
         self,

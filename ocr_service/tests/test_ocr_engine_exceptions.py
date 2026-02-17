@@ -445,6 +445,137 @@ def test_preprocess_frame_later_iterations_apply_pixel_rescue():
 
 
 @pytest.mark.asyncio
+async def test_extract_text_uses_card_strategy_when_doc_type_is_bank_card(
+    monkeypatch,
+):
+    processor = DocumentProcessor(
+        enhancer=engine_mod.ImageEnhancer(),
+        ocr_config=engine_mod.TesseractConfig(),
+        engine_config=engine_mod.EngineConfig(),
+        reconstructor=None,
+    )
+    processor.set_active_doc_type("bank_card")
+    calls = []
+
+    async def _passthrough_rescue(_self, _img, text):
+        return text
+
+    def _fake_ocr(_img, config):
+        calls.append(config)
+        if "tessedit_char_whitelist=0123456789/-" in config:
+            return "4111 1111 1111 1111"
+        return "4111 1111 1111 111I"
+
+    monkeypatch.setattr(
+        DocumentProcessor,
+        "_rescue_ambiguous_digits",
+        _passthrough_rescue,
+    )
+    monkeypatch.setattr(engine_mod.pytesseract, "image_to_string", _fake_ocr)
+
+    img = np.zeros((80, 240, 3), dtype=np.uint8)
+    result = await processor.extract_text(img)
+
+    assert result == "4111 1111 1111 1111"
+    assert any("tessedit_char_whitelist=0123456789/-" in c for c in calls)
+
+
+@pytest.mark.asyncio
+async def test_extract_text_card_mode_prefers_box_rescue_partial_over_noise(
+    monkeypatch,
+):
+    processor = DocumentProcessor(
+        enhancer=engine_mod.ImageEnhancer(),
+        ocr_config=engine_mod.TesseractConfig(),
+        engine_config=engine_mod.EngineConfig(),
+        reconstructor=None,
+    )
+    processor.set_active_doc_type("bank_card")
+
+    async def _passthrough_rescue(_self, _img, text):
+        return text
+
+    def _fake_ocr(_img, config):
+        _ = config
+        return "4048 3700 0450"
+
+    def _fake_prepare(_self, img):
+        _ = img
+        return np.zeros((160, 480), dtype=np.uint8)
+
+    def _fake_box_rescue(_self, _focus_img, base_text, allow_digit_drop=False):
+        if allow_digit_drop and base_text == "4048 3700 0450":
+            return "4048 3700 045"
+        return base_text
+
+    monkeypatch.setattr(
+        DocumentProcessor,
+        "_rescue_ambiguous_digits",
+        _passthrough_rescue,
+    )
+    monkeypatch.setattr(engine_mod.pytesseract, "image_to_string", _fake_ocr)
+    monkeypatch.setattr(
+        DocumentProcessor,
+        "_prepare_digit_focus_image",
+        _fake_prepare,
+    )
+    monkeypatch.setattr(
+        DocumentProcessor,
+        "_char_box_digit_rescue",
+        _fake_box_rescue,
+    )
+
+    img = np.zeros((80, 240, 3), dtype=np.uint8)
+    result = await processor.extract_text(img)
+
+    assert result == "4048 3700 045"
+
+
+@pytest.mark.asyncio
+async def test_process_image_activates_card_doc_type(monkeypatch):
+    engine = engine_mod.IterativeOCREngine(
+        config=engine_mod.EngineConfig(max_iterations=1, confidence_threshold=0.5)
+    )
+
+    async def _decode_ok(ctx):
+        ctx.current_img = np.zeros((32, 32, 3), dtype=np.uint8)
+        return True
+
+    async def _recon_noop(_ctx, _max_iterations):
+        return None
+
+    async def _layout_noop(ctx):
+        ctx.layout_regions = []
+        ctx.layout_type = "unknown"
+
+    def _preprocess(_img, _iteration, _use_recon):
+        return np.zeros((32, 32), dtype=np.uint8)
+
+    async def _extract_card_text(_img, _regions=None, _original_bytes=None):
+        return "4111 1111 1111 1111"
+
+    async def _fallback_noop(_ctx):
+        return None
+
+    async def _enhance_noop(img):
+        return img
+
+    monkeypatch.setattr(engine.processor, "decode_and_validate", _decode_ok)
+    monkeypatch.setattr(engine.processor, "run_reconstruction", _recon_noop)
+    monkeypatch.setattr(engine, "_analyze_layout", _layout_noop)
+    monkeypatch.setattr(engine.processor, "preprocess_frame", _preprocess)
+    monkeypatch.setattr(engine.processor, "extract_text", _extract_card_text)
+    monkeypatch.setattr(engine, "_maybe_apply_quality_fallbacks", _fallback_noop)
+    monkeypatch.setattr(engine_mod.ImageToolkit, "enhance_iteration", _enhance_noop)
+
+    result = await engine.process_image(b"img-bytes", doc_type="bank_card")
+
+    assert engine.processor.active_doc_type == "bank_card"
+    assert result.get("document_type") == "bank_card"
+    assert result.get("card_analysis", {}).get("luhn_valid_count") == 1
+
+
+@pytest.mark.asyncio
 async def test_extract_text_applies_digit_rescue_on_ambiguous_output(monkeypatch):
     processor = DocumentProcessor(
         enhancer=engine_mod.ImageEnhancer(),
