@@ -1,7 +1,7 @@
 """Regression tests for OCR engine fallbacks and preprocessing behavior."""
 
 # OpenCV binary modules commonly trigger false `no-member` in pylint.
-# pylint: disable=missing-function-docstring,no-member,import-error
+# pylint: disable=missing-function-docstring,no-member,import-error,protected-access
 
 import logging
 
@@ -377,7 +377,9 @@ async def test_process_image_triggers_textract_fallback_on_ambiguous_digits(
 
     assert calls["textract"] == 1
     assert calls["direct"] == 1
-    assert result.get("text") == "4048 3700 0453"
+    # Now it should be completed to 16 digits
+    assert result.get("text").startswith("4048 3700 0453")
+    assert len(result.get("text").replace(" ", "")) == 16
     assert result.get("document_type") == "bank_card"
     assert result.get("card_analysis", {}).get("detected") is True
     assert any(
@@ -857,3 +859,33 @@ def test_read_single_digit_accepts_high_confidence_zero(monkeypatch):
 
     digit = processor._read_single_digit(roi)
     assert digit == "0"
+
+
+@pytest.mark.asyncio
+async def test_card_completion_with_mock_validator():
+    """Verify that card numbers are completed and validated by mock provider."""
+    engine = engine_mod.IterativeOCREngine()
+    engine.validator.provider = "mock"
+    
+    # 11 digits: 4048 3700 045 (missing 5)
+    # The mock validator accepts if it ends with 0005
+    # Completion should find 4048 3700 045 + 3 + 0005 = 4048 3700 0453 0005
+    # 4048370004530005 is a valid Luhn number
+    
+    test_text = "Tarjeta: 4048 3700 045"
+    completed = await engine.processor._attempt_card_completion(test_text, validator=engine.validator)
+    
+    assert "4048 3700 0453 0005" in completed
+
+@pytest.mark.asyncio
+async def test_card_completion_fallback_to_luhn():
+    """If no validator match, fallback to first valid Luhn completion."""
+    engine = engine_mod.IterativeOCREngine()
+    engine.validator.provider = "mock"
+    
+    # Use a text that won't match the mock validator (doesn't end in 0005)
+    test_text = "Card: 4111 1111 1111 111" # 15 digits, missing 1
+    # 4111111111111111 is a valid Luhn (Visa test number)
+    
+    completed = await engine.processor._attempt_card_completion(test_text, validator=engine.validator)
+    assert "4111 1111 1111 1111" in completed

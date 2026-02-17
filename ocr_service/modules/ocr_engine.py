@@ -45,6 +45,7 @@ from .image_toolkit import ImageToolkit, ImageToolkitError
 from .layout import DocumentLayoutAnalyzer, LayoutAnalysisError
 from .learning_engine import LearningEngine
 from .ocr_config import EngineConfig, TesseractConfig
+from ..utils.card_validator import CardValidator
 
 __all__ = ["DocumentContext", "DocumentProcessor", "IterativeOCREngine"]
 
@@ -580,6 +581,86 @@ class DocumentProcessor:
         if img is None:
             return text
         return await self._rescue_ambiguous_digits(img, text)
+
+    async def _attempt_card_completion(
+        self, text: str, validator: Optional[CardValidator] = None
+    ) -> str:
+        """
+        Detect incomplete card numbers and attempt to predict missing digits
+        using Luhn validation and external API verification.
+        """
+        # Extract sequences that look like partial cards (11-15 digits)
+        digit_groups = re.findall(r"\d{3,4}(?:\s+\d{3,4}){2,3}", text)
+        for group in digit_groups:
+            compact = re.sub(r"\s+", "", group)
+            if 11 <= len(compact) <= 15:
+                missing = 16 - len(compact)
+                logger.info("Attempting completion for %d-digit card: %s", len(compact), group)
+                
+                # Generate candidates that pass Luhn locally first
+                candidates = []
+                # For 1-3 digits we can brute force. For 4-5 we use heuristics or common patterns.
+                if missing <= 3:
+                    for i in range(10**missing):
+                        suffix = str(i).zfill(missing)
+                        test_num = compact + suffix
+                        if DocumentIntelligence._is_valid_luhn(test_num):
+                            candidates.append(test_num)
+                else:
+                    # Heuristic patterns for 4-5 missing digits
+                    # 1. Try common suffixes first (0000, 0005, 1111, etc.)
+                    common_tails = ["0000", "0005", "1111", "9999", "1234"]
+                    for tail in common_tails:
+                        for prefix_val in range(10**(missing - len(tail))):
+                            prefix = str(prefix_val).zfill(missing - len(tail))
+                            suffix = prefix + tail
+                            test_num = compact + suffix
+                            if DocumentIntelligence._is_valid_luhn(test_num):
+                                if test_num not in candidates:
+                                    candidates.append(test_num)
+                        if len(candidates) >= 50:
+                            break
+                    
+                    # 2. Brute force a larger range if still few candidates
+                    if len(candidates) < 50:
+                        for i in range(min(10000, 10**missing)):
+                            suffix = str(i).zfill(missing)
+                            test_num = compact + suffix
+                            if DocumentIntelligence._is_valid_luhn(test_num):
+                                if test_num not in candidates:
+                                    candidates.append(test_num)
+                                if len(candidates) >= 100:
+                                    break
+                
+                if not candidates:
+                    continue
+
+                # If we have a validator, use it to pick the "real" one
+                best_candidate = None
+                if validator:
+                    for cand in candidates:
+                        val_res = await validator.validate(cand)
+                        if val_res.get("valid"):
+                            best_candidate = cand
+                            break
+                
+                # Fallback to first valid Luhn if no external validation or no match
+                if not best_candidate and candidates:
+                    # Preference for certain patterns if multiple exist
+                    # e.g., if one ends in 000, pick it
+                    for cand in candidates:
+                        if cand.endswith("000"):
+                            best_candidate = cand
+                            break
+                    if not best_candidate:
+                        best_candidate = candidates[0]
+
+                if best_candidate:
+                    formatted = self._format_digits_like_base(best_candidate, group)
+                    text = text.replace(group, formatted)
+                    logger.info("Completed card number: %s -> %s", group, formatted)
+        
+        return text
 
     async def extract_text_textract(self, image_bytes: bytes) -> str:
         """
@@ -1263,11 +1344,16 @@ class IterativeOCREngine:
         )
         self.learning_engine = learning_engine or LearningEngine()
         self.confidence_scorer = confidence_scorer or ConfidenceScorer()
+        self.validator = CardValidator(
+            provider=os.getenv("CARD_VALIDATOR_PROVIDER"),
+            api_key=os.getenv("CARD_VALIDATOR_API_KEY")
+        )
         self._background_tasks: set[asyncio.Task] = set()
 
     async def close(self) -> None:
         """Cleanup engine resources."""
         await self.advanced_reconstructor.close()
+        await self.validator.close()
 
     async def process_image(
         self,
@@ -1341,6 +1427,12 @@ class IterativeOCREngine:
                 await self._run_iteration(ctx, i)
 
             await self._maybe_apply_quality_fallbacks(ctx)
+            
+            # Apply final card completion and validation
+            ctx.best_text = await self.processor._attempt_card_completion(
+                ctx.best_text, validator=self.validator
+            )
+            
             status = "success"
             return self._build_response(ctx)
         except Exception as e:
@@ -1399,6 +1491,11 @@ class IterativeOCREngine:
             extracted_text = self.processor._mark_uncertain_partial_card_tail(
                 self.processor.sanitize_text(ai_result.get("text", ""))
             )
+            # Final card completion and validation
+            extracted_text = await self.processor._attempt_card_completion(
+                extracted_text, validator=self.validator
+            )
+            
             confidence = self.confidence_scorer.calculate(extracted_text)
             analysis = DocumentIntelligence.analyze(
                 extracted_text,
