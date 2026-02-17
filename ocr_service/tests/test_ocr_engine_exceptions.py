@@ -320,3 +320,19 @@ async def test_process_image_applies_direct_quality_fallback(monkeypatch):
         i.get("method") == "direct-quality-fallback"
         for i in result.get("iterations", [])
     )
+
+
+def test_sanitize_text_normalizes_grouped_numeric_noise():
+    processor = DocumentProcessor(
+        enhancer=engine_mod.ImageEnhancer(),
+        ocr_config=engine_mod.TesseractConfig(),
+        engine_config=engine_mod.EngineConfig(),
+        reconstructor=None,
+    )
+
+    cleaned = processor.sanitize_text("4048-. 3700 045—")
+    assert cleaned == "4048 3700 045"
+
+    # Keep decimal/monetary formatting readable.
+    amount = processor.sanitize_text("Total: 1.250,00 EUR")
+    assert "1.250,00" in amount

@@ -199,6 +199,23 @@ class DocumentProcessor:
             # Remove excessive whitespace
             sanitized = re.sub(r"\s+", " ", sanitized).strip()
 
+            # Normalize OCR punctuation noise inside grouped numeric sequences
+            # (e.g., "4048-. 3700 045—" -> "4048 3700 045") while preserving
+            # common decimal formats like "1.250,00".
+            previous = ""
+            while previous != sanitized:
+                previous = sanitized
+                sanitized = re.sub(
+                    r"(\d{3,4})\s*[-\u2013\u2014\u2212\.,:;]+\s*(\d{3,4})",
+                    r"\1 \2",
+                    sanitized,
+                )
+            sanitized = re.sub(
+                r"(\d{3,4})[-\u2013\u2014\u2212\.,:;]+(?=\s|$)",
+                r"\1",
+                sanitized,
+            )
+
             # Limit reasonable text length (prevent memory issues)
             if len(sanitized) > 10000:
                 sanitized = sanitized[:10000] + "..."
