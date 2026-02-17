@@ -9,7 +9,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from ocr_service.config import Settings, get_settings
 from ocr_service.handlers import register_handlers
 from ocr_service.middleware import ProcessTimeAndLoggingMiddleware
-from ocr_service.routers import ocr, storage, system
+from ocr_service.routers import datasets, ocr, storage, system
 from ocr_service.utils.limiter import limiter
 from ocr_service.utils.monitoring import init_monitoring
 from ocr_service.utils.redis_factory import (
@@ -94,5 +94,6 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.include_router(system.router, tags=["System"])
     app.include_router(ocr.router, tags=["OCR"])
     app.include_router(storage.router, tags=["Storage"])
+    app.include_router(datasets.router, tags=["Datasets"])
 
     return app

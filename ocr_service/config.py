@@ -88,6 +88,9 @@ class Settings(BaseSettings):
     al_cycle_samples: int = 50
     al_n_clusters: int = 5
 
+    # Dataset Upload (protected)
+    dataset_upload_key: Optional[str] = None
+
     @field_validator("allowed_origins", mode="after")
     @classmethod
     def validate_origins(cls, v: list[str], info) -> list[str]:

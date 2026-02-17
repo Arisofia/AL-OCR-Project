@@ -54,6 +54,11 @@ import json, os
 keys = [
     "OCR_API_KEY",
     "S3_BUCKET_NAME",
+    "DATASET_UPLOAD_KEY",
+    "OPENAI_API_KEY",
+    "GEMINI_API_KEY",
+    "HUGGING_FACE_HUB_TOKEN",
+    "ENABLE_BIN_LOOKUP",
 ]
 
 desired = {k: os.environ.get(k) for k in keys if os.environ.get(k)}

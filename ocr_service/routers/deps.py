@@ -14,6 +14,7 @@ from ocr_service.utils.redis_factory import get_redis_client as create_redis_cli
 
 # Security and Identity Management
 api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
+dataset_key_header = APIKeyHeader(name="X-DATASET-KEY", auto_error=False)
 
 
 async def get_api_key(
@@ -32,6 +33,21 @@ async def get_api_key(
 def get_request_id(request: Request) -> str:
     """Extracts AWS Request ID from Mangum scope or defaults to local trace."""
     return get_request_id_from_scope(request.scope)
+
+
+async def get_dataset_upload_key(
+    header_value: Optional[str] = Security(dataset_key_header),
+    curr_settings: Settings = Depends(get_settings),
+) -> str:
+    """Enforces Dataset upload key for protected dataset endpoints."""
+    expected = (curr_settings.dataset_upload_key or "").strip()
+    if not expected:
+        raise HTTPException(status_code=503, detail="Dataset uploads are disabled")
+    if header_value == expected:
+        return header_value
+    raise HTTPException(
+        status_code=403, detail="Unauthorized: Invalid or missing Dataset key"
+    )
 
 
 def get_redis_client_dep(

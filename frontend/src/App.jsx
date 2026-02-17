@@ -3,14 +3,27 @@ import api from './api'
 import Header from './components/Header'
 import UploadCard from './components/UploadCard'
 import ResultCard from './components/ResultCard'
+import DatasetUploadCard from './components/DatasetUploadCard'
+import DatasetResultCard from './components/DatasetResultCard'
 import './App.css'
 
 function App() {
+  const [mode, setMode] = useState('ocr')
   const [file, setFile] = useState(null)
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [preview, setPreview] = useState(null)
   const [health, setHealth] = useState('checking')
+
+  const [datasetKey, setDatasetKey] = useState('')
+  const [datasetFiles, setDatasetFiles] = useState([])
+  const [dataset, setDataset] = useState('occlusion_cards')
+  const [split, setSplit] = useState('inbox')
+  const [docType, setDocType] = useState('bank_card')
+  const [occlusionType, setOcclusionType] = useState('finger')
+  const [notes, setNotes] = useState('')
+  const [datasetUploads, setDatasetUploads] = useState([])
+  const [datasetUploading, setDatasetUploading] = useState(false)
 
   useEffect(() => {
     const checkHealth = async () => {
@@ -66,23 +79,117 @@ function App() {
     }
   }
 
+  const handleDatasetFilesChange = (e) => {
+    const files = Array.from(e.target.files || [])
+    setDatasetFiles(files)
+    setDatasetUploads([])
+  }
+
+  const handleDatasetUpload = async () => {
+    if (!datasetKey || datasetFiles.length === 0) return
+
+    setDatasetUploading(true)
+
+    const baseId = Date.now()
+    const initial = datasetFiles.map((f, idx) => ({
+      id: `${baseId}-${idx}`,
+      fileName: f.name,
+      status: 'pending'
+    }))
+    setDatasetUploads(initial)
+
+    for (let idx = 0; idx < datasetFiles.length; idx++) {
+      const f = datasetFiles[idx]
+      const rowId = `${baseId}-${idx}`
+      setDatasetUploads((prev) =>
+        prev.map((r) => (r.id === rowId ? { ...r, status: 'uploading' } : r))
+      )
+
+      const formData = new FormData()
+      formData.append('file', f)
+      formData.append('dataset', dataset)
+      formData.append('split', split)
+      formData.append('doc_type', docType)
+      formData.append('occlusion_type', occlusionType)
+      formData.append('notes', notes)
+
+      try {
+        const response = await api.post('/datasets/upload', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'X-DATASET-KEY': datasetKey
+          }
+        })
+        setDatasetUploads((prev) =>
+          prev.map((r) =>
+            r.id === rowId
+              ? { ...r, status: 'success', ...response.data }
+              : r
+          )
+        )
+      } catch (error) {
+        const errorMsg =
+          error.response?.data?.detail || 'Error uploading dataset image'
+        setDatasetUploads((prev) =>
+          prev.map((r) =>
+            r.id === rowId ? { ...r, status: 'error', detail: errorMsg } : r
+          )
+        )
+      }
+    }
+
+    setDatasetUploading(false)
+  }
+
   return (
     <div className="app-container">
-      <Header health={health} />
-      <main className="main-grid">
-        <UploadCard
-          file={file}
-          preview={preview}
-          loading={loading}
-          health={health}
-          onFileChange={handleFileChange}
-          onUpload={handleUpload}
-        />
-        <ResultCard
-          result={result}
-          loading={loading}
-        />
-      </main>
+      <Header
+        health={health}
+        mode={mode}
+        onModeChange={setMode}
+      />
+      {mode === 'ocr' ? (
+        <main className="main-grid">
+          <UploadCard
+            file={file}
+            preview={preview}
+            loading={loading}
+            health={health}
+            onFileChange={handleFileChange}
+            onUpload={handleUpload}
+          />
+          <ResultCard
+            result={result}
+            loading={loading}
+          />
+        </main>
+      ) : (
+        <main className="main-grid">
+          <DatasetUploadCard
+            files={datasetFiles}
+            uploading={datasetUploading}
+            health={health}
+            datasetKey={datasetKey}
+            dataset={dataset}
+            split={split}
+            docType={docType}
+            occlusionType={occlusionType}
+            notes={notes}
+            onDatasetKeyChange={setDatasetKey}
+            onDatasetChange={setDataset}
+            onSplitChange={setSplit}
+            onDocTypeChange={setDocType}
+            onOcclusionTypeChange={setOcclusionType}
+            onNotesChange={setNotes}
+            onFilesChange={handleDatasetFilesChange}
+            onUpload={handleDatasetUpload}
+          />
+          <DatasetResultCard
+            uploads={datasetUploads}
+            uploading={datasetUploading}
+          />
+        </main>
+      )}
     </div>
   )
 }

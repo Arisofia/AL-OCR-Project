@@ -31,6 +31,36 @@ header {
   margin-bottom: 3rem;
 }
 
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.mode-switch {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  overflow: hidden;
+  background: var(--card-bg);
+}
+
+.mode-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0.45rem 0.85rem;
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.mode-btn.active {
+  background: #eff6ff;
+  color: var(--primary);
+}
+
 .logo-section h1 {
   margin: 0;
   font-size: 1.5rem;
@@ -76,6 +106,114 @@ header {
   border-radius: 1rem;
   border: 1px solid var(--border);
   box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.card-title h2 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1rem;
+}
+
+.hint {
+  margin: 0.25rem 0 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.hint code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.72rem;
+  background: #f1f5f9;
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  color: #334155;
+}
+
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1rem 0 1rem 0;
+}
+
+.row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.field span {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #475569;
+}
+
+.text-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.65rem;
+  font-size: 0.85rem;
+  outline: none;
+  background: #fff;
+  color: var(--text-main);
+}
+
+.text-input:focus {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgb(147 197 253 / 0.35);
+}
+
+.textarea {
+  resize: vertical;
+}
+
+.upload-row {
+  display: flex;
+  align-items: flex-start;
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+}
+
+.upload-row__left {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+
+.upload-row__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.upload-row__name {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.upload-row__sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  word-break: break-word;
+}
+
+.upload-row__sub code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 6px;
 }
 
 .dropzone {
