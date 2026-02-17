@@ -226,6 +226,129 @@ class DocumentProcessor:
             logger.warning("Text sanitization failed: %s", e)
             return ""
 
+    @staticmethod
+    def _digit_count(text: str) -> int:
+        """Count numeric characters in a text string."""
+        return sum(char.isdigit() for char in text)
+
+    def _needs_digit_rescue(self, text: str) -> bool:
+        """
+        Detect ambiguous OCR output that is mostly numeric but contains
+        letter/symbol artifacts (e.g., '4048 3700 04M!').
+        """
+        compact = re.sub(r"\s+", "", text or "")
+        if not compact:
+            return False
+
+        digits = self._digit_count(compact)
+        if digits < 8:
+            return False
+
+        has_ambiguous = any(char.isalpha() or char in "!|" for char in compact)
+        if not has_ambiguous:
+            return False
+
+        return (digits / len(compact)) >= 0.65
+
+    def _prepare_digit_focus_image(self, img: np.ndarray) -> np.ndarray:
+        """Generate a high-contrast frame optimized for digit OCR retries."""
+        if len(img.shape) == 3:
+            gray = cast(
+                np.ndarray,
+                cv2.cvtColor(  # pylint: disable=no-member
+                    img, cv2.COLOR_BGR2GRAY  # pylint: disable=no-member
+                ),
+            )
+        else:
+            gray = img
+
+        upscaled = self.enhancer.upscale_and_smooth(gray, scale=2)
+        denoised = self.enhancer.denoise(upscaled)
+        return self.enhancer.apply_threshold(denoised)
+
+    @staticmethod
+    def _normalize_digit_candidate(text: str) -> str:
+        """Keep only digits/spaces from numeric-focused OCR retries."""
+        candidate = re.sub(r"[^0-9\s]", "", text or "")
+        candidate = re.sub(r"\s+", " ", candidate).strip()
+        if not candidate:
+            return ""
+
+        compact = candidate.replace(" ", "")
+        if len(compact) >= 12 and " " not in candidate:
+            return " ".join(
+                compact[i : i + 4] for i in range(0, len(compact), 4)
+            ).strip()
+        return candidate
+
+    @staticmethod
+    def _digit_candidate_score(text: str) -> tuple[int, int, int]:
+        """Score candidate text by digit density while penalizing non-digits."""
+        digits = sum(char.isdigit() for char in text)
+        noise = sum((not char.isdigit()) and (not char.isspace()) for char in text)
+        compact_len = len(text.replace(" ", ""))
+        return (digits, -noise, compact_len)
+
+    async def _rescue_ambiguous_digits(
+        self, img: np.ndarray, base_text: str
+    ) -> str:
+        """
+        Re-run OCR in numeric-focused mode when mixed glyphs appear.
+        No prediction/Luhn completion: only OCR retries on pixels.
+        """
+        if not self._needs_digit_rescue(base_text):
+            return base_text
+
+        try:
+            focus_img = await asyncio.to_thread(self._prepare_digit_focus_image, img)
+        except Exception as e:
+            logger.warning("Digit rescue preprocessing failed: %s", e)
+            return base_text
+
+        base_digits = self._digit_count(base_text)
+        best_text = base_text
+        best_score = self._digit_candidate_score(base_text)
+
+        for psm in (7, 6, 11):
+            config = (
+                f"--oem {self.ocr_config.oem} --psm {psm} -l eng "
+                "-c tessedit_char_whitelist=0123456789 "
+                "-c classify_bln_numeric_mode=1"
+            )
+            try:
+                candidate_raw = await asyncio.to_thread(
+                    pytesseract.image_to_string, focus_img, config=config
+                )
+            except (
+                pytesseract.pytesseract.TesseractNotFoundError,
+                pytesseract.pytesseract.TesseractError,
+            ):
+                break
+            except Exception as e:
+                logger.debug("Digit rescue OCR pass failed (psm=%d): %s", psm, e)
+                continue
+
+            candidate = self._normalize_digit_candidate(candidate_raw)
+            if not candidate:
+                continue
+
+            candidate_digits = self._digit_count(candidate)
+            if candidate_digits < base_digits:
+                continue
+
+            score = self._digit_candidate_score(candidate)
+            if score > best_score:
+                best_text = candidate
+                best_score = score
+
+        if best_text != base_text:
+            logger.info(
+                "Digit rescue improved OCR output: '%s' -> '%s'",
+                base_text,
+                best_text,
+            )
+        return best_text
+
     async def extract_text_textract(self, image_bytes: bytes) -> str:
         """
         Secondary fallback using AWS Textract:
@@ -536,6 +659,7 @@ class DocumentProcessor:
                 )
                 # Sanitize Tesseract output
                 text = self.sanitize_text(text)
+                text = await self._rescue_ambiguous_digits(img, text)
                 logger.info("Tesseract completed - extracted %d characters", len(text))
             status = "success"
             return text
@@ -601,7 +725,8 @@ class DocumentProcessor:
                 extracted = await asyncio.to_thread(
                     pytesseract.image_to_string, roi, config=self.ocr_config.flags
                 )
-                return self.sanitize_text(extracted)
+                cleaned = self.sanitize_text(extracted)
+                return await self._rescue_ambiguous_digits(roi, cleaned)
             except Exception:
                 logger.exception(
                     "Region extraction failed | bbox=%s", region.get("bbox")

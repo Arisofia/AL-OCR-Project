@@ -383,3 +383,40 @@ def test_preprocess_frame_later_iterations_apply_pixel_rescue():
     assert rescued.shape[0] > img.shape[0]
     assert rescued.shape[1] > img.shape[1]
     assert rescued.dtype == np.uint8
+
+
+@pytest.mark.asyncio
+async def test_extract_text_applies_digit_rescue_on_ambiguous_output(monkeypatch):
+    processor = DocumentProcessor(
+        enhancer=engine_mod.ImageEnhancer(),
+        ocr_config=engine_mod.TesseractConfig(),
+        engine_config=engine_mod.EngineConfig(),
+        reconstructor=None,
+    )
+    calls = []
+
+    def _fake_ocr(_img, config):
+        calls.append(config)
+        if "tessedit_char_whitelist=0123456789" in config:
+            return "4048 3700 0453"
+        return "4048 3700 04M!"
+
+    monkeypatch.setattr(engine_mod.pytesseract, "image_to_string", _fake_ocr)
+    img = np.zeros((80, 240, 3), dtype=np.uint8)
+
+    result = await processor.extract_text(img)
+
+    assert result == "4048 3700 0453"
+    assert any("tessedit_char_whitelist=0123456789" in c for c in calls)
+
+
+def test_digit_rescue_not_required_for_clean_numeric_text():
+    processor = DocumentProcessor(
+        enhancer=engine_mod.ImageEnhancer(),
+        ocr_config=engine_mod.TesseractConfig(),
+        engine_config=engine_mod.EngineConfig(),
+        reconstructor=None,
+    )
+
+    assert processor._needs_digit_rescue("4048 3700 0453") is False
+    assert processor._needs_digit_rescue("4048 3700 04M!") is True
