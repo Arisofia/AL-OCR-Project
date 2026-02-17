@@ -27,3 +27,4 @@ class EngineConfig(BaseModel):
     confidence_threshold: float = 0.5
     max_upscale_factor: float = 2.0
     max_long_side_px: int = 3000
+    enable_bin_lookup: bool = False

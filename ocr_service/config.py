@@ -48,6 +48,7 @@ class Settings(BaseSettings):
 
     enable_reconstruction: bool = False
     ocr_iterations: int = 3
+    enable_bin_lookup: bool = False
 
     # Redis Configuration
     redis_host: str = "localhost"

@@ -57,6 +57,7 @@ def get_ocr_engine(
     config = EngineConfig(
         max_iterations=curr_settings.ocr_iterations,
         enable_reconstruction=curr_settings.enable_reconstruction,
+        enable_bin_lookup=curr_settings.enable_bin_lookup,
     )
     return IterativeOCREngine(config=config)
 

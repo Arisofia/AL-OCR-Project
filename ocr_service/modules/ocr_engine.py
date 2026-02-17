@@ -1307,7 +1307,9 @@ class IterativeOCREngine:
                         fallback_text
                     )
                     fallback_analysis = DocumentIntelligence.analyze(
-                        fallback_text, layout_type="unknown"
+                        fallback_text,
+                        layout_type="unknown",
+                        include_bin_info=self.config.enable_bin_lookup,
                     )
                     status = "success"
                     return {
@@ -1399,7 +1401,9 @@ class IterativeOCREngine:
             )
             confidence = self.confidence_scorer.calculate(extracted_text)
             analysis = DocumentIntelligence.analyze(
-                extracted_text, layout_type=ctx.layout_type
+                extracted_text,
+                layout_type=ctx.layout_type,
+                include_bin_info=self.config.enable_bin_lookup,
             )
 
             self._schedule_learning(
@@ -1635,7 +1639,11 @@ class IterativeOCREngine:
         # Final sanitization of the best text before response
         final_text = self.processor.sanitize_text(ctx.best_text)
         final_text = self.processor._mark_uncertain_partial_card_tail(final_text)
-        analysis = DocumentIntelligence.analyze(final_text, layout_type=ctx.layout_type)
+        analysis = DocumentIntelligence.analyze(
+            final_text,
+            layout_type=ctx.layout_type,
+            include_bin_info=self.config.enable_bin_lookup,
+        )
         resp = {
             "text": final_text,
             "confidence": ctx.best_confidence,

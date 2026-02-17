@@ -34,6 +34,7 @@ class RedisWorker:
         engine_config = EngineConfig(
             max_iterations=self.settings.ocr_iterations,
             enable_reconstruction=self.settings.enable_reconstruction,
+            enable_bin_lookup=self.settings.enable_bin_lookup,
         )
         self.engine = IterativeOCREngine(config=engine_config)
         self.queue_name = "ocr_tasks"

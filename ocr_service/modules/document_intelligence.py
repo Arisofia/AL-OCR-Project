@@ -5,17 +5,26 @@ Document intelligence helpers:
 - validate detected card sequences with Luhn (no prediction/completion)
 """
 
+import logging
 import re
 from re import Pattern
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Optional
+
+import httpx
 
 __all__ = ["DocumentIntelligence"]
+
+logger = logging.getLogger("ocr-service.document-intelligence")
 
 
 class DocumentIntelligence:
     """Post-OCR analysis for document type and card-number metadata."""
 
     _CARD_PATTERN: ClassVar[Pattern[str]] = re.compile(r"(?:\d[\s\-]*){11,19}")
+    _BINLIST_URL: ClassVar[str] = "https://lookup.binlist.net/{prefix}"
+    _BIN_LOOKUP_TIMEOUT_SECONDS: ClassVar[float] = 2.0
+    _BIN_INFO_CACHE: ClassVar[dict[str, Optional[dict[str, Any]]]] = {}
+    _BIN_CACHE_MAX_SIZE: ClassVar[int] = 512
 
     _CARD_KEYWORDS: ClassVar[set[str]] = {
         "tarjeta",
@@ -61,8 +70,68 @@ class DocumentIntelligence:
         "id",
     }
 
+    @staticmethod
+    def _normalize_bin_prefix(value: str) -> str:
+        """Normalize BIN input and return a 6-8 digit lookup prefix."""
+        digits = re.sub(r"\D", "", value or "")
+        if len(digits) < 6:
+            return ""
+        return digits[:8] if len(digits) >= 8 else digits[:6]
+
     @classmethod
-    def analyze(cls, text: str, layout_type: str = "unknown") -> dict[str, Any]:
+    def _cache_bin_info(
+        cls, prefix: str, value: Optional[dict[str, Any]]
+    ) -> Optional[dict[str, Any]]:
+        """Store BIN lookup result in bounded in-memory cache."""
+        if len(cls._BIN_INFO_CACHE) >= cls._BIN_CACHE_MAX_SIZE:
+            oldest = next(iter(cls._BIN_INFO_CACHE), None)
+            if oldest is not None:
+                cls._BIN_INFO_CACHE.pop(oldest, None)
+        cls._BIN_INFO_CACHE[prefix] = value
+        return dict(value) if value else None
+
+    @classmethod
+    def fetch_bin_info(cls, bin_prefix: str) -> Optional[dict[str, Any]]:
+        """
+        Query BINLIST for issuer/country/type metadata using first 6-8 digits.
+        This enriches metadata only; it never completes hidden PAN digits.
+        """
+        normalized = cls._normalize_bin_prefix(bin_prefix)
+        if not normalized:
+            return None
+
+        if normalized in cls._BIN_INFO_CACHE:
+            cached = cls._BIN_INFO_CACHE[normalized]
+            return dict(cached) if cached else None
+
+        try:
+            response = httpx.get(
+                cls._BINLIST_URL.format(prefix=normalized),
+                headers={"Accept-Version": "3"},
+                timeout=cls._BIN_LOOKUP_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            info = {
+                "issuer": payload.get("bank", {}).get("name") or "unknown",
+                "country": payload.get("country", {}).get("name") or "unknown",
+                "type": payload.get("type") or "unknown",
+                "brand": payload.get("brand") or "unknown",
+                "scheme": payload.get("scheme") or "unknown",
+            }
+            return cls._cache_bin_info(normalized, info)
+        except (httpx.HTTPError, ValueError) as e:
+            logger.debug("BIN lookup failed for prefix %s: %s", normalized, e)
+            cls._cache_bin_info(normalized, None)
+            return None
+
+    @classmethod
+    def analyze(
+        cls,
+        text: str,
+        layout_type: str = "unknown",
+        include_bin_info: bool = False,
+    ) -> dict[str, Any]:
         """
         Analyze OCR text and return:
         - document_type
@@ -71,14 +140,17 @@ class DocumentIntelligence:
         candidates = cls._extract_card_candidates(text)
         card_rows = []
         for number in candidates:
-            card_rows.append(
-                {
-                    "masked": cls._mask_number(number),
-                    "length": len(number),
-                    "luhn_valid": cls._is_valid_luhn(number),
-                    "brand_guess": cls._guess_card_brand(number),
-                }
-            )
+            row = {
+                "masked": cls._mask_number(number),
+                "length": len(number),
+                "luhn_valid": cls._is_valid_luhn(number),
+                "brand_guess": cls._guess_card_brand(number),
+            }
+            if include_bin_info:
+                bin_info = cls.fetch_bin_info(number)
+                if bin_info:
+                    row["bin_info"] = bin_info
+            card_rows.append(row)
 
         luhn_valid_count = sum(1 for row in card_rows if row["luhn_valid"])
         card_analysis = {
