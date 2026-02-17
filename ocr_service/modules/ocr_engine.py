@@ -922,6 +922,39 @@ class DocumentProcessor:
             -noise,
         )
 
+    def _trim_spurious_trailing_zero_variant(self, text: str) -> str:
+        """
+        Build a conservative variant that drops one trailing zero when OCR likely
+        over-read an incomplete card tail (e.g. "4048 3700 0450").
+        """
+        cleaned = re.sub(r"\s+", " ", text or "").strip()
+        if not cleaned or not cleaned.endswith("0"):
+            return ""
+
+        groups = re.findall(r"\d+", cleaned)
+        if len(groups) < 2 or len(groups[-1]) != 4:
+            return ""
+
+        compact = "".join(groups)
+        if len(compact) < 9 or len(compact) >= 13:
+            return ""
+
+        analysis = DocumentIntelligence.analyze(cleaned)
+        card_analysis = analysis.get("card_analysis", {})
+        if card_analysis.get("luhn_valid_count", 0) > 0:
+            return ""
+
+        candidates = card_analysis.get("candidates", [])
+        if not candidates:
+            return ""
+        if any(row.get("length", 0) >= 13 for row in candidates):
+            return ""
+
+        trimmed = compact[:-1]
+        if len(trimmed) < 8:
+            return ""
+        return self._format_digits_like_base(trimmed, cleaned)
+
     async def _extract_text_card_mode(self, img: np.ndarray) -> str:
         """
         Card-specific OCR strategy:
@@ -938,6 +971,13 @@ class DocumentProcessor:
             if not candidate_text:
                 return
             candidates.append((label, candidate_text))
+
+            trimmed_variant = self._trim_spurious_trailing_zero_variant(
+                candidate_text
+            )
+            if trimmed_variant and trimmed_variant != candidate_text:
+                candidates.append((f"{label}-trim", trimmed_variant))
+
             if focus_img is None:
                 return
             try:

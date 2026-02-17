@@ -532,6 +532,54 @@ async def test_extract_text_card_mode_prefers_box_rescue_partial_over_noise(
 
 
 @pytest.mark.asyncio
+async def test_extract_text_card_mode_trims_spurious_trailing_zero(monkeypatch):
+    processor = DocumentProcessor(
+        enhancer=engine_mod.ImageEnhancer(),
+        ocr_config=engine_mod.TesseractConfig(),
+        engine_config=engine_mod.EngineConfig(),
+        reconstructor=None,
+    )
+    processor.set_active_doc_type("bank_card")
+
+    async def _passthrough_rescue(_self, _img, text):
+        return text
+
+    def _fake_ocr(_img, config):
+        _ = config
+        return "4048 3700 0450"
+
+    def _fake_prepare(_self, img):
+        _ = img
+        return np.zeros((160, 480), dtype=np.uint8)
+
+    def _same_box_rescue(_self, _focus_img, base_text, allow_digit_drop=False):
+        _ = allow_digit_drop
+        return base_text
+
+    monkeypatch.setattr(
+        DocumentProcessor,
+        "_rescue_ambiguous_digits",
+        _passthrough_rescue,
+    )
+    monkeypatch.setattr(engine_mod.pytesseract, "image_to_string", _fake_ocr)
+    monkeypatch.setattr(
+        DocumentProcessor,
+        "_prepare_digit_focus_image",
+        _fake_prepare,
+    )
+    monkeypatch.setattr(
+        DocumentProcessor,
+        "_char_box_digit_rescue",
+        _same_box_rescue,
+    )
+
+    img = np.zeros((80, 240, 3), dtype=np.uint8)
+    result = await processor.extract_text(img)
+
+    assert result == "4048 3700 045"
+
+
+@pytest.mark.asyncio
 async def test_process_image_activates_card_doc_type(monkeypatch):
     engine = engine_mod.IterativeOCREngine(
         config=engine_mod.EngineConfig(max_iterations=1, confidence_threshold=0.5)
