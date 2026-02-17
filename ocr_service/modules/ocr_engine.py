@@ -174,6 +174,34 @@ class DocumentProcessor:
                 return textract_text
             return ""
 
+    def _sanitize_text(self, text: str) -> str:
+        """Sanitize and validate extracted text to prevent corruption."""
+        if not text or not isinstance(text, str):
+            return ""
+
+        try:
+            # Ensure valid UTF-8 encoding
+            text = text.encode('utf-8', errors='ignore').decode('utf-8')
+
+            # Remove non-printable characters but keep basic punctuation
+            import string
+            allowed_chars = string.ascii_letters + string.digits + string.punctuation + " \n\t"
+            sanitized = ''.join(c for c in text if c in allowed_chars or ord(c) > 127)
+
+            # Remove excessive whitespace
+            import re
+            sanitized = re.sub(r'\s+', ' ', sanitized).strip()
+
+            # Limit reasonable text length (prevent memory issues)
+            if len(sanitized) > 10000:
+                sanitized = sanitized[:10000] + "..."
+
+            return sanitized
+
+        except Exception as e:
+            logger.warning("Text sanitization failed: %s", e)
+            return ""
+
     async def extract_text_textract(self, image_bytes: bytes) -> str:
         """
         Secondary fallback using AWS Textract:
@@ -193,12 +221,22 @@ class DocumentProcessor:
             lines = []
             for block in response.get("Blocks", []):
                 if block.get("BlockType") == "LINE" and block.get("Text"):
-                    text = block.get("Text", "").strip()
-                    if text:
-                        lines.append(text)
-                        logger.debug("Textract LINE block: '%s'", text)
+                    text = block.get("Text", "")
+                    if text and isinstance(text, str):
+                        # Sanitize and validate the text
+                        try:
+                            # Ensure it's valid UTF-8 and contains only printable characters
+                            sanitized = self._sanitize_text(text.strip())
+                            if sanitized:
+                                lines.append(sanitized)
+                                logger.debug("Textract LINE block: '%s'", sanitized)
+                        except (UnicodeDecodeError, UnicodeEncodeError) as e:
+                            logger.warning("Skipping corrupted text block: %s", e)
+                            continue
 
             result = "\n".join(lines).strip()
+            # Final validation of the complete result
+            result = self._sanitize_text(result)
             logger.info("Textract final result: '%s' (length: %d)", result, len(result))
             return result
 
@@ -275,10 +313,16 @@ class DocumentProcessor:
                         page_text = []
                         for block in blocks:
                             if block.get("BlockType") == "LINE" and block.get("Text"):
-                                text = block.get("Text", "").strip()
-                                if text:
-                                    page_text.append(text)
-                                    logger.debug("Async Textract LINE block: '%s'", text)
+                                text = block.get("Text", "")
+                                if text and isinstance(text, str):
+                                    try:
+                                        sanitized = self._sanitize_text(text.strip())
+                                        if sanitized:
+                                            page_text.append(sanitized)
+                                            logger.debug("Async Textract LINE block: '%s'", sanitized)
+                                    except (UnicodeDecodeError, UnicodeEncodeError) as e:
+                                        logger.warning("Skipping corrupted async text block: %s", e)
+                                        continue
                         all_text.extend(page_text)
 
                         next_token = result_response.get("NextToken")
@@ -286,6 +330,8 @@ class DocumentProcessor:
                             break
 
                     final_text = "\n".join(line for line in all_text if line).strip()
+                    # Final sanitization of the complete result
+                    final_text = self._sanitize_text(final_text)
                     logger.info(
                         "Async Textract completed: extracted %d lines from %s, final text: '%s' (length: %d)",
                         len(all_text),
@@ -429,6 +475,8 @@ class DocumentProcessor:
                 text = await asyncio.to_thread(
                     pytesseract.image_to_string, img, config=self.ocr_config.flags
                 )
+                # Sanitize Tesseract output
+                text = self._sanitize_text(text)
                 logger.info("Tesseract completed - extracted %d characters", len(text))
             status = "success"
             return text
@@ -739,11 +787,13 @@ class IterativeOCREngine:
 
     def _build_response(self, ctx: DocumentContext) -> dict[str, Any]:
         """Formats the final engine output."""
+        # Final sanitization of the best text before response
+        final_text = self._sanitize_text(ctx.best_text)
         resp = {
-            "text": ctx.best_text,
+            "text": final_text,
             "confidence": ctx.best_confidence,
             "iterations": ctx.iteration_history,
-            "success": len(ctx.best_text) > 0,
+            "success": len(final_text) > 0,
         }
         if ctx.reconstruction_info:
             resp["reconstruction"] = ctx.reconstruction_info
