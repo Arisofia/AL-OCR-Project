@@ -1053,6 +1053,15 @@ class DocumentProcessor:
         Card-specific OCR strategy:
         run multiple numeric-focused passes and pick the best validated output.
         """
+        # Tesseract often drops glyphs touching the image boundary. Add a
+        # conservative white border to help recover trailing digits at edges.
+        try:
+            h, w = img.shape[:2]
+            pad = min(32, max(8, int(round(0.02 * max(h, w)))))
+            img = ImageToolkit.prepare_roi(img, padding=pad)
+        except Exception as exc:
+            logger.debug("Card-mode border padding failed: %s", exc)
+
         candidates: list[tuple[str, str]] = []
         focus_img: Optional[np.ndarray] = None
         try:
