@@ -444,6 +444,25 @@ def test_preprocess_frame_later_iterations_apply_pixel_rescue():
     assert rescued.dtype == np.uint8
 
 
+def test_remove_skin_occlusion_whitens_detected_skin_regions():
+    processor = DocumentProcessor(
+        enhancer=engine_mod.ImageEnhancer(),
+        ocr_config=engine_mod.TesseractConfig(),
+        engine_config=engine_mod.EngineConfig(),
+        reconstructor=None,
+    )
+
+    img = np.zeros((30, 30, 3), dtype=np.uint8)
+    skin_hsv = np.uint8([[[10, 150, 220]]])
+    skin_bgr = cv2.cvtColor(skin_hsv, cv2.COLOR_HSV2BGR)[0, 0]
+    img[8:22, 8:22] = skin_bgr
+
+    cleaned = processor._remove_skin_occlusion(img)
+
+    assert np.all(cleaned[12, 12] == 255)
+    assert np.all(cleaned[2, 2] == img[2, 2])
+
+
 @pytest.mark.asyncio
 async def test_extract_text_uses_card_strategy_when_doc_type_is_bank_card(
     monkeypatch,

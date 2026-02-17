@@ -839,11 +839,42 @@ class DocumentProcessor:
             latency = time.time() - start_time
             OCR_RECONSTRUCTION_LATENCY.labels(status=status).observe(latency)
 
+    def _remove_skin_occlusion(self, img: np.ndarray) -> np.ndarray:
+        """
+        Remove likely finger/skin occlusion regions for card-like documents.
+        This is conservative and never guesses missing digits.
+        """
+        if len(img.shape) != 3:
+            return img
+
+        hsv = cast(
+            np.ndarray,
+            cv2.cvtColor(  # pylint: disable=no-member
+                img, cv2.COLOR_BGR2HSV  # pylint: disable=no-member
+            ),
+        )
+        lower_skin = np.array([0, 40, 80], dtype=np.uint8)
+        upper_skin = np.array([25, 255, 255], dtype=np.uint8)
+        skin_mask = cv2.inRange(  # pylint: disable=no-member
+            hsv, lower_skin, upper_skin
+        )
+
+        ratio = float(np.count_nonzero(skin_mask)) / float(skin_mask.size or 1)
+        if ratio < 0.01 or ratio > 0.60:
+            return img
+
+        cleaned = img.copy()
+        cleaned[skin_mask > 0] = (255, 255, 255)
+        return cleaned
+
     def preprocess_frame(
         self, img: np.ndarray, iteration: int, use_recon: bool
     ) -> np.ndarray:
         """Applies iterative preprocessing with a pixel-rescue pass."""
         working = img
+        if self._is_card_doc_type():
+            working = self._remove_skin_occlusion(working)
+
         if use_recon and iteration == 0 and self.reconstructor:
             rectified = self.reconstructor.remove_redactions(working)
             working = self.reconstructor.remove_color_overlay(rectified)
