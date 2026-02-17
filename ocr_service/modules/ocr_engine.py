@@ -10,6 +10,8 @@ Refactored into modular components for better maintainability and performance.
 import asyncio
 import logging
 import os
+import re
+import string
 import time
 from dataclasses import dataclass, field
 from io import BytesIO
@@ -174,23 +176,28 @@ class DocumentProcessor:
                 return textract_text
             return ""
 
-    def _sanitize_text(self, text: str) -> str:
+    def sanitize_text(self, text: str) -> str:
         """Sanitize and validate extracted text to prevent corruption."""
         if not text or not isinstance(text, str):
             return ""
 
         try:
             # Ensure valid UTF-8 encoding
-            text = text.encode('utf-8', errors='ignore').decode('utf-8')
+            text = text.encode("utf-8", errors="ignore").decode("utf-8")
 
             # Remove non-printable characters but keep basic punctuation
-            import string
-            allowed_chars = string.ascii_letters + string.digits + string.punctuation + " \n\t"
-            sanitized = ''.join(c for c in text if c in allowed_chars or ord(c) > 127)
+            allowed_chars = (
+                string.ascii_letters
+                + string.digits
+                + string.punctuation
+                + " \n\t"
+            )
+            sanitized = "".join(
+                c for c in text if c in allowed_chars or ord(c) > 127
+            )
 
             # Remove excessive whitespace
-            import re
-            sanitized = re.sub(r'\s+', ' ', sanitized).strip()
+            sanitized = re.sub(r"\s+", " ", sanitized).strip()
 
             # Limit reasonable text length (prevent memory issues)
             if len(sanitized) > 10000:
@@ -215,18 +222,21 @@ class DocumentProcessor:
 
     async def _extract_text_textract_sync(self, image_bytes: bytes) -> str:
         """Synchronous Textract for smaller documents."""
-        def _detect_lines() -> str:
+        def _detect_lines() -> tuple[str, int, int]:
             client = boto3.client("textract")
             response = client.detect_document_text(Document={"Bytes": image_bytes})
+            blocks = response.get("Blocks", [])
             lines = []
-            for block in response.get("Blocks", []):
+            line_blocks = 0
+            for block in blocks:
                 if block.get("BlockType") == "LINE" and block.get("Text"):
+                    line_blocks += 1
                     text = block.get("Text", "")
                     if text and isinstance(text, str):
                         # Sanitize and validate the text
                         try:
-                            # Ensure it's valid UTF-8 and contains only printable characters
-                            sanitized = self._sanitize_text(text.strip())
+                            # Ensure output remains safe for downstream consumers.
+                            sanitized = self.sanitize_text(text.strip())
                             if sanitized:
                                 lines.append(sanitized)
                                 logger.debug("Textract LINE block: '%s'", sanitized)
@@ -236,22 +246,31 @@ class DocumentProcessor:
 
             result = "\n".join(lines).strip()
             # Final validation of the complete result
-            result = self._sanitize_text(result)
-            logger.info("Textract final result: '%s' (length: %d)", result, len(result))
-            return result
+            result = self.sanitize_text(result)
+            logger.info("Textract final result length: %d", len(result))
+            return result, len(blocks), line_blocks
 
         try:
-            text = await asyncio.to_thread(_detect_lines)
+            text, total_blocks, line_blocks = await asyncio.to_thread(_detect_lines)
             logger.info(
-                "Sync Textract OCR completed - extracted %d characters from %d blocks",
-                len(text), len([b for b in response.get("Blocks", []) if b.get("BlockType") == "LINE"])
+                "Sync Textract OCR completed - extracted %d chars from "
+                "%d LINE blocks (total=%d)",
+                len(text),
+                line_blocks,
+                total_blocks,
             )
             if text:
-                logger.info("Sync Textract OCR succeeded - text preview: %s", text[:100])
+                logger.info(
+                    "Sync Textract OCR succeeded - text preview: %s",
+                    text[:100],
+                )
             else:
-                logger.warning("Sync Textract OCR returned empty text - response blocks: %d total, %d LINE blocks",
-                              len(response.get("Blocks", [])),
-                              len([b for b in response.get("Blocks", []) if b.get("BlockType") == "LINE"]))
+                logger.warning(
+                    "Sync Textract OCR returned empty text - response blocks: "
+                    "%d total, %d LINE blocks",
+                    total_blocks,
+                    line_blocks,
+                )
             return text
         except (ClientError, BotoCoreError) as e:
             logger.error("Sync Textract OCR failed: %s", e)
@@ -316,12 +335,21 @@ class DocumentProcessor:
                                 text = block.get("Text", "")
                                 if text and isinstance(text, str):
                                     try:
-                                        sanitized = self._sanitize_text(text.strip())
+                                        sanitized = self.sanitize_text(text.strip())
                                         if sanitized:
                                             page_text.append(sanitized)
-                                            logger.debug("Async Textract LINE block: '%s'", sanitized)
-                                    except (UnicodeDecodeError, UnicodeEncodeError) as e:
-                                        logger.warning("Skipping corrupted async text block: %s", e)
+                                            logger.debug(
+                                                "Async LINE block: '%s'",
+                                                sanitized,
+                                            )
+                                    except (
+                                        UnicodeDecodeError,
+                                        UnicodeEncodeError,
+                                    ) as e:
+                                        logger.warning(
+                                            "Skipping corrupted async text block: %s",
+                                            e,
+                                        )
                                         continue
                         all_text.extend(page_text)
 
@@ -331,13 +359,13 @@ class DocumentProcessor:
 
                     final_text = "\n".join(line for line in all_text if line).strip()
                     # Final sanitization of the complete result
-                    final_text = self._sanitize_text(final_text)
+                    final_text = self.sanitize_text(final_text)
                     logger.info(
-                        "Async Textract completed: extracted %d lines from %s, final text: '%s' (length: %d)",
+                        "Async Textract completed: %d lines from %s "
+                        "(final length: %d)",
                         len(all_text),
                         job_id,
-                        final_text,
-                        len(final_text)
+                        len(final_text),
                     )
                     return final_text
 
@@ -369,8 +397,10 @@ class DocumentProcessor:
             text = await asyncio.to_thread(_start_async_detection)
             if text:
                 logger.info(
-                    "Async Textract OCR succeeded - extracted %d characters, text preview: %s",
-                    len(text), text[:100]
+                    "Async Textract OCR succeeded - extracted %d characters, "
+                    "text preview: %s",
+                    len(text),
+                    text[:100],
                 )
             else:
                 logger.warning("Async Textract OCR returned empty text")
@@ -471,12 +501,15 @@ class DocumentProcessor:
                 logger.info("Extracting text from %d regions", len(regions))
                 text = await self._extract_from_regions(img, regions)
             else:
-                logger.info("Starting Tesseract OCR on full page (shape: %s)", img.shape)
+                logger.info(
+                    "Starting Tesseract OCR on full page (shape: %s)",
+                    img.shape,
+                )
                 text = await asyncio.to_thread(
                     pytesseract.image_to_string, img, config=self.ocr_config.flags
                 )
                 # Sanitize Tesseract output
-                text = self._sanitize_text(text)
+                text = self.sanitize_text(text)
                 logger.info("Tesseract completed - extracted %d characters", len(text))
             status = "success"
             return text
@@ -788,7 +821,7 @@ class IterativeOCREngine:
     def _build_response(self, ctx: DocumentContext) -> dict[str, Any]:
         """Formats the final engine output."""
         # Final sanitization of the best text before response
-        final_text = self._sanitize_text(ctx.best_text)
+        final_text = self.processor.sanitize_text(ctx.best_text)
         resp = {
             "text": final_text,
             "confidence": ctx.best_confidence,
