@@ -1101,14 +1101,16 @@ class IterativeOCREngine:
         best_text = (ctx.best_text or "").strip()
         low_confidence = ctx.best_confidence < self.config.confidence_threshold
         too_short = len(best_text) < 12
-        if not (low_confidence or too_short):
+        ambiguous_digits = self.processor._needs_digit_rescue(best_text)
+        if not (low_confidence or too_short or ambiguous_digits):
             return
 
         logger.info(
-            "Low-quality iterative OCR detected (confidence=%.2f, len=%d); "
+            "OCR fallback trigger (confidence=%.2f, len=%d, ambiguous_digits=%s); "
             "attempting quality fallbacks",
             ctx.best_confidence,
             len(best_text),
+            ambiguous_digits,
         )
         candidates: list[tuple[str, str]] = []
 
@@ -1138,7 +1140,18 @@ class IterativeOCREngine:
             len(selected_text) > len(best_text) * 1.5
             and selected_conf >= ctx.best_confidence
         )
-        if not (better_confidence or better_coverage):
+        selected_digits = self.processor._digit_count(selected_text)
+        base_digits = self.processor._digit_count(best_text)
+        digit_gain = selected_digits > base_digits
+        ambiguity_resolved = (
+            ambiguous_digits and not self.processor._needs_digit_rescue(selected_text)
+        )
+        if not (
+            better_confidence
+            or better_coverage
+            or digit_gain
+            or ambiguity_resolved
+        ):
             return
 
         ctx.best_text = selected_text
