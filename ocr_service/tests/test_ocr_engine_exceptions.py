@@ -410,6 +410,37 @@ async def test_extract_text_applies_digit_rescue_on_ambiguous_output(monkeypatch
     assert any("tessedit_char_whitelist=0123456789" in c for c in calls)
 
 
+@pytest.mark.asyncio
+async def test_extract_text_textract_applies_digit_rescue(monkeypatch):
+    processor = DocumentProcessor(
+        enhancer=engine_mod.ImageEnhancer(),
+        ocr_config=engine_mod.TesseractConfig(),
+        engine_config=engine_mod.EngineConfig(),
+        reconstructor=None,
+    )
+
+    async def _fake_sync_textract(_self, _image_bytes):
+        return "4048 3700 04M!"
+
+    async def _fake_rescue(_self, _image_bytes, _text):
+        return "4048 3700 0453"
+
+    monkeypatch.setattr(
+        DocumentProcessor,
+        "_extract_text_textract_sync",
+        _fake_sync_textract,
+    )
+    monkeypatch.setattr(
+        DocumentProcessor,
+        "_rescue_ambiguous_digits_from_bytes",
+        _fake_rescue,
+    )
+
+    result = await processor.extract_text_textract(b"small-image")
+
+    assert result == "4048 3700 0453"
+
+
 def test_digit_rescue_not_required_for_clean_numeric_text():
     processor = DocumentProcessor(
         enhancer=engine_mod.ImageEnhancer(),

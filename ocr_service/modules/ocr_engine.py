@@ -141,11 +141,14 @@ class DocumentProcessor:
         try:
             with Image.open(BytesIO(image_bytes)) as pil_img:
                 normalized = pil_img.convert("RGB")
-                return await asyncio.to_thread(
+                normalized_np = np.array(normalized)[:, :, ::-1].copy()
+                text = await asyncio.to_thread(
                     pytesseract.image_to_string,
                     normalized,
                     config=self.ocr_config.flags,
                 )
+            text = self.sanitize_text(text)
+            return await self._rescue_ambiguous_digits(normalized_np, text)
         except pytesseract.pytesseract.TesseractNotFoundError as e:
             logger.error(
                 "Direct fallback OCR cannot run: tesseract binary unavailable "
@@ -289,6 +292,84 @@ class DocumentProcessor:
         compact_len = len(text.replace(" ", ""))
         return (digits, -noise, compact_len)
 
+    @staticmethod
+    def _format_digits_like_base(digits: str, base_text: str) -> str:
+        """Format recovered digits preserving base grouping when possible."""
+        base_groups = re.findall(r"\d+", base_text or "")
+        if base_groups and sum(len(group) for group in base_groups) == len(digits):
+            offset = 0
+            grouped = []
+            for group in base_groups:
+                grouped.append(digits[offset : offset + len(group)])
+                offset += len(group)
+            return " ".join(grouped).strip()
+        return " ".join(digits[i : i + 4] for i in range(0, len(digits), 4)).strip()
+
+    def _char_box_digit_rescue(self, focus_img: np.ndarray, base_text: str) -> str:
+        """
+        Pixel-level character rescue:
+        re-read ambiguous boxes as single numeric glyphs.
+        """
+        box_config = f"--oem {self.ocr_config.oem} --psm 7 -l eng"
+        boxes = pytesseract.image_to_boxes(focus_img, config=box_config)
+        if not boxes:
+            return ""
+
+        height = focus_img.shape[0]
+        width = focus_img.shape[1]
+        recovered: list[str] = []
+        for line in boxes.splitlines():
+            parts = line.split()
+            if len(parts) < 5:
+                continue
+
+            glyph = parts[0]
+            try:
+                x1, y1, x2, y2 = map(int, parts[1:5])
+            except ValueError:
+                continue
+
+            if glyph.isdigit():
+                recovered.append(glyph)
+                continue
+
+            # Convert Tesseract box coordinates (origin bottom-left) to numpy
+            # crop coordinates (origin top-left).
+            left = max(0, x1 - 2)
+            right = min(width, x2 + 2)
+            top = max(0, height - y2 - 2)
+            bottom = min(height, height - y1 + 2)
+            if bottom <= top or right <= left:
+                continue
+
+            roi = focus_img[top:bottom, left:right]
+            if roi.size == 0:
+                continue
+
+            char_config = (
+                f"--oem {self.ocr_config.oem} --psm 10 -l eng "
+                "-c tessedit_char_whitelist=0123456789 "
+                "-c classify_bln_numeric_mode=1"
+            )
+            candidate = pytesseract.image_to_string(roi, config=char_config)
+            digit = re.sub(r"\D", "", candidate)
+            if digit:
+                recovered.append(digit[0])
+                continue
+
+            # Ignore OCR separator noise rather than preserving it as output noise.
+            if glyph in {"|", "!", "I", "l", ".", ",", ":", ";", "-", "_"}:
+                continue
+
+        if not recovered:
+            return ""
+
+        compact = "".join(recovered)
+        base_digits = self._digit_count(base_text)
+        if len(compact) < base_digits:
+            return ""
+        return self._format_digits_like_base(compact, base_text)
+
     async def _rescue_ambiguous_digits(
         self, img: np.ndarray, base_text: str
     ) -> str:
@@ -347,7 +428,45 @@ class DocumentProcessor:
                 base_text,
                 best_text,
             )
+            return best_text
+
+        # If multi-pass full-frame OCR did not improve, inspect ambiguous glyph
+        # boxes one by one and re-read each box in single-digit mode.
+        if self._needs_digit_rescue(best_text):
+            try:
+                boxed_candidate = await asyncio.to_thread(
+                    self._char_box_digit_rescue, focus_img, best_text
+                )
+            except Exception as e:
+                logger.debug("Char-box digit rescue failed: %s", e)
+                boxed_candidate = ""
+
+            if boxed_candidate:
+                boxed_score = self._digit_candidate_score(boxed_candidate)
+                if boxed_score >= best_score:
+                    logger.info(
+                        "Char-box rescue improved OCR output: '%s' -> '%s'",
+                        best_text,
+                        boxed_candidate,
+                    )
+                    return boxed_candidate
         return best_text
+
+    async def _rescue_ambiguous_digits_from_bytes(
+        self, image_bytes: bytes, text: str
+    ) -> str:
+        """Apply pixel-level digit rescue by decoding original image bytes."""
+        if not self._needs_digit_rescue(text):
+            return text
+
+        try:
+            img = await ImageToolkit.decode_image_async(image_bytes)
+        except Exception as e:
+            logger.warning("Digit rescue decode failed: %s", e)
+            return text
+        if img is None:
+            return text
+        return await self._rescue_ambiguous_digits(img, text)
 
     async def extract_text_textract(self, image_bytes: bytes) -> str:
         """
@@ -357,8 +476,10 @@ class DocumentProcessor:
 
         # Use sync API for smaller documents (< 5MB), async for larger ones
         if len(image_bytes) < 5 * 1024 * 1024:  # 5MB threshold
-            return await self._extract_text_textract_sync(image_bytes)
-        return await self._extract_text_textract_async(image_bytes)
+            text = await self._extract_text_textract_sync(image_bytes)
+        else:
+            text = await self._extract_text_textract_async(image_bytes)
+        return await self._rescue_ambiguous_digits_from_bytes(image_bytes, text)
 
     async def _extract_text_textract_sync(self, image_bytes: bytes) -> str:
         """Synchronous Textract for smaller documents."""
