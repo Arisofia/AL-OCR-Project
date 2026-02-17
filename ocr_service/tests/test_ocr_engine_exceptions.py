@@ -508,3 +508,51 @@ def test_digit_rescue_not_required_for_clean_numeric_text():
 
     assert processor._needs_digit_rescue("4048 3700 0453") is False
     assert processor._needs_digit_rescue("4048 3700 04M!") is True
+
+
+def test_read_single_digit_rejects_low_ink_zero(monkeypatch):
+    processor = DocumentProcessor(
+        enhancer=engine_mod.ImageEnhancer(),
+        ocr_config=engine_mod.TesseractConfig(),
+        engine_config=engine_mod.EngineConfig(),
+        reconstructor=None,
+    )
+    roi = np.full((32, 16), 255, dtype=np.uint8)
+
+    monkeypatch.setattr(
+        DocumentProcessor,
+        "_roi_ink_ratio",
+        staticmethod(lambda _roi: 0.01),
+    )
+    monkeypatch.setattr(
+        engine_mod.pytesseract,
+        "image_to_data",
+        lambda *_args, **_kwargs: {"text": ["0"], "conf": ["95"]},
+    )
+
+    digit = processor._read_single_digit(roi)
+    assert digit == ""
+
+
+def test_read_single_digit_accepts_high_confidence_zero(monkeypatch):
+    processor = DocumentProcessor(
+        enhancer=engine_mod.ImageEnhancer(),
+        ocr_config=engine_mod.TesseractConfig(),
+        engine_config=engine_mod.EngineConfig(),
+        reconstructor=None,
+    )
+    roi = np.full((32, 20), 255, dtype=np.uint8)
+
+    monkeypatch.setattr(
+        DocumentProcessor,
+        "_roi_ink_ratio",
+        staticmethod(lambda _roi: 0.2),
+    )
+    monkeypatch.setattr(
+        engine_mod.pytesseract,
+        "image_to_data",
+        lambda *_args, **_kwargs: {"text": ["0"], "conf": ["95"]},
+    )
+
+    digit = processor._read_single_digit(roi)
+    assert digit == "0"

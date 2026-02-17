@@ -293,6 +293,100 @@ class DocumentProcessor:
         return (digits, -noise, compact_len)
 
     @staticmethod
+    def _extract_box_roi(
+        focus_img: np.ndarray,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
+        padding: int = 2,
+    ) -> Optional[np.ndarray]:
+        """Convert Tesseract box coordinates to a cropped numpy ROI."""
+        height = focus_img.shape[0]
+        width = focus_img.shape[1]
+        left = max(0, x1 - padding)
+        right = min(width, x2 + padding)
+        top = max(0, height - y2 - padding)
+        bottom = min(height, height - y1 + padding)
+        if bottom <= top or right <= left:
+            return None
+        roi = focus_img[top:bottom, left:right]
+        if roi.size == 0:
+            return None
+        return roi
+
+    @staticmethod
+    def _roi_ink_ratio(roi: np.ndarray) -> float:
+        """Estimate foreground (ink) ratio in a glyph ROI."""
+        if len(roi.shape) == 3:
+            gray = cast(
+                np.ndarray,
+                cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY),  # pylint: disable=no-member
+            )
+        else:
+            gray = roi
+
+        _, binary = cv2.threshold(  # pylint: disable=no-member
+            gray,
+            0,
+            255,
+            cv2.THRESH_BINARY + cv2.THRESH_OTSU,  # pylint: disable=no-member
+        )
+        return float(np.mean(binary < 200))
+
+    def _read_single_digit(self, roi: np.ndarray) -> str:
+        """Read one numeric glyph with confidence/shape safeguards."""
+        ink_ratio = self._roi_ink_ratio(roi)
+        if ink_ratio < 0.02:
+            return ""
+
+        char_config = (
+            f"--oem {self.ocr_config.oem} --psm 10 -l eng "
+            "-c tessedit_char_whitelist=0123456789 "
+            "-c classify_bln_numeric_mode=1"
+        )
+        data = pytesseract.image_to_data(
+            roi,
+            config=char_config,
+            output_type=pytesseract.Output.DICT,
+        )
+
+        best_digit = ""
+        best_conf = -1.0
+        texts = data.get("text", [])
+        confs = data.get("conf", [])
+        for raw_text, raw_conf in zip(texts, confs):
+            digit = re.sub(r"\D", "", raw_text or "")
+            if len(digit) != 1:
+                continue
+            try:
+                conf = float(raw_conf)
+            except (TypeError, ValueError):
+                continue
+            if conf > best_conf:
+                best_digit = digit
+                best_conf = conf
+
+        if not best_digit:
+            candidate = pytesseract.image_to_string(roi, config=char_config)
+            digit = re.sub(r"\D", "", candidate)
+            if len(digit) != 1:
+                return ""
+            best_digit = digit
+            best_conf = 40.0
+
+        h, w = roi.shape[:2]
+        aspect_ratio = (w / float(h)) if h else 0.0
+        if best_digit == "0":
+            # Conservative rule: uncertain or very thin "0" is usually gap/noise.
+            if best_conf < 65.0 or ink_ratio < 0.08 or aspect_ratio < 0.35:
+                return ""
+        elif best_conf < 45.0:
+            return ""
+
+        return best_digit
+
+    @staticmethod
     def _format_digits_like_base(digits: str, base_text: str) -> str:
         """Format recovered digits preserving base grouping when possible."""
         base_groups = re.findall(r"\d+", base_text or "")
@@ -315,8 +409,6 @@ class DocumentProcessor:
         if not boxes:
             return ""
 
-        height = focus_img.shape[0]
-        width = focus_img.shape[1]
         recovered: list[str] = []
         for line in boxes.splitlines():
             parts = line.split()
@@ -329,32 +421,25 @@ class DocumentProcessor:
             except ValueError:
                 continue
 
+            roi = self._extract_box_roi(focus_img, x1, y1, x2, y2)
+            if roi is None:
+                continue
+
             if glyph.isdigit():
+                if glyph == "0":
+                    confirmed = self._read_single_digit(roi)
+                    if confirmed == "0":
+                        recovered.append("0")
+                    elif confirmed:
+                        recovered.append(confirmed)
+                    # If not confirmed, treat as gap/noise and skip.
+                    continue
                 recovered.append(glyph)
                 continue
 
-            # Convert Tesseract box coordinates (origin bottom-left) to numpy
-            # crop coordinates (origin top-left).
-            left = max(0, x1 - 2)
-            right = min(width, x2 + 2)
-            top = max(0, height - y2 - 2)
-            bottom = min(height, height - y1 + 2)
-            if bottom <= top or right <= left:
-                continue
-
-            roi = focus_img[top:bottom, left:right]
-            if roi.size == 0:
-                continue
-
-            char_config = (
-                f"--oem {self.ocr_config.oem} --psm 10 -l eng "
-                "-c tessedit_char_whitelist=0123456789 "
-                "-c classify_bln_numeric_mode=1"
-            )
-            candidate = pytesseract.image_to_string(roi, config=char_config)
-            digit = re.sub(r"\D", "", candidate)
+            digit = self._read_single_digit(roi)
             if digit:
-                recovered.append(digit[0])
+                recovered.append(digit)
                 continue
 
             # Ignore OCR separator noise rather than preserving it as output noise.
