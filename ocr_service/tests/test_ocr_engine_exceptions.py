@@ -330,9 +330,51 @@ def test_sanitize_text_normalizes_grouped_numeric_noise():
         reconstructor=None,
     )
 
-    cleaned = processor.sanitize_text("4048-. 3700 045—")
+    # Noise punctuation around grouped digits should be normalized.
+    cleaned = processor.sanitize_text("4048-.. 3700 045——")
     assert cleaned == "4048 3700 045"
+
+    cleaned_single = processor.sanitize_text("4048-. 3700 045—")
+    assert cleaned_single == "4048 3700 045"
 
     # Keep decimal/monetary formatting readable.
     amount = processor.sanitize_text("Total: 1.250,00 EUR")
     assert "1.250,00" in amount
+
+
+def test_preprocess_frame_uses_clean_for_ocr():
+    """Verify that the cleaning pipeline is used in the first iteration."""
+    processor = DocumentProcessor(
+        enhancer=engine_mod.ImageEnhancer(),
+        ocr_config=engine_mod.TesseractConfig(),
+        engine_config=engine_mod.EngineConfig(),
+        reconstructor=None,
+    )
+
+    # Create a noisy image
+    img = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
+
+    # First iteration (0) should use clean_for_ocr
+    thresh = processor.preprocess_frame(img, iteration=0, use_recon=False)
+
+    # clean_for_ocr returns a binary image (thresholded)
+    assert len(thresh.shape) == 2
+    assert thresh.dtype == np.uint8
+    assert set(np.unique(thresh)).issubset({0, 255})
+
+
+def test_preprocess_frame_later_iterations_apply_pixel_rescue():
+    """Later iterations should upscale/denoise to rescue faint pixel detail."""
+    processor = DocumentProcessor(
+        enhancer=engine_mod.ImageEnhancer(),
+        ocr_config=engine_mod.TesseractConfig(),
+        engine_config=engine_mod.EngineConfig(),
+        reconstructor=None,
+    )
+
+    img = np.random.randint(0, 255, (80, 120, 3), dtype=np.uint8)
+    rescued = processor.preprocess_frame(img, iteration=2, use_recon=False)
+
+    assert rescued.shape[0] > img.shape[0]
+    assert rescued.shape[1] > img.shape[1]
+    assert rescued.dtype == np.uint8

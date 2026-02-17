@@ -485,23 +485,32 @@ class DocumentProcessor:
     def preprocess_frame(
         self, img: np.ndarray, iteration: int, use_recon: bool
     ) -> np.ndarray:
-        """Applies sharpening, layer elimination, and thresholding."""
-        enhanced = self.enhancer.sharpen(img)
-
+        """Applies iterative preprocessing with a pixel-rescue pass."""
+        working = img
         if use_recon and iteration == 0 and self.reconstructor:
-            rectified = self.reconstructor.remove_redactions(enhanced)
-            enhanced = self.reconstructor.remove_color_overlay(rectified)
+            rectified = self.reconstructor.remove_redactions(working)
+            working = self.reconstructor.remove_color_overlay(rectified)
 
-        if len(enhanced.shape) == 3:
-            gray = cast(
+        if iteration == 0:
+            return self.enhancer.clean_for_ocr(working)
+
+        gray = (
+            cast(
                 np.ndarray,
                 cv2.cvtColor(  # pylint: disable=no-member
-                    enhanced, cv2.COLOR_BGR2GRAY  # pylint: disable=no-member
+                    working, cv2.COLOR_BGR2GRAY  # pylint: disable=no-member
                 ),
             )
-        else:
-            gray = enhanced
-        return self.enhancer.apply_threshold(gray)
+            if len(working.shape) == 3
+            else working
+        )
+        if iteration == 1:
+            return self.enhancer.apply_threshold(self.enhancer.sharpen(gray))
+
+        # Later passes prioritize faint-pixel recovery over aggressiveness.
+        upscaled = self.enhancer.upscale_and_smooth(gray, scale=2)
+        denoised = self.enhancer.denoise(upscaled)
+        return self.enhancer.apply_threshold(denoised)
 
     async def extract_text(
         self,

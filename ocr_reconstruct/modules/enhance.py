@@ -3,6 +3,8 @@ Image enhancement helpers: grayscale, sharpening, denoising, thresholding.
 Provides the ImageEnhancer class and functional wrappers for image preprocessing.
 """
 
+# OpenCV binary modules commonly trigger false `no-member` in pylint.
+# pylint: disable=no-member
 import cv2
 import numpy as np
 
@@ -73,6 +75,31 @@ class ImageEnhancer:
         Advanced denoising for colored images while preserving edges.
         """
         return cv2.fastNlMeansDenoisingColored(image, None, 10, 10, 7, 21)
+
+    @staticmethod
+    def clean_for_ocr(img: np.ndarray) -> np.ndarray:
+        """
+        Advanced cleaning pipeline to specifically target digit clarity
+        and remove pixel noise that causes misclassification.
+        """
+        # 1. Grayscale
+        gray = ImageEnhancer.to_gray(img)
+
+        # 2. Contrast Enhancement (CLAHE)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(gray)
+
+        # 3. Bilateral Filter (Preserve edges, reduce noise)
+        denoised = cv2.bilateralFilter(enhanced, 9, 75, 75)
+
+        # 4. Adaptive Thresholding (better for uneven lighting)
+        thresh = cv2.adaptiveThreshold(
+            denoised, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+        )
+
+        # 5. Morphological operations to clean up small noise and close gaps in digits
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+        return cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
 
 
 # Maintain functional interface for backward compatibility
