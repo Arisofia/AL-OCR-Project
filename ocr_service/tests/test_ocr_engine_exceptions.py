@@ -1,5 +1,11 @@
+"""Regression tests for OCR engine fallbacks and preprocessing behavior."""
+
+# OpenCV binary modules commonly trigger false `no-member` in pylint.
+# pylint: disable=missing-function-docstring,no-member,import-error
+
 import logging
 
+import cv2
 import numpy as np
 import pytest
 
@@ -41,7 +47,6 @@ async def test_reconstruction_logs_exception(caplog, monkeypatch):
 async def test_document_processor_applies_upscaling():
     # Create a small test image
     small_img = np.zeros((200, 200, 3), dtype=np.uint8)
-    import cv2
 
     _, img_bytes = cv2.imencode(".png", small_img)
 
