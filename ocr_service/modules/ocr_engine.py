@@ -572,9 +572,10 @@ class DocumentProcessor:
                 return ""
             roi = ImageToolkit.prepare_roi(roi)
             try:
-                return await asyncio.to_thread(
+                extracted = await asyncio.to_thread(
                     pytesseract.image_to_string, roi, config=self.ocr_config.flags
                 )
+                return self.sanitize_text(extracted)
             except Exception:
                 logger.exception(
                     "Region extraction failed | bbox=%s", region.get("bbox")
@@ -682,6 +683,7 @@ class IterativeOCREngine:
                 OCR_ITERATION_COUNT.inc()
                 await self._run_iteration(ctx, i)
 
+            await self._maybe_apply_textract_fallback(ctx)
             status = "success"
             return self._build_response(ctx)
         except Exception as e:
@@ -817,6 +819,59 @@ class IterativeOCREngine:
         except Exception:
             logger.exception("Iteration %d failed", i + 1)
             ctx.iteration_history.append({"iteration": i + 1, "error": "failed"})
+
+    async def _maybe_apply_textract_fallback(self, ctx: DocumentContext) -> None:
+        """
+        Apply Textract fallback when iterative Tesseract output appears low quality.
+
+        This catches cases where Tesseract returns gibberish without raising errors.
+        """
+        best_text = (ctx.best_text or "").strip()
+        low_confidence = ctx.best_confidence < self.config.confidence_threshold
+        too_short = len(best_text) < 12
+        if not (low_confidence or too_short):
+            return
+
+        logger.info(
+            "Low-quality iterative OCR detected (confidence=%.2f, len=%d); "
+            "attempting Textract quality fallback",
+            ctx.best_confidence,
+            len(best_text),
+        )
+        textract_text = await self.processor.extract_text_textract(ctx.image_bytes)
+        textract_text = self.processor.sanitize_text(textract_text)
+        if not textract_text:
+            return
+
+        textract_conf = self.confidence_scorer.calculate(textract_text)
+        better_confidence = textract_conf > (ctx.best_confidence + 0.05)
+        better_coverage = (
+            len(textract_text) > len(best_text) * 2
+            and textract_conf >= ctx.best_confidence
+        )
+        if not (better_confidence or better_coverage):
+            return
+
+        ctx.best_text = textract_text
+        ctx.best_confidence = textract_conf
+        ctx.iteration_history.append(
+            {
+                "iteration": len(ctx.iteration_history) + 1,
+                "text_length": len(textract_text),
+                "confidence": textract_conf,
+                "method": "textract-quality-fallback",
+                "preview_text": (
+                    f"{textract_text[:50]}..."
+                    if len(textract_text) > 50
+                    else textract_text
+                ),
+            }
+        )
+        logger.info(
+            "Textract quality fallback selected (confidence=%.2f, len=%d)",
+            textract_conf,
+            len(textract_text),
+        )
 
     def _build_response(self, ctx: DocumentContext) -> dict[str, Any]:
         """Formats the final engine output."""

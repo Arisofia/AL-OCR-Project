@@ -161,3 +161,101 @@ async def test_extract_text_falls_back_to_textract_on_tesseract_runtime_error(
     original_bytes = b"fake image bytes"
     text = await processor.extract_text(img, original_bytes=original_bytes)
     assert text == "textract runtime fallback"
+
+
+@pytest.mark.asyncio
+async def test_process_image_applies_textract_quality_fallback(monkeypatch):
+    engine = engine_mod.IterativeOCREngine(
+        config=engine_mod.EngineConfig(max_iterations=1, confidence_threshold=0.5)
+    )
+    calls = {"textract": 0}
+
+    async def _decode_ok(ctx):
+        ctx.current_img = np.zeros((32, 32, 3), dtype=np.uint8)
+        return True
+
+    async def _recon_noop(_ctx, _max_iterations):
+        return None
+
+    async def _layout_noop(ctx):
+        ctx.layout_regions = []
+        ctx.layout_type = "unknown"
+
+    def _preprocess(_img, _iteration, _use_recon):
+        return np.zeros((32, 32), dtype=np.uint8)
+
+    async def _extract_low_quality(_img, _regions=None, _original_bytes=None):
+        return "IR {g W rm"
+
+    async def _textract_good(_image_bytes):
+        calls["textract"] += 1
+        return ("Factura total fecha nombre id " * 8).strip()
+
+    async def _enhance_noop(img):
+        return img
+
+    monkeypatch.setattr(engine.processor, "decode_and_validate", _decode_ok)
+    monkeypatch.setattr(engine.processor, "run_reconstruction", _recon_noop)
+    monkeypatch.setattr(engine, "_analyze_layout", _layout_noop)
+    monkeypatch.setattr(engine.processor, "preprocess_frame", _preprocess)
+    monkeypatch.setattr(engine.processor, "extract_text", _extract_low_quality)
+    monkeypatch.setattr(engine.processor, "extract_text_textract", _textract_good)
+    monkeypatch.setattr(engine_mod.ImageToolkit, "enhance_iteration", _enhance_noop)
+
+    result = await engine.process_image(b"img-bytes")
+
+    assert calls["textract"] == 1
+    assert "Factura total" in result.get("text", "")
+    assert any(
+        i.get("method") == "textract-quality-fallback"
+        for i in result.get("iterations", [])
+    )
+
+
+@pytest.mark.asyncio
+async def test_process_image_skips_textract_fallback_on_high_confidence(monkeypatch):
+    engine = engine_mod.IterativeOCREngine(
+        config=engine_mod.EngineConfig(max_iterations=1, confidence_threshold=0.5)
+    )
+    calls = {"textract": 0}
+
+    async def _decode_ok(ctx):
+        ctx.current_img = np.zeros((32, 32, 3), dtype=np.uint8)
+        return True
+
+    async def _recon_noop(_ctx, _max_iterations):
+        return None
+
+    async def _layout_noop(ctx):
+        ctx.layout_regions = []
+        ctx.layout_type = "unknown"
+
+    def _preprocess(_img, _iteration, _use_recon):
+        return np.zeros((32, 32), dtype=np.uint8)
+
+    async def _extract_high_quality(_img, _regions=None, _original_bytes=None):
+        return ("Factura total fecha nombre id " * 8).strip()
+
+    async def _textract_unused(_image_bytes):
+        calls["textract"] += 1
+        return "textract should not be used"
+
+    async def _enhance_noop(img):
+        return img
+
+    monkeypatch.setattr(engine.processor, "decode_and_validate", _decode_ok)
+    monkeypatch.setattr(engine.processor, "run_reconstruction", _recon_noop)
+    monkeypatch.setattr(engine, "_analyze_layout", _layout_noop)
+    monkeypatch.setattr(engine.processor, "preprocess_frame", _preprocess)
+    monkeypatch.setattr(engine.processor, "extract_text", _extract_high_quality)
+    monkeypatch.setattr(engine.processor, "extract_text_textract", _textract_unused)
+    monkeypatch.setattr(engine_mod.ImageToolkit, "enhance_iteration", _enhance_noop)
+
+    result = await engine.process_image(b"img-bytes")
+
+    assert calls["textract"] == 0
+    assert "Factura total" in result.get("text", "")
+    assert not any(
+        i.get("method") == "textract-quality-fallback"
+        for i in result.get("iterations", [])
+    )
