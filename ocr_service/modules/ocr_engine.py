@@ -219,6 +219,24 @@ class DocumentProcessor:
             # Remove excessive whitespace
             sanitized = re.sub(r"\s+", " ", sanitized).strip()
 
+            # Normalize OCR punctuation noise inside long digit sequences
+            # (likely IDs/cards). This is intentionally conservative:
+            # it only applies when the sequence contains 11-19 digits.
+            def _normalize_long_digit_span(match: re.Match[str]) -> str:
+                span = match.group(0)
+                span = re.sub(
+                    "[-\u2013\u2014\u2212\\\\/|\\.,:;'\u2018\u2019\"\u201c\u201d]+",
+                    " ",
+                    span,
+                )
+                return re.sub(r"\s+", " ", span).strip()
+
+            sanitized = re.sub(
+                "(?:\\d[-\u2013\u2014\u2212\\\\/|\\.,:;'\u2018\u2019\"\u201c\u201d\\s]*){11,19}",
+                _normalize_long_digit_span,
+                sanitized,
+            )
+
             # Normalize OCR punctuation noise inside grouped numeric sequences
             # (e.g., "4048-. 3700 045—" -> "4048 3700 045") while preserving
             # common decimal formats like "1.250,00".
