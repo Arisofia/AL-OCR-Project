@@ -134,6 +134,9 @@ class AdvancedPixelReconstructor:
                 f"\n\nContext from similar documents: {font_meta}. "
                 f"Accuracy of previous similar reconstructions: {acc_score}."
             )
+            strict_instructions = context.get("strict_instructions")
+            if strict_instructions:
+                prompt += f"\n\nStrict extraction rules: {strict_instructions}"
         return prompt
 
     def _format_error(self, e: Exception) -> dict[str, Any]:

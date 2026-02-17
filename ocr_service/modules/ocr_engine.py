@@ -1502,6 +1502,46 @@ class IterativeOCREngine:
             logger.exception("Iteration %d failed", i + 1)
             ctx.iteration_history.append({"iteration": i + 1, "error": "failed"})
 
+    async def _extract_text_multimodal_fallback(self, ctx: DocumentContext) -> str:
+        """
+        Vision-LLM quality fallback. It is constrained to extraction only:
+        no guessing/completion of hidden digits.
+        """
+        providers = getattr(self.advanced_reconstructor, "providers", {})
+        if not providers:
+            return ""
+
+        strict_rules = (
+            "Return only text that is visibly present in the image. "
+            "Do not infer, complete, or guess occluded characters. "
+            "For card-like numbers, if a character is uncertain, output '?'. "
+            "Never generate missing PAN digits or check digits."
+        )
+        context = {
+            "layout_type": ctx.layout_type,
+            "doc_type": ctx.doc_type,
+            "strict_instructions": strict_rules,
+        }
+
+        try:
+            ai_result = await self.advanced_reconstructor.reconstruct_with_ai(
+                ctx.image_bytes,
+                context=context,
+                fallback=True,
+            )
+        except Exception as e:
+            logger.warning("Vision LLM fallback invocation failed: %s", e)
+            return ""
+
+        if not isinstance(ai_result, dict):
+            return ""
+        if "error" in ai_result:
+            logger.info("Vision LLM fallback unavailable: %s", ai_result.get("error"))
+            return ""
+
+        text = self.processor.sanitize_text(ai_result.get("text", ""))
+        return self.processor._mark_uncertain_partial_card_tail(text)
+
     async def _maybe_apply_quality_fallbacks(self, ctx: DocumentContext) -> None:
         """
         Apply quality fallbacks when iterative Tesseract output appears low quality.
@@ -1533,6 +1573,10 @@ class IterativeOCREngine:
         direct_text = self.processor.sanitize_text(direct_text)
         if direct_text:
             candidates.append(("direct-quality-fallback", direct_text))
+
+        vision_text = await self._extract_text_multimodal_fallback(ctx)
+        if vision_text:
+            candidates.append(("vision-llm-quality-fallback", vision_text))
 
         if not candidates:
             return

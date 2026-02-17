@@ -386,6 +386,90 @@ async def test_process_image_triggers_textract_fallback_on_ambiguous_digits(
     )
 
 
+@pytest.mark.asyncio
+async def test_process_image_applies_vision_llm_quality_fallback(monkeypatch):
+    engine = engine_mod.IterativeOCREngine(
+        config=engine_mod.EngineConfig(max_iterations=1, confidence_threshold=0.5)
+    )
+    calls = {"textract": 0, "direct": 0, "vision": 0}
+
+    async def _decode_ok(ctx):
+        ctx.current_img = np.zeros((32, 32, 3), dtype=np.uint8)
+        return True
+
+    async def _recon_noop(_ctx, _max_iterations):
+        return None
+
+    async def _layout_noop(ctx):
+        ctx.layout_regions = []
+        ctx.layout_type = "unknown"
+
+    def _preprocess(_img, _iteration, _use_recon):
+        return np.zeros((32, 32), dtype=np.uint8)
+
+    async def _extract_low_quality(_img, _regions=None, _original_bytes=None):
+        return "IR {g W rm"
+
+    async def _textract_empty(_image_bytes):
+        calls["textract"] += 1
+        return ""
+
+    async def _direct_empty(_image_bytes):
+        calls["direct"] += 1
+        return ""
+
+    captured = {}
+
+    async def _vision_reconstruct(
+        _image_bytes,
+        provider="openai",
+        context=None,
+        fallback=True,
+    ):
+        _ = provider
+        _ = fallback
+        calls["vision"] += 1
+        captured["context"] = context
+        return {"text": ("Factura total fecha nombre id " * 8).strip()}
+
+    async def _enhance_noop(img):
+        return img
+
+    monkeypatch.setattr(engine.processor, "decode_and_validate", _decode_ok)
+    monkeypatch.setattr(engine.processor, "run_reconstruction", _recon_noop)
+    monkeypatch.setattr(engine, "_analyze_layout", _layout_noop)
+    monkeypatch.setattr(engine.processor, "preprocess_frame", _preprocess)
+    monkeypatch.setattr(engine.processor, "extract_text", _extract_low_quality)
+    monkeypatch.setattr(engine.processor, "extract_text_textract", _textract_empty)
+    monkeypatch.setattr(engine.processor, "extract_text_direct", _direct_empty)
+    monkeypatch.setattr(
+        engine.advanced_reconstructor,
+        "reconstruct_with_ai",
+        _vision_reconstruct,
+    )
+    monkeypatch.setattr(
+        engine.advanced_reconstructor,
+        "providers",
+        {"openai": object()},
+        raising=False,
+    )
+    monkeypatch.setattr(engine_mod.ImageToolkit, "enhance_iteration", _enhance_noop)
+
+    result = await engine.process_image(b"img-bytes")
+
+    assert calls["textract"] == 1
+    assert calls["direct"] == 1
+    assert calls["vision"] == 1
+    assert "Factura total" in result.get("text", "")
+    assert "Do not infer, complete, or guess occluded characters." in (
+        captured.get("context", {}).get("strict_instructions", "")
+    )
+    assert any(
+        i.get("method") == "vision-llm-quality-fallback"
+        for i in result.get("iterations", [])
+    )
+
+
 def test_sanitize_text_normalizes_grouped_numeric_noise():
     processor = DocumentProcessor(
         enhancer=engine_mod.ImageEnhancer(),
