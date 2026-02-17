@@ -378,6 +378,8 @@ async def test_process_image_triggers_textract_fallback_on_ambiguous_digits(
     assert calls["textract"] == 1
     assert calls["direct"] == 1
     assert result.get("text") == "4048 3700 0453"
+    assert result.get("document_type") == "bank_card"
+    assert result.get("card_analysis", {}).get("detected") is True
     assert any(
         i.get("method") == "textract-quality-fallback"
         for i in result.get("iterations", [])

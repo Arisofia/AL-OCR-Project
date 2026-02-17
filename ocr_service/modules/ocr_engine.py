@@ -40,6 +40,7 @@ from ocr_service.utils.capabilities import CapabilityProvider
 
 from .advanced_recon import AdvancedPixelReconstructor
 from .confidence import ConfidenceScorer
+from .document_intelligence import DocumentIntelligence
 from .image_toolkit import ImageToolkit, ImageToolkitError
 from .layout import DocumentLayoutAnalyzer, LayoutAnalysisError
 from .learning_engine import LearningEngine
@@ -1012,6 +1013,9 @@ class IterativeOCREngine:
                     fallback_confidence = self.confidence_scorer.calculate(
                         fallback_text
                     )
+                    fallback_analysis = DocumentIntelligence.analyze(
+                        fallback_text, layout_type="unknown"
+                    )
                     status = "success"
                     return {
                         "text": fallback_text,
@@ -1026,6 +1030,7 @@ class IterativeOCREngine:
                         ],
                         "success": True,
                         "method": "pillow-direct-fallback",
+                        **fallback_analysis,
                     }
                 return {"error": "Corrupted or unsupported image format"}
 
@@ -1094,6 +1099,9 @@ class IterativeOCREngine:
 
             extracted_text = ai_result.get("text", "")
             confidence = self.confidence_scorer.calculate(extracted_text)
+            analysis = DocumentIntelligence.analyze(
+                extracted_text, layout_type=ctx.layout_type
+            )
 
             self._schedule_learning(
                 ctx.doc_type,
@@ -1111,6 +1119,7 @@ class IterativeOCREngine:
                     "regions": len(ctx.layout_regions),
                 },
                 "success": True,
+                **analysis,
             }
         except Exception as e:
             logger.exception("Error in process_image_advanced")
@@ -1265,11 +1274,13 @@ class IterativeOCREngine:
         """Formats the final engine output."""
         # Final sanitization of the best text before response
         final_text = self.processor.sanitize_text(ctx.best_text)
+        analysis = DocumentIntelligence.analyze(final_text, layout_type=ctx.layout_type)
         resp = {
             "text": final_text,
             "confidence": ctx.best_confidence,
             "iterations": ctx.iteration_history,
             "success": len(final_text) > 0,
+            **analysis,
         }
         if ctx.reconstruction_info:
             resp["reconstruction"] = ctx.reconstruction_info

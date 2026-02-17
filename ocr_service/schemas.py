@@ -34,6 +34,8 @@ class OCRResponse(BaseModel):
     layout_analysis: Optional[dict] = None
     method: Optional[str] = None
     request_id: Optional[str] = None
+    document_type: Optional[str] = None
+    card_analysis: Optional[dict] = None
 
 
 class HealthResponse(BaseModel):
