@@ -579,6 +579,23 @@ async def test_extract_text_card_mode_trims_spurious_trailing_zero(monkeypatch):
     assert result == "4048 3700 045"
 
 
+def test_build_response_marks_uncertain_partial_card_tail():
+    engine = engine_mod.IterativeOCREngine()
+    ctx = engine_mod.DocumentContext(
+        image_bytes=b"img-bytes",
+        use_reconstruction=False,
+        best_text="4048 3700 0450",
+        best_confidence=0.99,
+    )
+    ctx.layout_type = "unknown"
+
+    response = engine._build_response(ctx)
+
+    assert response["text"] == "4048 3700 045?"
+    assert response["document_type"] == "bank_card"
+    assert response["card_analysis"]["requires_manual_review"] is True
+
+
 @pytest.mark.asyncio
 async def test_process_image_activates_card_doc_type(monkeypatch):
     engine = engine_mod.IterativeOCREngine(

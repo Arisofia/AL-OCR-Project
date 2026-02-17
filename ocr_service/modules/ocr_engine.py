@@ -900,7 +900,9 @@ class DocumentProcessor:
             return False
         return len(groups[-1]) in {1, 2, 3}
 
-    def _score_card_text(self, text: str) -> tuple[int, int, int, int, int, int]:
+    def _score_card_text(
+        self, text: str
+    ) -> tuple[int, int, int, int, int, int, int]:
         """Score card OCR candidates preferring valid Luhn and cleaner digits."""
         analysis = DocumentIntelligence.analyze(text)
         card_analysis = analysis.get("card_analysis", {}) if analysis else {}
@@ -911,16 +913,47 @@ class DocumentProcessor:
         truncated_bonus = (
             1 if max_len < 13 and self._last_group_is_truncated(text) else 0
         )
+        suspicious_tail_penalty = (
+            1 if self._has_suspicious_partial_zero_tail(text) else 0
+        )
         digit_count = self._digit_count(text)
         noise = sum((not char.isdigit()) and (not char.isspace()) for char in text)
         return (
             valid_count,
             plausible_count,
             truncated_bonus,
+            -suspicious_tail_penalty,
             max_len,
             digit_count,
             -noise,
         )
+
+    def _has_suspicious_partial_zero_tail(self, text: str) -> bool:
+        """
+        Detect likely spurious trailing zero in short/partial card-like strings,
+        such as '4048 3700 0450', where the final glyph is low certainty.
+        """
+        cleaned = re.sub(r"\s+", " ", text or "").strip()
+        if not cleaned or not cleaned.endswith("0"):
+            return False
+
+        groups = re.findall(r"\d+", cleaned)
+        if not groups or not groups[-1].endswith("0"):
+            return False
+
+        compact = "".join(groups)
+        if len(compact) < 9 or len(compact) >= 13:
+            return False
+
+        analysis = DocumentIntelligence.analyze(cleaned)
+        card_analysis = analysis.get("card_analysis", {})
+        if card_analysis.get("luhn_valid_count", 0) > 0:
+            return False
+
+        candidates = card_analysis.get("candidates", [])
+        if not candidates:
+            return False
+        return not any(row.get("length", 0) >= 13 for row in candidates)
 
     def _trim_spurious_trailing_zero_variant(self, text: str) -> str:
         """
@@ -954,6 +987,16 @@ class DocumentProcessor:
         if len(trimmed) < 8:
             return ""
         return self._format_digits_like_base(trimmed, cleaned)
+
+    def _mark_uncertain_partial_card_tail(self, text: str) -> str:
+        """
+        Avoid returning a false trailing zero for partial card-like captures.
+        Instead, mark the last glyph as uncertain for manual review.
+        """
+        cleaned = re.sub(r"\s+", " ", text or "").strip()
+        if not self._has_suspicious_partial_zero_tail(cleaned):
+            return cleaned
+        return re.sub(r"0$", "?", cleaned)
 
     async def _extract_text_card_mode(self, img: np.ndarray) -> str:
         """
@@ -1033,6 +1076,7 @@ class DocumentProcessor:
             candidates,
             key=lambda item: self._score_card_text(item[1]),
         )
+        selected = self._mark_uncertain_partial_card_tail(selected)
         logger.info(
             "Card OCR strategy selected %s (len=%d, score=%s)",
             method,
@@ -1225,6 +1269,9 @@ class IterativeOCREngine:
                     await self.processor.extract_text_direct(image_bytes)
                 ).strip()
                 if fallback_text:
+                    fallback_text = self.processor._mark_uncertain_partial_card_tail(
+                        self.processor.sanitize_text(fallback_text)
+                    )
                     fallback_confidence = self.confidence_scorer.calculate(
                         fallback_text
                     )
@@ -1316,7 +1363,9 @@ class IterativeOCREngine:
                     doc_type=ctx.doc_type,
                 )
 
-            extracted_text = ai_result.get("text", "")
+            extracted_text = self.processor._mark_uncertain_partial_card_tail(
+                self.processor.sanitize_text(ai_result.get("text", ""))
+            )
             confidence = self.confidence_scorer.calculate(extracted_text)
             analysis = DocumentIntelligence.analyze(
                 extracted_text, layout_type=ctx.layout_type
@@ -1510,6 +1559,7 @@ class IterativeOCREngine:
         """Formats the final engine output."""
         # Final sanitization of the best text before response
         final_text = self.processor.sanitize_text(ctx.best_text)
+        final_text = self.processor._mark_uncertain_partial_card_tail(final_text)
         analysis = DocumentIntelligence.analyze(final_text, layout_type=ctx.layout_type)
         resp = {
             "text": final_text,
