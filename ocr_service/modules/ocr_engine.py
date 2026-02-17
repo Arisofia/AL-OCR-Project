@@ -683,7 +683,7 @@ class IterativeOCREngine:
                 OCR_ITERATION_COUNT.inc()
                 await self._run_iteration(ctx, i)
 
-            await self._maybe_apply_textract_fallback(ctx)
+            await self._maybe_apply_quality_fallbacks(ctx)
             status = "success"
             return self._build_response(ctx)
         except Exception as e:
@@ -820,9 +820,9 @@ class IterativeOCREngine:
             logger.exception("Iteration %d failed", i + 1)
             ctx.iteration_history.append({"iteration": i + 1, "error": "failed"})
 
-    async def _maybe_apply_textract_fallback(self, ctx: DocumentContext) -> None:
+    async def _maybe_apply_quality_fallbacks(self, ctx: DocumentContext) -> None:
         """
-        Apply Textract fallback when iterative Tesseract output appears low quality.
+        Apply quality fallbacks when iterative Tesseract output appears low quality.
 
         This catches cases where Tesseract returns gibberish without raising errors.
         """
@@ -834,43 +834,61 @@ class IterativeOCREngine:
 
         logger.info(
             "Low-quality iterative OCR detected (confidence=%.2f, len=%d); "
-            "attempting Textract quality fallback",
+            "attempting quality fallbacks",
             ctx.best_confidence,
             len(best_text),
         )
+        candidates: list[tuple[str, str]] = []
+
         textract_text = await self.processor.extract_text_textract(ctx.image_bytes)
         textract_text = self.processor.sanitize_text(textract_text)
-        if not textract_text:
+        if textract_text:
+            candidates.append(("textract-quality-fallback", textract_text))
+
+        direct_text = await self.processor.extract_text_direct(ctx.image_bytes)
+        direct_text = self.processor.sanitize_text(direct_text)
+        if direct_text:
+            candidates.append(("direct-quality-fallback", direct_text))
+
+        if not candidates:
             return
 
-        textract_conf = self.confidence_scorer.calculate(textract_text)
-        better_confidence = textract_conf > (ctx.best_confidence + 0.05)
+        scored = []
+        for method, candidate_text in candidates:
+            candidate_conf = self.confidence_scorer.calculate(candidate_text)
+            scored.append((method, candidate_text, candidate_conf))
+
+        method, selected_text, selected_conf = max(
+            scored, key=lambda item: (item[2], len(item[1]))
+        )
+        better_confidence = selected_conf > (ctx.best_confidence + 0.02)
         better_coverage = (
-            len(textract_text) > len(best_text) * 2
-            and textract_conf >= ctx.best_confidence
+            len(selected_text) > len(best_text) * 1.5
+            and selected_conf >= ctx.best_confidence
         )
         if not (better_confidence or better_coverage):
             return
 
-        ctx.best_text = textract_text
-        ctx.best_confidence = textract_conf
+        ctx.best_text = selected_text
+        ctx.best_confidence = selected_conf
         ctx.iteration_history.append(
             {
                 "iteration": len(ctx.iteration_history) + 1,
-                "text_length": len(textract_text),
-                "confidence": textract_conf,
-                "method": "textract-quality-fallback",
+                "text_length": len(selected_text),
+                "confidence": selected_conf,
+                "method": method,
                 "preview_text": (
-                    f"{textract_text[:50]}..."
-                    if len(textract_text) > 50
-                    else textract_text
+                    f"{selected_text[:50]}..."
+                    if len(selected_text) > 50
+                    else selected_text
                 ),
             }
         )
         logger.info(
-            "Textract quality fallback selected (confidence=%.2f, len=%d)",
-            textract_conf,
-            len(textract_text),
+            "Quality fallback selected (%s, confidence=%.2f, len=%d)",
+            method,
+            selected_conf,
+            len(selected_text),
         )
 
     def _build_response(self, ctx: DocumentContext) -> dict[str, Any]:

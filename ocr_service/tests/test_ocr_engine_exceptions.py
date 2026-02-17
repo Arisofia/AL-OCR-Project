@@ -168,7 +168,7 @@ async def test_process_image_applies_textract_quality_fallback(monkeypatch):
     engine = engine_mod.IterativeOCREngine(
         config=engine_mod.EngineConfig(max_iterations=1, confidence_threshold=0.5)
     )
-    calls = {"textract": 0}
+    calls = {"textract": 0, "direct": 0}
 
     async def _decode_ok(ctx):
         ctx.current_img = np.zeros((32, 32, 3), dtype=np.uint8)
@@ -191,6 +191,10 @@ async def test_process_image_applies_textract_quality_fallback(monkeypatch):
         calls["textract"] += 1
         return ("Factura total fecha nombre id " * 8).strip()
 
+    async def _direct_empty(_image_bytes):
+        calls["direct"] += 1
+        return ""
+
     async def _enhance_noop(img):
         return img
 
@@ -200,11 +204,13 @@ async def test_process_image_applies_textract_quality_fallback(monkeypatch):
     monkeypatch.setattr(engine.processor, "preprocess_frame", _preprocess)
     monkeypatch.setattr(engine.processor, "extract_text", _extract_low_quality)
     monkeypatch.setattr(engine.processor, "extract_text_textract", _textract_good)
+    monkeypatch.setattr(engine.processor, "extract_text_direct", _direct_empty)
     monkeypatch.setattr(engine_mod.ImageToolkit, "enhance_iteration", _enhance_noop)
 
     result = await engine.process_image(b"img-bytes")
 
     assert calls["textract"] == 1
+    assert calls["direct"] == 1
     assert "Factura total" in result.get("text", "")
     assert any(
         i.get("method") == "textract-quality-fallback"
@@ -257,5 +263,60 @@ async def test_process_image_skips_textract_fallback_on_high_confidence(monkeypa
     assert "Factura total" in result.get("text", "")
     assert not any(
         i.get("method") == "textract-quality-fallback"
+        for i in result.get("iterations", [])
+    )
+
+
+@pytest.mark.asyncio
+async def test_process_image_applies_direct_quality_fallback(monkeypatch):
+    engine = engine_mod.IterativeOCREngine(
+        config=engine_mod.EngineConfig(max_iterations=1, confidence_threshold=0.5)
+    )
+    calls = {"textract": 0, "direct": 0}
+
+    async def _decode_ok(ctx):
+        ctx.current_img = np.zeros((32, 32, 3), dtype=np.uint8)
+        return True
+
+    async def _recon_noop(_ctx, _max_iterations):
+        return None
+
+    async def _layout_noop(ctx):
+        ctx.layout_regions = []
+        ctx.layout_type = "unknown"
+
+    def _preprocess(_img, _iteration, _use_recon):
+        return np.zeros((32, 32), dtype=np.uint8)
+
+    async def _extract_low_quality(_img, _regions=None, _original_bytes=None):
+        return "IR {g W rm"
+
+    async def _textract_weak(_image_bytes):
+        calls["textract"] += 1
+        return "IR {g W rm"
+
+    async def _direct_good(_image_bytes):
+        calls["direct"] += 1
+        return ("Factura total fecha nombre id " * 8).strip()
+
+    async def _enhance_noop(img):
+        return img
+
+    monkeypatch.setattr(engine.processor, "decode_and_validate", _decode_ok)
+    monkeypatch.setattr(engine.processor, "run_reconstruction", _recon_noop)
+    monkeypatch.setattr(engine, "_analyze_layout", _layout_noop)
+    monkeypatch.setattr(engine.processor, "preprocess_frame", _preprocess)
+    monkeypatch.setattr(engine.processor, "extract_text", _extract_low_quality)
+    monkeypatch.setattr(engine.processor, "extract_text_textract", _textract_weak)
+    monkeypatch.setattr(engine.processor, "extract_text_direct", _direct_good)
+    monkeypatch.setattr(engine_mod.ImageToolkit, "enhance_iteration", _enhance_noop)
+
+    result = await engine.process_image(b"img-bytes")
+
+    assert calls["textract"] == 1
+    assert calls["direct"] == 1
+    assert "Factura total" in result.get("text", "")
+    assert any(
+        i.get("method") == "direct-quality-fallback"
         for i in result.get("iterations", [])
     )
