@@ -113,8 +113,17 @@ class ImageToolkit:
         """
         Applies padding to a Region of Interest for better OCR performance.
         """
+        # OpenCV's `value` behaves differently for multi-channel images:
+        # `value=[255]` only sets the first channel. Make the border white.
+        border_value = 255 if len(roi.shape) < 3 else [255] * roi.shape[2]
         return cv2.copyMakeBorder(
-            roi, padding, padding, padding, padding, cv2.BORDER_CONSTANT, value=[255]
+            roi,
+            padding,
+            padding,
+            padding,
+            padding,
+            cv2.BORDER_CONSTANT,
+            value=border_value,
         )
 
     @staticmethod

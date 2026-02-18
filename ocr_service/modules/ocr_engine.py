@@ -898,6 +898,15 @@ class DocumentProcessor:
             rectified = self.reconstructor.remove_redactions(working)
             working = self.reconstructor.remove_color_overlay(rectified)
 
+        if self._is_card_doc_type():
+            # Pad before thresholding/morphology so edge-touching digits are not lost.
+            try:
+                h, w = working.shape[:2]
+                pad = min(32, max(8, int(round(0.02 * max(h, w)))))
+                working = ImageToolkit.prepare_roi(working, padding=pad)
+            except Exception as exc:
+                logger.debug("Card-mode preprocess padding failed: %s", exc)
+
         if iteration == 0:
             return self.enhancer.clean_for_ocr(working)
 
