@@ -1,0 +1,8 @@
+[MASTER]
+# cv2 is a C-extension with dynamically generated members; without this, Pylint
+# frequently reports false positives like "Module 'cv2' has no 'cvtColor' member".
+extension-pkg-allow-list=cv2
+
+[TYPECHECK]
+generated-members=cv2.*
+

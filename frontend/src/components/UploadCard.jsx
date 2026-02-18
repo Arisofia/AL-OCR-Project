@@ -1,7 +1,16 @@
 import { Upload, Loader2, Zap, FileText } from 'lucide-react'
 import { motion as Motion } from 'framer-motion'
 
-const UploadCard = ({ file, preview, loading, health, onFileChange, onUpload }) => {
+const UploadCard = ({
+  file,
+  preview,
+  loading,
+  health,
+  docType,
+  onDocTypeChange,
+  onFileChange,
+  onUpload
+}) => {
   return (
     <section className="upload-section">
       <div className="upload-card">
@@ -34,6 +43,26 @@ const UploadCard = ({ file, preview, loading, health, onFileChange, onUpload }) 
               </>
             )}
           </div>
+        </div>
+
+        <div className="form-stack" style={{ marginTop: '1rem' }}>
+          <div className="field">
+            <span>Document Type</span>
+            <select
+              className="text-input"
+              value={docType}
+              onChange={(e) => onDocTypeChange(e.target.value)}
+            >
+              <option value="generic">Auto / Generic</option>
+              <option value="bank_card">Bank Card</option>
+              <option value="invoice">Invoice</option>
+              <option value="receipt">Receipt</option>
+              <option value="id_document">ID Document</option>
+            </select>
+          </div>
+          <p className="hint" style={{ margin: 0 }}>
+            For cards, select <code>Bank Card</code> to enable card-optimized OCR (padding + digit rescue).
+          </p>
         </div>
 
         <button

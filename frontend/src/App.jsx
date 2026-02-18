@@ -14,6 +14,7 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [preview, setPreview] = useState(null)
   const [health, setHealth] = useState('checking')
+  const [ocrDocType, setOcrDocType] = useState('generic')
 
   const [datasetKey, setDatasetKey] = useState('')
   const [datasetFiles, setDatasetFiles] = useState([])
@@ -65,6 +66,9 @@ function App() {
 
     try {
       const response = await api.post('/ocr', formData, {
+        params: {
+          doc_type: ocrDocType
+        },
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -155,6 +159,8 @@ function App() {
             preview={preview}
             loading={loading}
             health={health}
+            docType={ocrDocType}
+            onDocTypeChange={setOcrDocType}
             onFileChange={handleFileChange}
             onUpload={handleUpload}
           />
