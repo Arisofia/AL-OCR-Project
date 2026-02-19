@@ -46,7 +46,7 @@ jobs:
       - name: Build and push (primary auth)
         id: build_push_primary
         continue-on-error: true
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./ocr_service/Dockerfile
@@ -70,7 +70,7 @@ jobs:
         id: build_push_retry
         if: ${{ steps.build_push_primary.outcome != 'success' }}
         continue-on-error: true
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./ocr_service/Dockerfile
