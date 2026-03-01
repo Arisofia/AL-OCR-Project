@@ -40,7 +40,11 @@ def test_classify_driver_license():
 
 
 def test_classify_national_id():
-    text = "NATIONAL IDENTITY CARD\nDocumento Nacional de Identidad\nNúmero de identificación: 12345678X"
+    text = (
+        "NATIONAL IDENTITY CARD\n"
+        "Documento Nacional de Identidad\n"
+        "Número de identificación: 12345678X"
+    )
     result = DocumentIntelligence.analyze(text)
     assert result["document_type"] == "national_id"
     assert result["type_confidence"] >= 0.65
