@@ -96,7 +96,7 @@ _ADDRESS_PATTERNS = [
 ]
 
 _EXPIRY_PATTERNS = [
-    r"(?:EXPIRY|EXP\.?|EXPIRATION|VENC\.?|VÁLIDO\s+HASTA|VALID\s+THRU)[:\s/]+(\d{1,2}[/.\-]\d{2,4})",
+    r"(?:EXPIRY|EXP\.?|EXPIRATION|VENC\.?|VÁLIDO\s+HASTA|VALID\s+THRU)[:\s/]+(\d{1,2}[/.\-]\d{2,4})(?![/.\-]\d{2,4})",
     r"(?:VALID\s+UNTIL|VÁLIDO\s+HASTA)[:\s]+(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})",
 ]
 
