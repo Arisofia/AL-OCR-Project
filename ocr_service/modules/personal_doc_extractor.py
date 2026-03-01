@@ -302,32 +302,20 @@ FIELD_DEFINITIONS: dict[str, list[_FieldDef]] = {
     "receipt": [
         ("total_amount", _TOTAL_PATTERNS, False, "high"),
     ],
-    # Aliases: map id_card → same fields as national_id
-    "id_card": [
-        ("full_name", _NAME_PATTERNS, False, "medium"),
-        ("date_of_birth", _DATE_PATTERNS, False, "high"),
-        ("document_number", _DOC_NUMBER_PATTERNS, False, "medium"),
-        ("expiry_date", _EXPIRY_PATTERNS, False, "high"),
-        ("nationality", _NATIONALITY_PATTERNS, False, "high"),
-        ("gender", _GENDER_PATTERNS, False, "high"),
-        ("address", _ADDRESS_PATTERNS, False, "low"),
-        ("place_of_birth", _PLACE_OF_BIRTH_PATTERNS, False, "medium"),
-    ],
-    # Aliases: map credit_card / debit_card → same fields as bank_card
-    "credit_card": [
-        ("card_number", _PAN_PATTERNS, True, "high"),
-        ("expiry_date", _EXPIRY_PATTERNS, False, "high"),
-        ("cvv", _CVV_PATTERNS, True, "high"),
-        ("cardholder_name", _NAME_PATTERNS, False, "medium"),
-    ],
-    "debit_card": [
-        ("card_number", _PAN_PATTERNS, True, "high"),
-        ("expiry_date", _EXPIRY_PATTERNS, False, "high"),
-        ("cvv", _CVV_PATTERNS, True, "high"),
-        ("cardholder_name", _NAME_PATTERNS, False, "medium"),
-    ],
 }
 
+# Aliases: document types that reuse the same field definitions as a base type.
+_ALIAS_DOCUMENT_TYPES: dict[str, str] = {
+    # id_card → same fields as national_id
+    "id_card": "national_id",
+    # credit_card / debit_card → same fields as bank_card
+    "credit_card": "bank_card",
+    "debit_card": "bank_card",
+}
+
+# Populate FIELD_DEFINITIONS for aliases by referencing their base type lists.
+for _alias_doc_type, _base_doc_type in _ALIAS_DOCUMENT_TYPES.items():
+    FIELD_DEFINITIONS[_alias_doc_type] = FIELD_DEFINITIONS[_base_doc_type]
 # Document types that are treated as generic (minimal field extraction)
 _GENERIC_DOC_TYPES = {"generic", "generic_document", "form", "unknown"}
 
