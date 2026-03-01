@@ -1,6 +1,6 @@
 """
 Document intelligence helpers:
-- classify extracted OCR text into a document type
+- classify extracted OCR text into a document type (including personal documents)
 - detect card-like number sequences
 - validate detected card sequences with Luhn (no prediction/completion)
 """
@@ -70,6 +70,136 @@ class DocumentIntelligence:
         "id",
     }
 
+    # Personal document keyword sets
+    _PASSPORT_KEYWORDS: ClassVar[set[str]] = {
+        "passport",
+        "pasaporte",
+        "passeport",
+        "reisepass",
+        "mrz",
+        "p<",
+        "nationality",
+        "nacionalidad",
+        "place of birth",
+    }
+    _DRIVER_LICENSE_KEYWORDS: ClassVar[set[str]] = {
+        "driving licence",
+        "driver's license",
+        "driver license",
+        "licencia de conducir",
+        "permis de conduire",
+        "führerschein",
+        "fuhrerschein",
+        "driving",
+        "categories",
+        "vehicle",
+    }
+    _NATIONAL_ID_KEYWORDS: ClassVar[set[str]] = {
+        "national id",
+        "national identity",
+        "cedula de identidad",
+        "documento nacional",
+        "numero de identificacion",
+        "número de identificación",
+        "identity card",
+        "carte nationale",
+        "personalausweis",
+    }
+    _TAX_ID_KEYWORDS: ClassVar[set[str]] = {
+        "tax id",
+        "taxpayer",
+        "nif",
+        "cif",
+        "rfc",
+        "cpf",
+        "cnpj",
+        "tin",
+        "vat",
+        "fiscal",
+        "tributario",
+        "identification number",
+    }
+    _UTILITY_BILL_KEYWORDS: ClassVar[set[str]] = {
+        "utility",
+        "electricity",
+        "electric",
+        "water",
+        "gas",
+        "internet",
+        "phone bill",
+        "kwh",
+        "meter reading",
+        "consumption",
+        "lectura",
+        "consumo",
+        "servicio",
+        "suministro",
+    }
+    _BANK_STATEMENT_KEYWORDS: ClassVar[set[str]] = {
+        "bank statement",
+        "account statement",
+        "estado de cuenta",
+        "extracto",
+        "balance",
+        "transactions",
+        "transacciones",
+        "opening balance",
+        "closing balance",
+        "debit",
+        "credit",
+        "iban",
+        "swift",
+        "routing",
+    }
+    _PAYSLIP_KEYWORDS: ClassVar[set[str]] = {
+        "payslip",
+        "pay stub",
+        "salary",
+        "salario",
+        "nomina",
+        "nómina",
+        "payroll",
+        "earnings",
+        "deductions",
+        "gross",
+        "net pay",
+        "employer",
+        "employee id",
+    }
+    _EMPLOYMENT_LETTER_KEYWORDS: ClassVar[set[str]] = {
+        "employment letter",
+        "carta de empleo",
+        "carta laboral",
+        "to whom it may concern",
+        "a quien corresponda",
+        "employed",
+        "employment",
+        "position",
+        "designation",
+        "annual salary",
+        "full time",
+    }
+    _RESIDENCE_PERMIT_KEYWORDS: ClassVar[set[str]] = {
+        "residence permit",
+        "permiso de residencia",
+        "residency",
+        "resident",
+        "visa",
+        "immigration",
+        "foreign national",
+        "valid for",
+    }
+    _MEMBERSHIP_CARD_KEYWORDS: ClassVar[set[str]] = {
+        "membership",
+        "member",
+        "club",
+        "loyalty",
+        "rewards",
+        "points",
+        "member since",
+        "member id",
+    }
+
     @staticmethod
     def _normalize_bin_prefix(value: str) -> str:
         """Normalize BIN input and return a 6-8 digit lookup prefix."""
@@ -135,6 +265,7 @@ class DocumentIntelligence:
         """
         Analyze OCR text and return:
         - document_type
+        - type_confidence
         - card_analysis metadata (masked candidates + Luhn validity)
         """
         candidates = cls._extract_card_candidates(text)
@@ -160,9 +291,12 @@ class DocumentIntelligence:
             "requires_manual_review": len(card_rows) > 0 and luhn_valid_count == 0,
             "candidates": card_rows,
         }
-        document_type = cls._classify_document_type(text, layout_type, card_rows)
+        document_type, type_confidence = cls._classify_document_type(
+            text, layout_type, card_rows
+        )
         return {
             "document_type": document_type,
+            "type_confidence": type_confidence,
             "card_analysis": card_analysis,
         }
 
@@ -238,9 +372,19 @@ class DocumentIntelligence:
         text: str,
         layout_type: str,
         card_rows: list[dict[str, Any]],
-    ) -> str:
-        """Classify document category using text keywords + card metadata."""
+    ) -> tuple[str, float]:
+        """
+        Classify document category using text keywords + card metadata.
+
+        Returns a tuple of (document_type, type_confidence) where type_confidence
+        is a float in [0.0, 1.0]. When uncertain, returns 'generic_document' with
+        a lower confidence score.
+        """
         lower = (text or "").lower()
+
+        def _keyword_score(keywords: set[str]) -> int:
+            return sum(1 for kw in keywords if kw in lower)
+
         has_card_keyword = any(keyword in lower for keyword in cls._CARD_KEYWORDS)
         has_invoice_keyword = any(keyword in lower for keyword in cls._INVOICE_KEYWORDS)
         has_receipt_keyword = any(keyword in lower for keyword in cls._RECEIPT_KEYWORDS)
@@ -249,18 +393,67 @@ class DocumentIntelligence:
         has_card_candidates = len(card_rows) > 0
         max_card_len = max((row.get("length", 0) for row in card_rows), default=0)
 
+        passport_score = _keyword_score(cls._PASSPORT_KEYWORDS)
+        driver_score = _keyword_score(cls._DRIVER_LICENSE_KEYWORDS)
+        national_id_score = _keyword_score(cls._NATIONAL_ID_KEYWORDS)
+        tax_id_score = _keyword_score(cls._TAX_ID_KEYWORDS)
+        utility_score = _keyword_score(cls._UTILITY_BILL_KEYWORDS)
+        bank_stmt_score = _keyword_score(cls._BANK_STATEMENT_KEYWORDS)
+        payslip_score = _keyword_score(cls._PAYSLIP_KEYWORDS)
+        employment_score = _keyword_score(cls._EMPLOYMENT_LETTER_KEYWORDS)
+        residence_score = _keyword_score(cls._RESIDENCE_PERMIT_KEYWORDS)
+        membership_score = _keyword_score(cls._MEMBERSHIP_CARD_KEYWORDS)
+
+        # Build list of (doc_type, raw_score) for personal documents.
+        personal_doc_candidates: list[tuple[str, int]] = [
+            ("passport", passport_score),
+            ("driver_license", driver_score),
+            ("national_id", national_id_score),
+            ("tax_id", tax_id_score),
+            ("utility_bill", utility_score),
+            ("bank_statement", bank_stmt_score),
+            ("payslip", payslip_score),
+            ("employment_letter", employment_score),
+            ("residence_permit", residence_score),
+            ("membership_card", membership_score),
+        ]
+        best_personal_type, best_personal_score = max(
+            personal_doc_candidates, key=lambda x: x[1]
+        )
+
+        # --- Personal document classification (high-confidence, checked first) ---
+        if best_personal_score >= 2:
+            # Multiple matching keywords → higher confidence; skip card detection
+            confidence = min(0.95, 0.70 + best_personal_score * 0.05)
+            return best_personal_type, round(confidence, 2)
+
+        # --- Hard classification rules (high confidence) ---
         if has_invoice_keyword:
-            return "invoice"
+            return "invoice", 0.90
         if has_receipt_keyword:
-            return "receipt"
-        if has_id_keyword:
-            return "id_document"
+            return "receipt", 0.88
         if has_valid_card:
-            return "bank_card"
+            return "bank_card", 0.95
         if has_card_candidates and (has_card_keyword or max_card_len >= 11):
-            return "bank_card"
+            return "bank_card", 0.80
+
+        if best_personal_score == 1:
+            # Single keyword match → moderate confidence
+            # Check for legacy id_document (catch-all)
+            if has_id_keyword and best_personal_type in {
+                "passport",
+                "national_id",
+                "driver_license",
+            }:
+                return best_personal_type, 0.65
+            if has_id_keyword:
+                return "id_document", 0.60
+
+        # --- Legacy fallback rules ---
+        if has_id_keyword:
+            return "id_document", 0.55
         if layout_type == "dense_text":
-            return "statement"
+            return "statement", 0.60
         if layout_type == "large_blocks":
-            return "form"
-        return "generic"
+            return "form", 0.55
+        return "generic_document", 0.40
