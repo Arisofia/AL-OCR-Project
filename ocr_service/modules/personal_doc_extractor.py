@@ -96,8 +96,10 @@ _ADDRESS_PATTERNS = [
 ]
 
 _EXPIRY_PATTERNS = [
-    r"(?:EXPIRY|EXP\.?|EXPIRATION|VENC\.?|VÁLIDO\s+HASTA|VALID\s+THRU)[:\s/]+(\d{1,2}[/.\-]\d{2,4})(?![/.\-]\d{2,4})",
-    r"(?:VALID\s+UNTIL|VÁLIDO\s+HASTA)[:\s]+(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})",
+    # Full date (DD/MM/YYYY or DD/MM/YY) – matched first to avoid truncating the year
+    r"(?:EXPIRY|EXPIRATION|EXP\.?|VENC\.?|VÁLIDO\s+HASTA|VALID\s+(?:THRU|UNTIL))[:\s/]+(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})",
+    # Short MM/YY – only when NOT followed by another date component
+    r"(?:EXPIRY|EXP\.?|EXPIRATION|VENC\.?|VALID\s+THRU)[:\s/]+(\d{1,2}[/.\-]\d{2,4})(?![/.\-]\d{2,4})",
 ]
 
 _NATIONALITY_PATTERNS = [
@@ -147,6 +149,11 @@ _PERIOD_PATTERNS = [
 _TOTAL_PATTERNS = [
     r"(?:TOTAL\s+AMOUNT|TOTAL|IMPORTE\s+TOTAL|MONTANT\s+TOTAL)[:\s]+([£$€\d,\.\s]+)",
     r"(?:AMOUNT\s+DUE|SALDO\s+TOTAL|BALANCE\s+DUE)[:\s]+([£$€\d,\.\s]+)",
+]
+
+_OPENING_BALANCE_PATTERNS = [
+    r"(?:OPENING\s+BALANCE|SALDO\s+INICIAL|SOLDE\s+INITIAL|ANFANGSSALDO)[:\s]+([£$€\d,\.\s]+)",
+    r"(?:BALANCE\s+BROUGHT\s+FORWARD|B/F)[:\s]+([£$€\d,\.\s]+)",
 ]
 
 # ---------------------------------------------------------------------------
@@ -219,7 +226,7 @@ FIELD_DEFINITIONS: dict[str, list[_FieldDef]] = {
         ("address", _ADDRESS_PATTERNS, False, "medium"),
         ("account_number", _ACCOUNT_NUMBER_PATTERNS, False, "medium"),
         ("period", _PERIOD_PATTERNS, False, "high"),
-        ("opening_balance", _TOTAL_PATTERNS[:1], False, "medium"),
+        ("opening_balance", _OPENING_BALANCE_PATTERNS, False, "medium"),
     ],
     "statement": [
         ("full_name", _NAME_PATTERNS, False, "medium"),

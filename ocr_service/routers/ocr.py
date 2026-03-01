@@ -113,6 +113,29 @@ async def perform_document_ocr(
 
     Sensitive fields (PAN, CVV) are masked in the response and never logged.
     Low-confidence reconstructions are flagged in the ``warnings`` array.
+
+    Example response::
+
+        {
+            "filename": "passport.jpg",
+            "document_type": "passport",
+            "type_confidence": 0.80,
+            "plain_text": "PASSPORT\\nSurname: SMITH...",
+            "fields": [
+                {"name": "document_number", "value": "AB123456",
+                 "raw_ocr": "AB123456", "confidence_level": "high"},
+                {"name": "date_of_birth", "value": "15-03-1985",
+                 "raw_ocr": "15/03/1985", "confidence_level": "medium"}
+            ],
+            "warnings": [
+                "date_of_birth partially reconstructed from OCR output; verify manually"
+            ],
+            "metadata": {"language_guess": "en", "country_guess": null,
+                         "ocr_method": "gemini"},
+            "processing_time": 1.23,
+            "request_id": "abc-123",   // optional – null when not set
+            "s3_key": null             // optional – null when no S3 upload
+        }
     """
     start_time = time.time()
     status = "failure"
