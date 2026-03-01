@@ -7,7 +7,10 @@ from fastapi import APIRouter, Depends, File, Header, Request, UploadFile
 from ocr_service.config import Settings, get_settings
 from ocr_service.exceptions import OCRPipelineError
 from ocr_service.metrics import OCR_ERROR_COUNT, OCR_REQUEST_COUNT, OCR_REQUEST_LATENCY
-from ocr_service.modules.personal_doc_extractor import PersonalDocExtractor, detect_metadata
+from ocr_service.modules.personal_doc_extractor import (
+    PersonalDocExtractor,
+    detect_metadata,
+)
 from ocr_service.modules.processor import OCRProcessor, ProcessingConfig
 from ocr_service.routers.deps import get_api_key, get_ocr_processor, get_request_id
 from ocr_service.schemas import DocumentField, DocumentResponse, OCRResponse
