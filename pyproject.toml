@@ -20,6 +20,8 @@ ignore = [
 "scripts/*" = ["T201"]
 "ocr_service/config.py" = ["ERA001"]
 "ocr_service/modules/active_learning_orchestrator.py" = ["ERA001"]
+"ocr_service/modules/personal_doc_extractor.py" = ["RUF001", "RUF002", "RUF003", "ERA001", "ARG001", "E501"]
+"ocr_service/routers/ocr.py" = ["RUF002", "E501"]
 
 [tool.mypy]
 python_version = "3.9"
