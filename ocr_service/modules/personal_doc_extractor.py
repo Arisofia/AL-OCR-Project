@@ -81,13 +81,13 @@ _MRZ_PATTERNS = [
 ]
 
 _NAME_PATTERNS = [
-    # After common labels
+    # Full name label (prefer complete names when available)
+    r"(?:FULL\s+NAME|NOMBRE\s+COMPLETO)[:\s]+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s\-']{4,60})",
+    # MRZ name: P<COUNTRY<SURNAME<<GIVEN<< (full name block)
+    r"P<[A-Z]{3}<([A-Z<]{5,44})",
+    # Fallbacks: component labels (surname / given names)
     r"(?:SURNAME|APELLIDOS?|LAST\s+NAME|NOM)[:\s]+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s\-']{2,50})",
     r"(?:GIVEN\s+NAMES?|NOMBRES?|FIRST\s+NAME|PRÉNOM)[:\s]+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s\-']{2,40})",
-    # MRZ name: P<COUNTRY<SURNAME<<GIVEN<<
-    r"P<[A-Z]{3}<([A-Z<]{5,44})",
-    # Full name label
-    r"(?:FULL\s+NAME|NOMBRE\s+COMPLETO)[:\s]+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s\-']{4,60})",
 ]
 
 _ADDRESS_PATTERNS = [
