@@ -2,7 +2,7 @@
 Pydantic schemas for the OCR service API.
 """
 
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
@@ -35,7 +35,37 @@ class OCRResponse(BaseModel):
     method: Optional[str] = None
     request_id: Optional[str] = None
     document_type: Optional[str] = None
+    type_confidence: Optional[float] = None
     card_analysis: Optional[dict] = None
+
+
+class DocumentField(BaseModel):
+    """
+    Schema for a single extracted field from a personal document.
+    """
+
+    name: str
+    value: str
+    raw_ocr: Optional[str] = None
+    confidence_level: str  # "high", "medium", or "low"
+
+
+class DocumentResponse(BaseModel):
+    """
+    Schema for structured personal document OCR response.
+    Includes document classification, extracted fields, warnings, and metadata.
+    """
+
+    filename: str
+    document_type: str
+    type_confidence: float
+    plain_text: str
+    fields: list[DocumentField]
+    warnings: list[str]
+    metadata: dict[str, Any]
+    processing_time: float
+    request_id: Optional[str] = None
+    s3_key: Optional[str] = None
 
 
 class HealthResponse(BaseModel):
