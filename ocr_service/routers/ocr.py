@@ -216,10 +216,18 @@ async def perform_document_ocr(
             )
 
         expected_count = len(MANDATORY_FIELDS.get(document_type, []))
+        # Total number of fields extracted (mandatory + optional)
         extracted_count = len(doc_fields)
-        completeness = (
-            round(extracted_count / expected_count, 4) if expected_count else None
-        )
+        # Number of mandatory fields that are present
+        missing_mandatory = decision_readiness.get("missing_mandatory", []) or []
+        mandatory_present = max(0, expected_count - len(missing_mandatory))
+        if expected_count:
+            ratio = mandatory_present / expected_count
+            # Clamp ratio to [0, 1] to avoid over- or underflow due to inconsistencies
+            ratio = max(0.0, min(1.0, ratio))
+            completeness = round(ratio, 4)
+        else:
+            completeness = None
 
         analytics = DocumentAnalytics(
             decision_readiness=decision_readiness,
