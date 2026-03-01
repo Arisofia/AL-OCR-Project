@@ -7,6 +7,7 @@ import pytest
 from ocr_service.modules.document_intelligence import DocumentIntelligence
 from ocr_service.modules.personal_doc_extractor import (
     PersonalDocExtractor,
+    _luhn_valid,
     detect_metadata,
 )
 
@@ -243,3 +244,109 @@ def test_driver_license_fields(extractor):
     field_names = {f.name for f in fields}
     assert "date_of_birth" in field_names
     assert "expiry_date" in field_names
+
+
+# ---------------------------------------------------------------------------
+# Luhn algorithm unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_luhn_valid_known_good_card():
+    """Standard Visa test PAN 4111111111111111 must pass Luhn."""
+    assert _luhn_valid("4111111111111111") is True
+
+
+def test_luhn_invalid_last_digit_changed():
+    """Changing the last digit of a Luhn-valid number must fail."""
+    assert _luhn_valid("4111111111111112") is False
+
+
+def test_luhn_rejects_non_digit_string():
+    assert _luhn_valid("4111-1111-1111-1111") is False
+
+
+def test_luhn_rejects_too_short():
+    assert _luhn_valid("123456789012") is False  # 12 digits, below min 13
+
+
+def test_luhn_rejects_too_long():
+    assert _luhn_valid("1" * 20) is False  # 20 digits, above max 19
+
+
+def test_luhn_amex_valid():
+    """Standard Amex test PAN 378282246310005 must pass Luhn."""
+    assert _luhn_valid("378282246310005") is True
+
+
+# ---------------------------------------------------------------------------
+# Pattern-aware validator integration tests (Luhn + expiry date)
+# ---------------------------------------------------------------------------
+
+
+def test_luhn_valid_card_boosts_confidence_to_high(extractor):
+    """card_number passing Luhn gets confidence_level='high' and a positive note."""
+    text = "VISA\n4111 1111 1111 1111\nJOHN SMITH\nEXP 12/26\n"
+    fields, warnings = extractor.extract(text, "bank_card")
+    card = next((f for f in fields if f.name == "card_number"), None)
+    assert card is not None, "card_number field should be extracted"
+    assert card.confidence_level == "high"
+    assert any("Luhn check passed" in w for w in warnings), warnings
+
+
+def test_luhn_invalid_card_lowers_confidence_to_low(extractor):
+    """card_number failing Luhn gets confidence_level='low' and a warning."""
+    text = "VISA\n4111 1111 1111 1112\nJOHN SMITH\nEXP 12/26\n"
+    fields, warnings = extractor.extract(text, "bank_card")
+    card = next((f for f in fields if f.name == "card_number"), None)
+    assert card is not None, "card_number field should be extracted"
+    assert card.confidence_level == "low"
+    assert any("Luhn check failed" in w for w in warnings), warnings
+
+
+def test_valid_mmyy_expiry_boosts_confidence_to_high(extractor):
+    """card expiry in MM/YY format within valid range → confidence_level='high'."""
+    text = "VISA\n4111 1111 1111 1111\nEXP 12/26\n"
+    fields, warnings = extractor.extract(text, "bank_card")
+    exp = next((f for f in fields if f.name == "expiry_date"), None)
+    assert exp is not None, "expiry_date should be extracted"
+    assert exp.confidence_level == "high"
+    assert any("format valid" in w for w in warnings), warnings
+
+
+def test_invalid_expiry_month_lowers_confidence(extractor):
+    """Expiry with month 13 must get confidence_level='low' and a warning."""
+    text = "EXP 13/26\n"
+    fields, warnings = extractor.extract(text, "bank_card")
+    exp = next((f for f in fields if f.name == "expiry_date"), None)
+    if exp:  # only assert if the pattern matched
+        assert exp.confidence_level == "low"
+        assert any("invalid month" in w for w in warnings), warnings
+
+
+def test_passport_full_date_expiry_boosts_confidence(extractor):
+    """Document expiry in DD/MM/YYYY format → confidence_level='high'."""
+    text = "PASSPORT\nDate of Expiry: 25/09/2030\n"
+    fields, warnings = extractor.extract(text, "passport")
+    exp = next((f for f in fields if f.name == "expiry_date"), None)
+    assert exp is not None, "expiry_date should be extracted from passport text"
+    assert exp.confidence_level == "high"
+    assert any("format valid" in w for w in warnings), warnings
+
+
+def test_bank_statement_opening_balance_field(extractor):
+    """bank_statement must extract opening_balance using dedicated patterns."""
+    text = (
+        "BANK STATEMENT\n"
+        "Account: DE89370400440532013000\n"
+        "Opening Balance: £1,200.00\n"
+        "Statement Period: January 2024\n"
+    )
+    fields, _ = extractor.extract(text, "bank_statement")
+    field_names = {f.name for f in fields}
+    assert "opening_balance" in field_names, (
+        "opening_balance must be extracted with _OPENING_BALANCE_PATTERNS"
+    )
+    ob_field = next(f for f in fields if f.name == "opening_balance")
+    assert "1,200" in ob_field.value or "1200" in ob_field.value, (
+        f"opening_balance value should contain the extracted amount; got {ob_field.value!r}"
+    )

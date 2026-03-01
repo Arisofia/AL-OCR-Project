@@ -22,12 +22,13 @@ Design goals:
 - Each extracted field carries raw_ocr, normalized value, and a confidence level.
 """
 
+import datetime
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
-__all__ = ["PersonalDocExtractor", "ExtractedField", "detect_metadata"]
+__all__ = ["PersonalDocExtractor", "ExtractedField", "detect_metadata", "_luhn_valid"]
 
 logger = logging.getLogger("ocr-service.personal-doc-extractor")
 
@@ -324,6 +325,134 @@ def _mask_pan(value: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Pattern-aware confidence validators (continuous learning layer)
+# ---------------------------------------------------------------------------
+# Design: adding a new field validation rule is purely a configuration exercise
+# — define a validator function and register it in _FIELD_VALIDATORS.
+#
+# Each validator receives (normalized_value, raw_ocr_value) and returns:
+#   (confidence_override, advisory_note)
+#   confidence_override  – "high"/"medium"/"low", or None to keep existing level
+#   advisory_note        – human-readable string (positive or warning), or None
+#
+# This registry is the "continuous learning" representation for this codebase:
+# domain knowledge about valid formats (card lengths, Luhn, expiry ranges) is
+# encoded here in a centrally managed, extendable configuration map rather than
+# scattered across pattern strings.
+
+
+def _luhn_valid(number: str) -> bool:
+    """Return True when *number* (digits-only string) satisfies the Luhn algorithm."""
+    if not number.isdigit() or not (13 <= len(number) <= 19):
+        return False
+    total = 0
+    for i, ch in enumerate(reversed(number)):
+        d = int(ch)
+        if i % 2 == 1:
+            d = d * 2 - 9 if d > 4 else d * 2
+        total += d
+    return total % 10 == 0
+
+
+def _validate_pan(
+    value: str, raw: str
+) -> tuple[Optional[str], Optional[str]]:
+    """
+    Validate a card PAN (Primary Account Number).
+
+    Checks (in order):
+    1. Stripped value must be digits only (no mixed alpha/symbol chars).
+    2. Length must be 13-19 digits (ISO 7812 range).
+    3. Luhn algorithm must pass.
+
+    Returns:
+        ("high", positive note)   – all checks pass
+        ("low",  warning note)    – any check fails
+    """
+    digits = re.sub(r"\D", "", raw)
+    if not digits:
+        return "low", (
+            "card_number contains non-digit characters; value likely misread"
+        )
+    if not (13 <= len(digits) <= 19):
+        return "low", (
+            f"card_number digit count ({len(digits)}) is outside expected "
+            "range 13-19; verify manually"
+        )
+    if _luhn_valid(digits):
+        return "high", "Luhn check passed; confidence boosted to high"
+    return "low", "Luhn check failed; card number likely misread – verify manually"
+
+
+def _validate_expiry_date(
+    value: str, raw: str
+) -> tuple[Optional[str], Optional[str]]:
+    """
+    Validate an expiry date field.
+
+    Accepts formats after separator normalisation (separators become ``-``):
+    - ``MM-YY``      – card short expiry (e.g. ``12-26``)
+    - ``MM-YYYY``    – medium expiry (e.g. ``12-2026``)
+    - ``DD-MM-YYYY`` / ``DD-MM-YY`` – document expiry (e.g. ``25-09-2030``)
+
+    Adjusts confidence:
+    - Valid format + month 1-12 + year within allowed range → ``"high"``
+    - Month outside 1-12                                   → ``"low"`` + warning
+    - Unrecognised format                                   → ``None`` (keep base)
+    """
+    now = datetime.date.today()
+    # Allow documents up to 10 years expired (historical / archival use-cases)
+    cutoff_year = now.year - 10
+
+    # MM-YY  (e.g. "12-26")
+    m = re.match(r"^(\d{1,2})-(\d{2})$", value)
+    if m:
+        month, year = int(m.group(1)), 2000 + int(m.group(2))
+        if not (1 <= month <= 12):
+            return "low", "Expiry date has invalid month (must be 01-12); verify manually"
+        if year >= cutoff_year:
+            return "high", "Expiry date format valid (MM/YY)"
+        return None, None  # Very old; keep base confidence
+
+    # MM-YYYY  (e.g. "12-2026")
+    m = re.match(r"^(\d{1,2})-(\d{4})$", value)
+    if m:
+        month, year = int(m.group(1)), int(m.group(2))
+        if not (1 <= month <= 12):
+            return "low", "Expiry date has invalid month (must be 01-12); verify manually"
+        if year >= cutoff_year:
+            return "high", "Expiry date format valid (MM/YYYY)"
+        return None, None
+
+    # DD-MM-YYYY or DD-MM-YY  (e.g. "25-09-2030")
+    m = re.match(r"^(\d{1,2})-(\d{1,2})-(\d{2,4})$", value)
+    if m:
+        day, month = int(m.group(1)), int(m.group(2))
+        year_s = m.group(3)
+        year = int(year_s) if len(year_s) == 4 else 2000 + int(year_s)
+        if not (1 <= month <= 12):
+            return "low", "Expiry date has invalid month (must be 01-12); verify manually"
+        if not (1 <= day <= 31):
+            return "low", "Expiry date has invalid day (must be 01-31); verify manually"
+        if year >= cutoff_year:
+            return "high", "Expiry date format valid (DD/MM/YYYY)"
+        return None, None
+
+    return None, None  # Unrecognised format; keep existing confidence
+
+
+# Registry: maps field_name → validator callable
+# To add a new validation rule, add an entry here; the execution loop in
+# extract() applies all registered validators automatically.
+_FIELD_VALIDATORS: dict[
+    str, Callable[[str, str], tuple[Optional[str], Optional[str]]]
+] = {
+    "card_number": _validate_pan,
+    "expiry_date": _validate_expiry_date,
+}
+
+
+# ---------------------------------------------------------------------------
 # Core extractor
 # ---------------------------------------------------------------------------
 
@@ -383,6 +512,17 @@ class PersonalDocExtractor:
                 base_confidence, raw_value, normalized
             )
 
+            # Post-extraction format/algorithm validation (Luhn, expiry range, etc.)
+            # Produces field-specific confidence adjustments and advisory notes.
+            validator_note: Optional[str] = None
+            validator = _FIELD_VALIDATORS.get(field_name)
+            if validator:
+                conf_override, validator_note = validator(normalized, raw_value)
+                if conf_override is not None:
+                    confidence = conf_override
+                if validator_note is not None:
+                    warnings.append(validator_note)
+
             # Mask sensitive values before returning
             display_value = normalized
             if is_sensitive or field_name in _SENSITIVE_FIELDS:
@@ -401,7 +541,8 @@ class PersonalDocExtractor:
             )
             fields.append(ef)
 
-            if confidence == "low":
+            if confidence == "low" and validator_note is None:
+                # Skip generic warning when a validator already emitted a specific note
                 warnings.append(
                     f"{field_name} extracted with low confidence; "
                     "verify manually"

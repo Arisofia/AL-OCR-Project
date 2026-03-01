@@ -138,6 +138,9 @@ def test_document_endpoint_pan_masked():
         assert "1111" in card_field["value"]
         # Full PAN must not appear in value
         assert "4111 1111 1111 1111" not in card_field["value"]
+        # Masking format must show leading asterisks followed by last 4 digits
+        assert card_field["value"].endswith("1111"), card_field["value"]
+        assert "*" in card_field["value"]
         # raw_ocr must be redacted
         assert card_field["raw_ocr"] == "[REDACTED]"
     finally:
@@ -176,5 +179,51 @@ def test_document_endpoint_requires_auth():
         client = TestClient(app)
         response = client.post("/ocr/documents", files=_fake_upload())
         assert response.status_code == 403
+    finally:
+        app.dependency_overrides.pop(get_ocr_processor, None)
+
+
+def test_document_endpoint_luhn_note_in_warnings():
+    """A valid Luhn PAN must produce a Luhn advisory note in the warnings array."""
+    app.dependency_overrides[get_ocr_processor] = lambda: _make_mock_processor(
+        _BANK_CARD_RESULT
+    )
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/ocr/documents",
+            files=_fake_upload(),
+            headers=_auth_headers(),
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        warnings = data.get("warnings", [])
+        # 4111111111111111 is Luhn-valid, so a positive Luhn note must appear
+        assert any("Luhn" in w for w in warnings), (
+            f"Expected a Luhn advisory note in warnings; got: {warnings}"
+        )
+    finally:
+        app.dependency_overrides.pop(get_ocr_processor, None)
+
+
+def test_document_endpoint_expiry_format_note_in_warnings():
+    """Valid MM/YY expiry on a bank card must produce an expiry format note."""
+    app.dependency_overrides[get_ocr_processor] = lambda: _make_mock_processor(
+        _BANK_CARD_RESULT
+    )
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/ocr/documents",
+            files=_fake_upload(),
+            headers=_auth_headers(),
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        warnings = data.get("warnings", [])
+        # EXP 12/26 → "Expiry date format valid (MM/YY)"
+        assert any("format valid" in w for w in warnings), (
+            f"Expected expiry format note in warnings; got: {warnings}"
+        )
     finally:
         app.dependency_overrides.pop(get_ocr_processor, None)
