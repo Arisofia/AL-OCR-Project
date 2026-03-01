@@ -385,7 +385,7 @@ def _validate_pan(
 
 
 def _validate_expiry_date(
-    value: str, raw: str
+    value: str, _raw: str
 ) -> tuple[Optional[str], Optional[str]]:
     """
     Validate an expiry date field.
