@@ -39,7 +39,7 @@ jobs:
 
       - name: Set up CML
         id: setup_cml
-        uses: iterative/setup-cml@v2
+        uses: iterative/setup-cml@v3
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
