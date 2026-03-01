@@ -25,7 +25,7 @@ jobs:
         ${{ vars.OCR_BACKEND_URL || 'https://e2bb7336nub3gwutziiz355cbm0geswv.lambda-url.us-east-1.on.aws' }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Validate required secrets
         run: |
