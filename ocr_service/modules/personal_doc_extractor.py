@@ -25,7 +25,7 @@ Design goals:
 import datetime
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 __all__ = ["PersonalDocExtractor", "ExtractedField", "detect_metadata", "_luhn_valid"]
