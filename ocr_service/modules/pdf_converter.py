@@ -105,13 +105,13 @@ def _try_pillow(
 
     try:
         results: list[np.ndarray] = []
-        img = Image.open(io.BytesIO(pdf_bytes))
-        for page_idx in range(max_pages):
-            try:
-                img.seek(page_idx)
-            except EOFError:
-                break
-            results.append(_pil_to_bgr(img.copy()))
+        with Image.open(io.BytesIO(pdf_bytes)) as img:
+            for page_idx in range(max_pages):
+                try:
+                    img.seek(page_idx)
+                except EOFError:
+                    break
+                results.append(_pil_to_bgr(img.copy()))
         return results if results else None
     except Exception:
         logger.debug("Pillow PDF conversion failed", exc_info=True)
