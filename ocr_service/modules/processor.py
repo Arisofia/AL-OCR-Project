@@ -390,7 +390,7 @@ class OCRProcessor:
             ok, buf = cv2.imencode(".png", page_array)
             if not ok:
                 continue
-            page_bytes = io.BytesIO(buf.tobytes()).read()
+            page_bytes = buf.tobytes()
             page_result = await self._execute_ocr_strategy(
                 page_bytes, advanced, use_recon, doc_type
             )
