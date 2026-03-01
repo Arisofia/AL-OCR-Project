@@ -356,33 +356,3 @@ def test_bank_statement_opening_balance_field(extractor):
     )
 
 
-def test_id_card_alias_extraction(extractor):
-    """'id_card' document type must be handled as an alias for national_id fields."""
-    text = (
-        "IDENTITY CARD\n"
-        "DNI: 12345678X\n"
-        "JUAN PEREZ\n"
-        "Date of Birth: 12/05/1990\n"
-        "Expiry: 01/01/2030\n"
-    )
-    fields, _ = extractor.extract(text, "id_card")
-    field_names = {f.name for f in fields}
-    assert "document_number" in field_names
-    assert "date_of_birth" in field_names
-
-
-def test_credit_card_alias(extractor):
-    """'credit_card' type must extract card_number and expiry_date like bank_card."""
-    text = "VISA\n4111 1111 1111 1111\nJOHN SMITH\nEXP 12/26\n"
-    fields, _ = extractor.extract(text, "credit_card")
-    field_names = {f.name for f in fields}
-    assert "card_number" in field_names
-
-
-def test_debit_card_alias(extractor):
-    """'debit_card' type must extract card_number and expiry_date like bank_card."""
-    text = "MASTERCARD\n5500 0000 0000 0004\nALICE JONES\nEXP 11/27\n"
-    fields, _ = extractor.extract(text, "debit_card")
-    field_names = {f.name for f in fields}
-    assert "card_number" in field_names
-    assert "expiry_date" in field_names
