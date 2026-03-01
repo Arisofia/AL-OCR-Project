@@ -2,12 +2,13 @@
 
 import asyncio
 import hashlib
+import io
 import json
 import logging
 import mimetypes
 import time
 from dataclasses import dataclass
-from typing import Any, Optional, cast
+from typing import Any, ClassVar, Optional, cast
 
 import redis.asyncio as redis  # pylint: disable=import-error
 import redis.exceptions as redis_exceptions  # pylint: disable=import-error
@@ -24,6 +25,7 @@ from ocr_service.services.storage import StorageService
 from ocr_service.utils.tracing import get_current_trace_id
 
 from .ocr_engine import IterativeOCREngine
+from .pdf_converter import is_pdf, pdf_pages_to_images
 
 __all__ = ["OCRProcessor", "ProcessingConfig"]
 
@@ -166,12 +168,17 @@ class OCRProcessor:
 
             # 3. Execute OCR
             use_recon = config.reconstruct or config.enable_reconstruction_config
-            result = await self._execute_ocr_strategy(
-                contents,
-                config.advanced,
-                use_recon,
-                config.doc_type,
-            )
+            if is_pdf(contents):
+                result = await self._process_pdf(
+                    contents, config.advanced, use_recon, config.doc_type
+                )
+            else:
+                result = await self._execute_ocr_strategy(
+                    contents,
+                    config.advanced,
+                    use_recon,
+                    config.doc_type,
+                )
 
             if "error" in result:
                 raise OCRPipelineError(
@@ -228,22 +235,37 @@ class OCRProcessor:
                 filename=filename,
             ) from exc
 
+    _ACCEPTED_EXTENSIONS: ClassVar[frozenset[str]] = frozenset({
+        ".pdf", ".tiff", ".tif", ".heic", ".heif", ".avif", ".webp", ".bmp",
+    })
+
     def _validate_file_type(
         self,
         content_type: str,
         filename: Optional[str],
         request_id: str,
     ) -> None:
-        """Validate that the file is a supported image type."""
-        if not content_type.startswith("image/"):
-            raise OCRPipelineError(
-                phase="validation",
-                message="File must be a valid image format",
-                status_code=400,
-                correlation_id=request_id,
-                trace_id=get_current_trace_id(),
-                filename=filename,
-            )
+        """Validate that the file is a supported image or document type."""
+        if content_type.startswith("image/"):
+            return
+        if content_type == "application/pdf":
+            return
+        if content_type == "application/octet-stream" and filename:
+            ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+            if ext in self._ACCEPTED_EXTENSIONS:
+                return
+        raise OCRPipelineError(
+            phase="validation",
+            message=(
+                "Unsupported file type. Accepted formats: image/*, "
+                "application/pdf, or application/octet-stream with a "
+                ".pdf/.tiff/.tif/.heic/.heif/.avif/.webp/.bmp extension."
+            ),
+            status_code=400,
+            correlation_id=request_id,
+            trace_id=get_current_trace_id(),
+            filename=filename,
+        )
 
     def _build_idempotency_key(
         self,
@@ -344,6 +366,55 @@ class OCRProcessor:
         except redis_exceptions.RedisError:
             OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="delete").inc()
             logger.exception("Redis delete failed")
+
+    async def _process_pdf(
+        self,
+        contents: bytes,
+        advanced: bool,
+        use_recon: bool,
+        doc_type: str,
+    ) -> dict[str, Any]:
+        """Convert a PDF to images and run OCR on each page, then aggregate."""
+        import cv2  # pylint: disable=import-outside-toplevel
+
+        pages = pdf_pages_to_images(contents)
+        if not pages:
+            return {"error": "PDF produced no renderable pages"}
+
+        texts: list[str] = []
+        best_result: Optional[dict[str, Any]] = None
+        best_confidence: float = -1.0
+        combined_iterations: list[dict[str, Any]] = []
+
+        for page_idx, page_array in enumerate(pages):
+            ok, buf = cv2.imencode(".png", page_array)
+            if not ok:
+                continue
+            page_bytes = io.BytesIO(buf.tobytes()).read()
+            page_result = await self._execute_ocr_strategy(
+                page_bytes, advanced, use_recon, doc_type
+            )
+            if "error" in page_result:
+                continue
+            texts.append(page_result.get("text", ""))
+            page_conf = float(page_result.get("confidence", 0.0))
+            if page_conf > best_confidence:
+                best_confidence = page_conf
+                best_result = page_result
+            for it in page_result.get("iterations", []) or []:
+                it_copy = dict(it)
+                it_copy["page"] = page_idx + 1
+                combined_iterations.append(it_copy)
+
+        if best_result is None:
+            return {"error": "All PDF pages failed OCR"}
+
+        best_result["text"] = "\n\n--- PAGE BREAK ---\n\n".join(
+            t for t in texts if t
+        )
+        best_result["confidence"] = best_confidence
+        best_result["iterations"] = combined_iterations
+        return best_result
 
     async def _execute_ocr_strategy(
         self,

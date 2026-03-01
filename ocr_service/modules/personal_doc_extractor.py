@@ -157,6 +157,33 @@ _OPENING_BALANCE_PATTERNS = [
     r"(?:BALANCE\s+BROUGHT\s+FORWARD|B/F)[:\s]+([£$€\d,\.\s]+)",
 ]
 
+_CLOSING_BALANCE_PATTERNS = [
+    r"(?:CLOSING\s+BALANCE|SALDO\s+FINAL|SOLDE\s+FINAL|ENDSALDO)[:\s]+([£$€\d,\.\s]+)",
+    r"(?:BALANCE\s+CARRIED\s+FORWARD|C/F|FINAL\s+BALANCE)[:\s]+([£$€\d,\.\s]+)",
+]
+
+_VAT_PATTERNS = [
+    r"(?:VAT|IVA|TVA|TAX\s+AMOUNT|MWST)[:\s]+([£$€\d,\.\s%]+)",
+    r"(?:VALUE\s+ADDED\s+TAX)[:\s]+([£$€\d,\.\s]+)",
+]
+
+_ISSUE_DATE_PATTERNS = [
+    r"(?:ISSUE\s+DATE|DATE\s+OF\s+ISSUE|ISSUED|EMISSION\s+DATE"
+    r"|FECHA\s+DE\s+EMISI[OÓ]N)[:\s]+(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})",
+    r"(?:DATE\s+ISSUED|FECHA\s+DE\s+EXPEDICI[OÓ]N)"
+    r"[:\s]+(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})",
+]
+
+_PLACE_OF_BIRTH_PATTERNS = [
+    r"(?:PLACE\s+OF\s+BIRTH|LIEU\s+DE\s+NAISSANCE|LUGAR\s+DE\s+NACIMIENTO|LUOGO\s+DI\s+NASCITA|GEBURTSORT)[:\s]+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑA-Za-z\s\-,]{2,50})",
+    r"(?:POB|NACIDO\s+EN|BORN\s+IN)[:\s]+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑA-Za-z\s\-,]{2,50})",
+]
+
+_OUTSTANDING_AMOUNT_PATTERNS = [
+    r"(?:OUTSTANDING\s+AMOUNT|AMOUNT\s+OUTSTANDING|SALDO\s+PENDIENTE|MONTANT\s+EN\s+SOUFFRANCE)[:\s]+([£$€\d,\.\s]+)",
+    r"(?:OVERDUE|PAST\s+DUE)[:\s]+([£$€\d,\.\s]+)",
+]
+
 # ---------------------------------------------------------------------------
 # Field definitions per document type
 # ---------------------------------------------------------------------------
@@ -175,6 +202,7 @@ FIELD_DEFINITIONS: dict[str, list[_FieldDef]] = {
         ("nationality", _NATIONALITY_PATTERNS, False, "high"),
         ("gender", _GENDER_PATTERNS, False, "high"),
         ("address", _ADDRESS_PATTERNS, False, "low"),
+        ("place_of_birth", _PLACE_OF_BIRTH_PATTERNS, False, "medium"),
     ],
     "national_id": [
         ("full_name", _NAME_PATTERNS, False, "medium"),
@@ -184,6 +212,7 @@ FIELD_DEFINITIONS: dict[str, list[_FieldDef]] = {
         ("nationality", _NATIONALITY_PATTERNS, False, "high"),
         ("gender", _GENDER_PATTERNS, False, "high"),
         ("address", _ADDRESS_PATTERNS, False, "low"),
+        ("place_of_birth", _PLACE_OF_BIRTH_PATTERNS, False, "medium"),
     ],
     "passport": [
         ("full_name", _NAME_PATTERNS, False, "medium"),
@@ -193,6 +222,7 @@ FIELD_DEFINITIONS: dict[str, list[_FieldDef]] = {
         ("nationality", _NATIONALITY_PATTERNS, False, "high"),
         ("gender", _GENDER_PATTERNS, False, "high"),
         ("mrz_data", _MRZ_PATTERNS, False, "medium"),
+        ("place_of_birth", _PLACE_OF_BIRTH_PATTERNS, False, "medium"),
     ],
     "driver_license": [
         ("full_name", _NAME_PATTERNS, False, "medium"),
@@ -228,6 +258,8 @@ FIELD_DEFINITIONS: dict[str, list[_FieldDef]] = {
         ("account_number", _ACCOUNT_NUMBER_PATTERNS, False, "medium"),
         ("period", _PERIOD_PATTERNS, False, "high"),
         ("opening_balance", _OPENING_BALANCE_PATTERNS, False, "medium"),
+        ("closing_balance", _CLOSING_BALANCE_PATTERNS, False, "medium"),
+        ("total_amount", _TOTAL_PATTERNS, False, "medium"),
     ],
     "statement": [
         ("full_name", _NAME_PATTERNS, False, "medium"),
@@ -264,9 +296,35 @@ FIELD_DEFINITIONS: dict[str, list[_FieldDef]] = {
         ("total_amount", _TOTAL_PATTERNS, False, "high"),
         ("account_number", _ACCOUNT_NUMBER_PATTERNS, False, "medium"),
         ("period", _PERIOD_PATTERNS, False, "medium"),
+        ("vat_amount", _VAT_PATTERNS, False, "medium"),
+        ("issue_date", _ISSUE_DATE_PATTERNS, False, "medium"),
     ],
     "receipt": [
         ("total_amount", _TOTAL_PATTERNS, False, "high"),
+    ],
+    # Aliases: map id_card → same fields as national_id
+    "id_card": [
+        ("full_name", _NAME_PATTERNS, False, "medium"),
+        ("date_of_birth", _DATE_PATTERNS, False, "high"),
+        ("document_number", _DOC_NUMBER_PATTERNS, False, "medium"),
+        ("expiry_date", _EXPIRY_PATTERNS, False, "high"),
+        ("nationality", _NATIONALITY_PATTERNS, False, "high"),
+        ("gender", _GENDER_PATTERNS, False, "high"),
+        ("address", _ADDRESS_PATTERNS, False, "low"),
+        ("place_of_birth", _PLACE_OF_BIRTH_PATTERNS, False, "medium"),
+    ],
+    # Aliases: map credit_card / debit_card → same fields as bank_card
+    "credit_card": [
+        ("card_number", _PAN_PATTERNS, True, "high"),
+        ("expiry_date", _EXPIRY_PATTERNS, False, "high"),
+        ("cvv", _CVV_PATTERNS, True, "high"),
+        ("cardholder_name", _NAME_PATTERNS, False, "medium"),
+    ],
+    "debit_card": [
+        ("card_number", _PAN_PATTERNS, True, "high"),
+        ("expiry_date", _EXPIRY_PATTERNS, False, "high"),
+        ("cvv", _CVV_PATTERNS, True, "high"),
+        ("cardholder_name", _NAME_PATTERNS, False, "medium"),
     ],
 }
 
