@@ -11,7 +11,6 @@ Covers:
 import io
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from fastapi.testclient import TestClient
 
 from ocr_service.config import get_settings
