@@ -26,6 +26,11 @@ class DocumentIntelligence:
     _BIN_INFO_CACHE: ClassVar[dict[str, Optional[dict[str, Any]]]] = {}
     _BIN_CACHE_MAX_SIZE: ClassVar[int] = 512
 
+    # Confidence scoring constants for personal document classification
+    _MAX_TYPE_CONFIDENCE: ClassVar[float] = 0.95
+    _BASE_PERSONAL_DOC_CONFIDENCE: ClassVar[float] = 0.70
+    _KEYWORD_SCORE_WEIGHT: ClassVar[float] = 0.05
+
     _CARD_KEYWORDS: ClassVar[set[str]] = {
         "tarjeta",
         "card",
@@ -424,7 +429,11 @@ class DocumentIntelligence:
         # --- Personal document classification (high-confidence, checked first) ---
         if best_personal_score >= 2:
             # Multiple matching keywords → higher confidence; skip card detection
-            confidence = min(0.95, 0.70 + best_personal_score * 0.05)
+            confidence = min(
+                cls._MAX_TYPE_CONFIDENCE,
+                cls._BASE_PERSONAL_DOC_CONFIDENCE
+                + best_personal_score * cls._KEYWORD_SCORE_WEIGHT,
+            )
             return best_personal_type, round(confidence, 2)
 
         # --- Hard classification rules (high confidence) ---

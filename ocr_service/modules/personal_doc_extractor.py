@@ -27,7 +27,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-__all__ = ["PersonalDocExtractor", "ExtractedField"]
+__all__ = ["PersonalDocExtractor", "ExtractedField", "detect_metadata"]
 
 logger = logging.getLogger("ocr-service.personal-doc-extractor")
 
@@ -463,7 +463,7 @@ class PersonalDocExtractor:
         normalized: str,
     ) -> str:
         """
-        Downgrade confidence when reconstruction artefacts are present
+        Downgrade confidence when reconstruction artifacts are present
         (e.g. '?' markers or unusual character mix).
         """
         if "?" in raw:
