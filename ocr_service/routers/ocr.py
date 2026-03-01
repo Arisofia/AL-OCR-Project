@@ -7,13 +7,23 @@ from fastapi import APIRouter, Depends, File, Header, Request, UploadFile
 from ocr_service.config import Settings, get_settings
 from ocr_service.exceptions import OCRPipelineError
 from ocr_service.metrics import OCR_ERROR_COUNT, OCR_REQUEST_COUNT, OCR_REQUEST_LATENCY
+from ocr_service.modules.decision_readiness import (
+    MANDATORY_FIELDS,
+    compute_decision_readiness,
+    quality_band,
+)
 from ocr_service.modules.personal_doc_extractor import (
     PersonalDocExtractor,
     detect_metadata,
 )
 from ocr_service.modules.processor import OCRProcessor, ProcessingConfig
 from ocr_service.routers.deps import get_api_key, get_ocr_processor, get_request_id
-from ocr_service.schemas import DocumentField, DocumentResponse, OCRResponse
+from ocr_service.schemas import (
+    DocumentAnalytics,
+    DocumentField,
+    DocumentResponse,
+    OCRResponse,
+)
 from ocr_service.utils.limiter import limiter
 
 logger = logging.getLogger("ocr-service.routers.ocr")
@@ -183,6 +193,53 @@ async def perform_document_ocr(
         metadata = detect_metadata(plain_text)
         metadata["ocr_method"] = result.get("method")
 
+        # --- Analytics -------------------------------------------------------
+        decision_readiness = compute_decision_readiness(
+            document_type, raw_fields, type_confidence
+        )
+
+        band = quality_band(type_confidence)
+        requires_review = band in ("fair", "poor") or not decision_readiness["ready"]
+
+        remediation_hints: list[str] = []
+        if band == "poor":
+            remediation_hints.append(
+                "Image quality is poor; consider re-scanning at higher resolution."
+            )
+        elif band == "fair":
+            remediation_hints.append(
+                "Image quality is fair; manual verification recommended."
+            )
+        for mf in decision_readiness.get("missing_mandatory", []):
+            remediation_hints.append(
+                f"Mandatory field '{mf}' could not be extracted; verify manually."
+            )
+
+        expected_count = len(MANDATORY_FIELDS.get(document_type, []))
+        # Total number of fields extracted (mandatory + optional)
+        extracted_count = len(doc_fields)
+        # Number of mandatory fields that are present
+        missing_mandatory = decision_readiness.get("missing_mandatory", []) or []
+        mandatory_present = max(0, expected_count - len(missing_mandatory))
+        if expected_count:
+            ratio = mandatory_present / expected_count
+            # Clamp ratio to [0, 1] to avoid over- or underflow due to inconsistencies
+            ratio = max(0.0, min(1.0, ratio))
+            completeness = round(ratio, 4)
+        else:
+            completeness = None
+
+        analytics = DocumentAnalytics(
+            decision_readiness=decision_readiness,
+            quality_band=band,
+            requires_manual_review=requires_review,
+            remediation_hints=remediation_hints,
+            field_completeness_ratio=completeness,
+            fields_extracted_count=extracted_count,
+            fields_expected_count=expected_count,
+        )
+        # --- End analytics ---------------------------------------------------
+
         status = "success"
         return DocumentResponse(
             filename=result.get("filename", file.filename or "unknown"),
@@ -195,6 +252,7 @@ async def perform_document_ocr(
             processing_time=result.get("processing_time", round(time.time() - start_time, 3)),
             request_id=request_id,
             s3_key=result.get("s3_key"),
+            analytics=analytics,
         )
 
     except OCRPipelineError as e:

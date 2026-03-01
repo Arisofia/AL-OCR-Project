@@ -50,6 +50,27 @@ class DocumentField(BaseModel):
     confidence_level: str  # "high", "medium", or "low"
 
 
+class DocumentAnalytics(BaseModel):
+    """
+    Analytics block attached to each document OCR response.
+
+    Provides pixel-level quality metrics, decision readiness scoring, and
+    remediation hints to guide downstream consumers.
+    """
+
+    pixel_coverage_ratio: Optional[float] = None
+    readability_index: Optional[float] = None
+    decision_readiness: Optional[dict[str, Any]] = None
+    iteration_convergence: Optional[float] = None
+    pixel_rescue_applied: bool = False
+    quality_band: Optional[str] = None  # "excellent" | "good" | "fair" | "poor"
+    requires_manual_review: bool = False
+    remediation_hints: list[str] = []
+    field_completeness_ratio: Optional[float] = None
+    fields_extracted_count: int = 0
+    fields_expected_count: int = 0
+
+
 class DocumentResponse(BaseModel):
     """
     Schema for structured personal document OCR response.
@@ -66,6 +87,7 @@ class DocumentResponse(BaseModel):
     processing_time: float
     request_id: Optional[str] = None
     s3_key: Optional[str] = None
+    analytics: Optional[DocumentAnalytics] = None
 
 
 class HealthResponse(BaseModel):
@@ -113,3 +135,4 @@ class ErrorResponse(BaseModel):
     correlation_id: Optional[str] = None
     trace_id: Optional[str] = None
     filename: Optional[str] = None
+

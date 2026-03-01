@@ -11,7 +11,6 @@ from ocr_service.modules.personal_doc_extractor import (
     detect_metadata,
 )
 
-
 # ---------------------------------------------------------------------------
 # Enhanced DocumentIntelligence classification tests
 # ---------------------------------------------------------------------------
@@ -352,5 +351,8 @@ def test_bank_statement_opening_balance_field(extractor):
     )
     ob_field = next(f for f in fields if f.name == "opening_balance")
     assert "1,200" in ob_field.value or "1200" in ob_field.value, (
-        f"opening_balance value should contain the extracted amount; got {ob_field.value!r}"
+        f"opening_balance value should contain the extracted amount; "
+        f"got {ob_field.value!r}"
     )
+
+
