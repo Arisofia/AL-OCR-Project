@@ -37,6 +37,26 @@ npm run verify:cicd
 npm run check:deploy-secrets
 ```
 
+### Run Frontend + Backend Together
+
+Use the unified local scripts:
+
+```bash
+npm run dev:up
+```
+
+This starts:
+- Backend on `http://127.0.0.1:8000`
+- Frontend on `http://127.0.0.1:5173`
+
+The script reads `OCR_API_KEY` from your environment or root `.env` and injects it into both services so OCR calls from the frontend work locally.
+
+To stop both services:
+
+```bash
+npm run dev:down
+```
+
 
 ### Architecture Diagram
 

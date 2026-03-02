@@ -8,6 +8,8 @@
     "url": "git+https://github.com/Arisofia/AL-OCR-Project.git"
   },
   "scripts": {
+    "dev:up": "./tools/dev_up.sh",
+    "dev:down": "./tools/dev_down.sh",
     "frontend:dev": "cd frontend && npm run dev",
     "frontend:build": "cd frontend && npm run build",
     "frontend:lint": "cd frontend && npm run lint",
