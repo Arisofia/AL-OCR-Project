@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-test('upload and extract text flow', async ({ page, baseURL }) => {
+test('upload and extract text flow', async ({ page }) => {
   // Mock health check success
   await page.route('**/health', async (route) => {
     await route.fulfill({
@@ -16,7 +16,7 @@ test('upload and extract text flow', async ({ page, baseURL }) => {
   });
 
   // Mock the OCR API response
-  await page.route('**/ocr', async (route) => {
+  await page.route(/\/ocr(\?.*)?$/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import path from 'path';
 
 test.describe('OCR Flow', () => {
   test('should display healthy status and handle document upload', async ({ page }) => {
@@ -20,7 +19,7 @@ test.describe('OCR Flow', () => {
     await expect(statusBadge).toContainText('System healthy', { timeout: 10000 });
 
     // 2. Mock the OCR API response to avoid S3 dependency in E2E
-    await page.route('**/ocr', async (route) => {
+    await page.route(/\/ocr(\?.*)?$/, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
