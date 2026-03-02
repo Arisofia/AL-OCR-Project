@@ -1,6 +1,8 @@
 import { FileText, Loader2 } from 'lucide-react'
-import { motion as Motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import PropTypes from 'prop-types'
+
+const MotionDiv = motion.div
 
 const ResultCard = ({ result, loading }) => {
   const cardAnalysis = result?.card_analysis
@@ -8,7 +10,7 @@ const ResultCard = ({ result, loading }) => {
   const renderContent = () => {
     if (loading) {
       return (
-        <Motion.div
+        <MotionDiv
           key="loading"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -17,13 +19,13 @@ const ResultCard = ({ result, loading }) => {
         >
           <Loader2 className="animate-spin" size={48} color="#e2e8f0" />
           <p>Our AI is reading your document...</p>
-        </Motion.div>
+        </MotionDiv>
       )
     }
 
     if (result) {
       return (
-        <Motion.div
+        <MotionDiv
           key="result"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -95,12 +97,12 @@ const ResultCard = ({ result, loading }) => {
             </div>
           )}
           <pre className="ocr-text">{result.text}</pre>
-        </Motion.div>
+        </MotionDiv>
       )
     }
 
     return (
-      <Motion.div
+      <MotionDiv
         key="empty"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -108,7 +110,7 @@ const ResultCard = ({ result, loading }) => {
       >
         <FileText size={48} color="#e2e8f0" />
         <p>Upload a document to see extracted text</p>
-      </Motion.div>
+      </MotionDiv>
     )
   }
 
