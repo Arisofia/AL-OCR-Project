@@ -1,8 +1,6 @@
 import { Upload, Loader2, Zap, FileText } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { motion as Motion } from 'framer-motion'
 import PropTypes from 'prop-types'
-
-const MotionImg = motion.img
 
 const UploadCard = ({
   file,
@@ -17,7 +15,7 @@ const UploadCard = ({
   const renderDropzoneContent = () => {
     if (preview) {
       return (
-        <MotionImg
+        <Motion.img
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           src={preview}
