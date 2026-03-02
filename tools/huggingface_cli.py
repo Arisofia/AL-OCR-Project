@@ -14,8 +14,9 @@ from pathlib import Path
 # Add project root to sys.path for local development
 sys.path.append(str(Path(__file__).parent.parent))
 
-from ocr_service.config import get_settings
-from ocr_service.modules.ai_providers import HuggingFaceVisionProvider
+# pylint: disable=wrong-import-position
+from ocr_service.config import get_settings  # noqa: E402
+from ocr_service.modules.ai_providers import HuggingFaceVisionProvider  # noqa: E402
 
 
 async def main():
