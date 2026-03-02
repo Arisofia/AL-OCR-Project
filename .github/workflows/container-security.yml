@@ -233,7 +233,7 @@ jobs:
 
       - name: Upload scan artifacts
         if: always()
-        uses: actions/upload-artifact@65c86b38a0357c228d7bfb17554440211b17c9bb # v6.0.0
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: container-scans
           path: |
@@ -407,7 +407,7 @@ jobs:
           echo "result_file=$OUT_FILE" >> $GITHUB_OUTPUT
 
       - name: Upload benchmark artifact
-        uses: actions/upload-artifact@65c86b38a0357c228d7bfb17554440211b17c9bb # v6.0.0
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: lambda-benchmark-results
           path: lambda_benchmark_results.txt
