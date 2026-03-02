@@ -37,6 +37,7 @@ crash.log
 # Logs
 logs/
 *.log
+.run/
 
 # Python mypy cache
 .mypy_cache/
@@ -93,6 +94,8 @@ htmlcov/
 frontend/playwright-report/
 frontend/test-results/
 *.tsbuildinfo
+frontend/eslint.config.d.ts
+frontend/vite.config.d.ts
 .coverage*
 *.log
 gitleaks
