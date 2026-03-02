@@ -28,9 +28,7 @@ class ImageEnhancer:
         """
         Converts an image to grayscale if it is in color.
         """
-        if len(img.shape) == 3:
-            return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        return img
+        return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
 
     @staticmethod
     def sharpen(img_gray: np.ndarray) -> np.ndarray:

@@ -16,10 +16,7 @@ def image_to_text(
     Converts an image (numpy array) to text using Tesseract.
     Accepts both grayscale and color images.
     """
-    if len(img.shape) == 3:
-        img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    else:
-        img_gray = img  # type: ignore
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
 
     config = f"--oem {oem} --psm {psm}"
     text = str(pytesseract.image_to_string(img_gray, lang=lang, config=config))

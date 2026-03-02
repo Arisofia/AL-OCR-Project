@@ -80,10 +80,7 @@ class PixelReconstructor:
         """
         Attempts to identify black redaction boxes and inpaint them.
         """
-        if len(image.shape) == 3:
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        else:
-            gray = image  # type: ignore
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
 
         # Black boxes have very low intensity
         _, mask = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY_INV)
