@@ -74,7 +74,7 @@ jobs:
 
       - name: Upload Test Coverage
         if: always() && hashFiles('coverage.xml') != ''
-        uses: actions/upload-artifact@4cec3d8aa04fe25bd47b124429530a98c1c1fd5a # v4.6.0
+        uses: actions/upload-artifact@4cec3d8ad04fe25bd47b124429530a98c1c1fd5a # v4.6.0
         with:
           name: coverage-report-${{ matrix.python-version }}
           path: coverage.xml

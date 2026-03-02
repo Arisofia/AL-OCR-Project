@@ -52,7 +52,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload security reports
-        uses: actions/upload-artifact@4cec3d8aa04fe25bd47b124429530a98c1c1fd5a # v6.0.0
+        uses: actions/upload-artifact@4cec3d8ad04fe25bd47b124429530a98c1c1fd5a # v6.0.0
         with:
           name: security-reports
           path: |
