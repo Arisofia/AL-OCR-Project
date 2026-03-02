@@ -22,7 +22,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v6.0.2
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@39751155f0af13c2f8dbf60102c14c7427eda028 # v6.0.0
+        uses: actions/setup-python@v6 # v6.0.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
@@ -67,7 +67,7 @@ jobs:
         run: python -m pytest --verbose --cov=./ --cov-report=xml
       - name: Upload Test Coverage
         if: always() && hashFiles('coverage.xml') != ''
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v6.0.0
+        uses: actions/upload-artifact@v4 # v6.0.0
         with:
           name: coverage-report-${{ matrix.python-version }}
           path: coverage.xml

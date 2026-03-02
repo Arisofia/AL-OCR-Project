@@ -14,7 +14,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v6.0.2
 
       - name: Set up Python
-        uses: actions/setup-python@39751155f0af13c2f8dbf60102c14c7427eda028 # v6.0.0
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: "pip"
@@ -39,7 +39,7 @@ jobs:
 
       - name: Set up CML
         id: setup_cml
-        uses: iterative/setup-cml@797697806a22b261077d6684a10c20645d8574a8 # v3.0.1
+        uses: iterative/setup-cml@v2.0.1
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

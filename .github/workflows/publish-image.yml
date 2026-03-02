@@ -18,10 +18,10 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v6.0.2
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c5346a8f9a5c99ac79b4e5b6285f1eccead67c # v3.7.0
+        uses: docker/setup-qemu-action@v3 # v3.7.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c693551f7255f5270ec23adc93e8d59714 # v3.12.0
+        uses: docker/setup-buildx-action@v3 # v3.12.0
 
       # Prefer a PAT when configured (it can bypass org/repo GHCR restrictions),
       # but fall back to GITHUB_TOKEN so a stale/incorrect PAT doesn't break builds.
@@ -46,7 +46,7 @@ jobs:
       - name: Build and push (primary auth)
         id: build_push_primary
         continue-on-error: true
-        uses: docker/build-push-action@10e90e396780ee27a5568396f36d73677100159e # v6.15.0
+        uses: docker/build-push-action@v6 # v6.15.0
         with:
           context: .
           file: ./ocr_service/Dockerfile
@@ -70,7 +70,7 @@ jobs:
         id: build_push_retry
         if: ${{ steps.build_push_primary.outcome != 'success' }}
         continue-on-error: true
-        uses: docker/build-push-action@10e90e396780ee27a5568396f36d73677100159e # v6.15.0
+        uses: docker/build-push-action@v6 # v6.15.0
         with:
           context: .
           file: ./ocr_service/Dockerfile

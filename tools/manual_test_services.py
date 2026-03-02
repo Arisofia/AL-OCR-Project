@@ -4,17 +4,20 @@ Uses mocking to simulate AWS interactions without requiring real credentials.
 """
 
 import contextlib
-import os
+import importlib
 import sys
 import typing
+from pathlib import Path
 from unittest.mock import MagicMock
 
-# Add ocr_service to path
+# Add project root to path for script execution from any cwd.
 with contextlib.suppress(Exception):
-    sys.path.append(os.path.join(os.path.dirname(__file__), "..", "ocr_service"))
+    PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
+    if PROJECT_ROOT not in sys.path:
+        sys.path.append(PROJECT_ROOT)
 
 
-class FakeBoto3Module:
+class FakeBoto3Module:  # pylint: disable=too-few-public-methods
     """
     Fake boto3 module to avoid installation/typing issues in this environment.
     """
@@ -36,9 +39,11 @@ sys.modules["botocore"] = MagicMock()
 sys.modules["botocore.exceptions"] = MagicMock()
 sys.modules["botocore.config"] = MagicMock()
 
-# Inject fake boto3 BEFORE importing services
-# Service imports are performed inside `run_tests` after the fake boto3 module
-# is registered to avoid top-level import-time side effects and E402 lint warnings.
+# Inject fake boto3 BEFORE importing services.
+StorageService = importlib.import_module("ocr_service.services.storage").StorageService
+TextractService = importlib.import_module(
+    "ocr_service.services.textract"
+).TextractService
 
 
 def run_tests():
@@ -47,10 +52,6 @@ def run_tests():
     """
     # Now run tests with the fake boto3
     mock_tex = sys.modules["boto3"].client("textract")
-
-    # Import services here after faking boto3 to avoid import-time side effects
-    from services.storage import StorageService
-    from services.textract import TextractService
 
     # Test StorageService
     storage = StorageService(bucket_name="test-bucket")
@@ -62,7 +63,7 @@ def run_tests():
     # Test Textract
     mock_tex.analyze_document.return_value = {"Blocks": []}
     textract = TextractService()
-    res = textract.analyze_document(b"b", "k")
+    res = textract.analyze_document("test-bucket", "test-key")
     print("analyze_document returned:", res)
 
 
