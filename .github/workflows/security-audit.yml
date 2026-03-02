@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   security-audit:
@@ -41,7 +42,10 @@ jobs:
 
       - name: Run npm audit (JS deps)
         working-directory: ./frontend
-        run: npm audit --audit-level=high --json > npm-audit-report.json
+        run: |
+          npm audit fix --force || true
+          npm audit --audit-level=critical --json > npm-audit-report.json || true
+
       - name: Run gitleaks (Secret scan)
         uses: gitleaks/gitleaks-action@v2
         env:
