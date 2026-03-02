@@ -1,16 +1,13 @@
 ---
 name: Deploy
-
 on:
   push:
     branches:
       - main
   workflow_dispatch: {}
-
 permissions:
   contents: read
   id-token: write
-
 jobs:
   deploy:
     runs-on: ubuntu-22.04
@@ -27,7 +24,7 @@ jobs:
         run: npm install
 
       - name: Configure AWS credentials (OIDC)
-              uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ secrets.AWS_REGION }}
