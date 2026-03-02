@@ -29,7 +29,7 @@ jobs:
       - name: Configure AWS Credentials
         if:
           ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-        uses: aws-actions/configure-aws-credentials@010d0da01d0b5a38af31e9c7ec00174257bba011 # v6.0.0
+              uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: us-east-1
