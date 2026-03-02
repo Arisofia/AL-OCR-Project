@@ -65,7 +65,7 @@ _DATE_PATTERNS = [
 
 _DOC_NUMBER_PATTERNS = [
     # Alphanumeric IDs like "A1234567" or "DNI 12345678X"; allow '?' for OCR uncertainty
-    r"\b(?:DNI|NIE|NIF|ID|No\.?|NUM\.?|CÉDULA|CEDULA|DOC)[\s:#]*([A-Z0-9?]{6,20})\b",
+    r"\b(?:DNI|NIE|NIF|ID|No\.?|NUM\.?|CÉDULA|CEDULA|DOC)[\s:#]*([A-Z0-9?]{6,20})(?=[^A-Z0-9?]|$)",
     r"\b([A-Z]{1,3}\s?\d{6,12})\b",
     r"\b(\d{7,12}[A-Z]?)\b",
 ]
