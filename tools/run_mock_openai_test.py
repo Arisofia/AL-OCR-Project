@@ -1,3 +1,8 @@
+"""
+Mock test script for verifying OpenAI provider integration logic.
+Simulates API responses including error scenarios like quota exceeded.
+"""
+
 import asyncio
 import logging
 from pathlib import Path
@@ -5,7 +10,7 @@ from typing import Optional
 
 import httpx
 
-from ocr_service.modules.ai_providers import OpenAIVisionProvider
+from ocr_service.modules.ai_providers import AIProviderError, OpenAIVisionProvider
 
 # Use a stable, minimal binary file for image bytes (no external deps)
 img_path = Path("test_image.bin")
@@ -84,6 +89,9 @@ class _MockAsyncClient:
         return False
 
     async def post(self, url, headers=None, json=None, timeout=None):
+        """
+        Emulates an asynchronous POST request to the OpenAI API.
+        """
         logger.debug("MockAsyncClient.post called for URL: %s", url)
         logger.debug("Request headers: %s", headers)
         logger.debug("Request payload keys: %s", list((json or {}).keys()))
@@ -94,6 +102,9 @@ class _MockAsyncClient:
 
 
 async def run_scenario(name: str, status_code: int, body: Optional[dict] = None):
+    """
+    Executes a test scenario with a specific HTTP status code and response body.
+    """
     original_client = httpx.AsyncClient
     httpx.AsyncClient = lambda *a, **k: _MockAsyncClient(  # type: ignore
         status_code=status_code, body=body
@@ -105,14 +116,17 @@ async def run_scenario(name: str, status_code: int, body: Optional[dict] = None)
         image_bytes = img_path.read_bytes()
         result = await provider.reconstruct(image_bytes, "Test prompt")
         print(f"[{name}] Provider result:", result)
-    except Exception as exc:
-        logger.exception("[%s] Provider raised exception", name)
+    except (AIProviderError, OSError, ValueError) as exc:
+        logger.exception("[%s] Provider raised expected exception", name)
         print(f"[{name}] Exception:", repr(exc))
     finally:
         httpx.AsyncClient = original_client  # type: ignore
 
 
 async def main():
+    """
+    Orchestrates the execution of multiple mock test scenarios.
+    """
     await run_scenario(
         name="QuotaExceeded403",
         status_code=403,

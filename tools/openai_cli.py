@@ -14,10 +14,16 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 # pylint: disable=wrong-import-position
 from ocr_service.config import get_settings  # noqa: E402
-from ocr_service.modules.ai_providers import OpenAIVisionProvider  # noqa: E402
+from ocr_service.modules.ai_providers import (  # noqa: E402
+    AIProviderError,
+    OpenAIVisionProvider,
+)
 
 
 async def main():
+    """
+    Main entrypoint for the OpenAI Vision CLI tool.
+    """
     parser = argparse.ArgumentParser(description="OpenAI Vision CLI")
     parser.add_argument("image_path", help="Path to the image file to process")
     parser.add_argument(
@@ -44,7 +50,8 @@ async def main():
         )
         sys.exit(1)
 
-    if not os.path.exists(args.image_path):
+    image_path = Path(args.image_path)
+    if not image_path.exists():
         print("Error: Image file not found at", args.image_path)
         sys.exit(1)
 
@@ -52,8 +59,7 @@ async def main():
     provider = OpenAIVisionProvider(api_key=api_key)
 
     print("Reading image:", args.image_path)
-    with open(args.image_path, "rb") as f:
-        image_bytes = f.read()
+    image_bytes = await asyncio.to_thread(image_path.read_bytes)
 
     print(f"Sending request to OpenAI (prompt: {args.prompt[:50]}...)")
     try:
@@ -69,8 +75,8 @@ async def main():
             print(result.get("text"))
             print("\n--- Metadata ---")
             print(f"Model: {result.get('model')}")
-    except Exception as e:
-        print("Exception occurred:", e)
+    except (AIProviderError, OSError, ValueError) as e:
+        print("Error occurred:", e)
 
 
 if __name__ == "__main__":

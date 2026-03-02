@@ -1,54 +1,49 @@
-"""CLI entrypoint for the iterative OCR + reconstruction project."""
+"""
+Main entry point for the OCR reconstruction library.
+Provides a simple CLI to process images and extract text iteratively.
+"""
 
 import argparse
+import sys
 
 from ocr_reconstruct.modules.pipeline import IterativeOCR
 
 
-def parse_args():
-    p = argparse.ArgumentParser(
-        description="Iterative OCR with pixel reconstruction",
-    )
-    p.add_argument(
-        "--image",
-        help="Path to the image file",
-        required=True,
-    )
-    p.add_argument(
-        "--iterations",
-        type=int,
-        default=3,
-        help="Number of iterations",
-    )
-    p.add_argument(
-        "--output",
-        default="reconstructed_text.txt",
-        help="Output text file",
-    )
-    p.add_argument(
-        "--save-iterations",
-        action="store_true",
-        help="Save images of each iteration",
-    )
-    return p.parse_args()
-
-
 def main():
-    args = parse_args()
-    worker = IterativeOCR(
-        iterations=args.iterations,
-        save_iterations=args.save_iterations,
+    """
+    Main entrypoint for the OCR reconstruction CLI tool.
+    Parses arguments and orchestrates the extraction process.
+    """
+    parser = argparse.ArgumentParser(description="Iterative OCR Reconstructor")
+    parser.add_argument("image_path", help="Path to the image file")
+    parser.add_argument(
+        "--iterations", type=int, default=3, help="Number of enhancement iterations"
     )
-    text, meta = worker.process_file(args.image)
+    parser.add_argument(
+        "--output-dir", default="./iterations", help="Directory to save debug images"
+    )
+    parser.add_argument(
+        "--save", action="store_true", help="Save intermediate iteration images"
+    )
 
-    with open(args.output, "w", encoding="utf-8") as fh:
-        fh.write(text)
+    args = parser.parse_args()
 
-    print("--- Result ---")
-    print(text)
-    print("--- Meta ---")
-    for k, v in meta.items():
-        print(f"{k}: {v}")
+    pipeline = IterativeOCR(
+        iterations=args.iterations, save_iterations=args.save, output_dir=args.output_dir
+    )
+
+    try:
+        text, meta = pipeline.process_file(args.image_path)
+        print("\n--- Extracted Text ---")
+        print(text)
+        print("\n--- Metadata ---")
+        print(f"Iterations completed: {len(meta.get('iterations', []))}")
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

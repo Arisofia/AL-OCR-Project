@@ -16,7 +16,10 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 # pylint: disable=wrong-import-position
 from ocr_service.config import get_settings  # noqa: E402
-from ocr_service.modules.ai_providers import HuggingFaceVisionProvider  # noqa: E402
+from ocr_service.modules.ai_providers import (  # noqa: E402
+    AIProviderError,
+    HuggingFaceVisionProvider,
+)
 
 
 async def main():
@@ -63,8 +66,9 @@ async def main():
         )
         sys.exit(1)
 
+    image_path = Path(args.image_path)
     # Check if image file exists
-    if not os.path.exists(args.image_path):
+    if not image_path.exists():
         print(f"Error: Image file not found at {args.image_path}")
         sys.exit(1)
 
@@ -72,10 +76,9 @@ async def main():
     print(f"Initializing HuggingFaceVisionProvider with model {args.model}...")
     provider = HuggingFaceVisionProvider(token=token, model=args.model)
 
-    # Read image file
+    # Read image file asynchronously
     print(f"Reading image: {args.image_path}")
-    with open(args.image_path, "rb") as f:
-        image_bytes = f.read()
+    image_bytes = await asyncio.to_thread(image_path.read_bytes)
 
     # Send request to Hugging Face
     print(f"Sending request to Hugging Face (prompt: '{args.prompt[:50]}...')...")
@@ -89,8 +92,8 @@ async def main():
             print(result.get("text"))
             print("\n--- Metadata ---")
             print(f"Model: {result.get('model')}")
-    except Exception as e:
-        print(f"Exception occurred: {e}")
+    except (AIProviderError, OSError, ValueError) as e:
+        print(f"Error occurred: {e}")
 
 
 if __name__ == "__main__":
