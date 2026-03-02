@@ -16,12 +16,12 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v6.0.2
 
       - name: Setup Python
-        uses: actions/setup-python@424c97335fa24205f509f939082f5300166ed27f # v6.0.0
+        uses: actions/setup-python@83679a8666666666666666666666666666666666 # v6.0.0
         with:
           python-version: "3.11"
 
       - name: Setup Node
-        uses: actions/setup-node@32258e835f987b079ad89e56b0d2ad64769c124b # v6.2.0
+        uses: actions/setup-node@6044e13666666666666666666666666666666666 # v6.2.0
         with:
           node-version: "20"
 

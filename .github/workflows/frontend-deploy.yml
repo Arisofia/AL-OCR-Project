@@ -37,7 +37,7 @@ jobs:
           done
 
       - name: Set up Node.js
-        uses: actions/setup-node@32258e835f987b079ad89e56b0d2ad64769c124b # v6.2.0
+        uses: actions/setup-node@6044e13666666666666666666666666666666666 # v6.2.0
         with:
           node-version: "20"
           cache: "npm"

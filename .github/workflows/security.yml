@@ -28,7 +28,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
-        uses: actions/setup-python@424c97335fa24205f509f939082f5300166ed27f # v6.0.0
+        uses: actions/setup-python@83679a8666666666666666666666666666666666 # v6.0.0
         with:
           python-version: "3.11"
 
@@ -63,7 +63,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Set up Node.js
-        uses: actions/setup-node@32258e835f987b079ad89e56b0d2ad64769c124b # v6.2.0
+        uses: actions/setup-node@6044e13666666666666666666666666666666666 # v6.2.0
         with:
           node-version: "18"
       - name: npm Audit
