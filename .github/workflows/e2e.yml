@@ -94,8 +94,7 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key:
-            ${{ runner.os }}-playwright-${{
-            hashFiles('frontend/package-lock.json') }}
+            ${{ runner.os }}-playwright-${{ hashFiles('frontend/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-playwright-
 
@@ -130,8 +129,8 @@ jobs:
         run: |
           (npx -y netlify-cli deploy \
           --dir=dist \
-          --site="$NETLIFY_SITE_ID" \         
-        --json --auth="$NETLIFY_AUTH_TOKEN") > netlify-deploy.json
+          --site="$NETLIFY_SITE_ID" \
+          --json --auth="$NETLIFY_AUTH_TOKEN") > netlify-deploy.json
           DEPLOY_URL=$(jq -r '.deploy_url' netlify-deploy.json)
           echo "DEPLOY_URL=$DEPLOY_URL" >> $GITHUB_ENV
           echo "Deployed preview to $DEPLOY_URL"
@@ -139,8 +138,7 @@ jobs:
       - name: Start backend
         working-directory: ./ocr_service
         env:
-          PYTHONPATH:
-            ${{ github.workspace }}:${{ github.workspace }}/ocr_service
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/ocr_service
           OCR_API_KEY: ${{ secrets.OCR_API_KEY || '' }}
         run: |
           nohup uvicorn main:app --host 0.0.0.0 --port 8000 \
