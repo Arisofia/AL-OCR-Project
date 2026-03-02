@@ -1,6 +1,6 @@
 const DEFAULT_TIMEOUT_MS = 30000;
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const stripTrailingSlash = (value) => String(value || "").replace(/\/+$/, "");
 
@@ -36,7 +36,8 @@ exports.handler = async (event) => {
   const query =
     event.rawQuery ||
     new URLSearchParams(event.queryStringParameters || {}).toString();
-  const upstreamUrl = `${backendBase}${upstreamPath}${query ? `?${query}` : ""}`;
+  const querySuffix = query ? `?${query}` : "";
+  const upstreamUrl = `${backendBase}${upstreamPath}${querySuffix}`;
 
   const forwardHeaders = new Headers();
   for (const [key, value] of Object.entries(event.headers || {})) {
@@ -52,16 +53,19 @@ exports.handler = async (event) => {
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  const httpMethod = event.httpMethod || "GET";
+  const requestBody = event.isBase64Encoded
+    ? Buffer.from(event.body || "", "base64")
+    : event.body;
+  const fetchBody = ["GET", "HEAD"].includes(httpMethod)
+    ? undefined
+    : requestBody;
 
   try {
     const response = await fetch(upstreamUrl, {
-      method: event.httpMethod || "GET",
+      method: httpMethod,
       headers: forwardHeaders,
-      body: ["GET", "HEAD"].includes(event.httpMethod)
-        ? undefined
-        : event.isBase64Encoded
-          ? Buffer.from(event.body || "", "base64")
-          : event.body,
+      body: fetchBody,
       signal: controller.signal,
     });
 
@@ -79,7 +83,7 @@ exports.handler = async (event) => {
     };
   } catch (error) {
     const detail =
-      error && error.name === "AbortError"
+      error?.name === "AbortError"
         ? "Upstream OCR API timeout"
         : "Failed to reach OCR API";
 

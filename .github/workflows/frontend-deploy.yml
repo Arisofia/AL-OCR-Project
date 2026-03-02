@@ -93,6 +93,7 @@ jobs:
               -m githubCommitAuthorEmail="${{ steps.vercel_whoami.outputs.email }}" \
               -m githubCommitAuthorLogin="${{ steps.vercel_whoami.outputs.username }}" \
               -b VITE_API_BASE=/api \
+              -b NPM_FLAGS=--legacy-peer-deps \
               -e OCR_API_KEY="$OCR_API_KEY" \
               -e OCR_BACKEND_URL="$OCR_BACKEND_URL" 2>&1 | tee /dev/stderr
           )"

@@ -1,4 +1,5 @@
 import { Upload, Loader2 } from 'lucide-react'
+import PropTypes from 'prop-types'
 
 const DatasetUploadCard = ({
   files,
@@ -152,6 +153,38 @@ const DatasetUploadCard = ({
       </div>
     </section>
   )
+}
+
+DatasetUploadCard.propTypes = {
+  files: PropTypes.oneOfType([PropTypes.array, PropTypes.instanceOf(FileList)]),
+  uploading: PropTypes.bool,
+  health: PropTypes.string,
+  datasetKey: PropTypes.string,
+  dataset: PropTypes.string,
+  split: PropTypes.string,
+  docType: PropTypes.string,
+  occlusionType: PropTypes.string,
+  notes: PropTypes.string,
+  onDatasetKeyChange: PropTypes.func.isRequired,
+  onDatasetChange: PropTypes.func.isRequired,
+  onSplitChange: PropTypes.func.isRequired,
+  onDocTypeChange: PropTypes.func.isRequired,
+  onOcclusionTypeChange: PropTypes.func.isRequired,
+  onNotesChange: PropTypes.func.isRequired,
+  onFilesChange: PropTypes.func.isRequired,
+  onUpload: PropTypes.func.isRequired,
+}
+
+DatasetUploadCard.defaultProps = {
+  files: [],
+  uploading: false,
+  health: 'unknown',
+  datasetKey: '',
+  dataset: '',
+  split: 'inbox',
+  docType: 'bank_card',
+  occlusionType: 'unknown',
+  notes: '',
 }
 
 export default DatasetUploadCard
