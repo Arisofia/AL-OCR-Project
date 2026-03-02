@@ -114,7 +114,7 @@ jobs:
       - name: Check Netlify secret availability
         id: check_netlify_secrets
         run: |
-          if [ -n "${{ secrets.NETLIFY_AUTH_TOKEN }}" ]; then
+          if [ -n "${{ secrets.NETLIFY_AUTH_TOKEN }}" ] && [ -n "${{ secrets.NETLIFY_SITE_ID }}" ]; then
             echo "has_netlify=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_netlify=false" >> "$GITHUB_OUTPUT"
@@ -125,11 +125,13 @@ jobs:
         working-directory: ./frontend
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
         id: netlify_deploy
         run: |
           (npx -y netlify-cli deploy \
           --dir=dist \
-          --json --auth="$NETLIFY_AUTH_TOKEN") > netlify-deploy.json
+          --site="$NETLIFY_SITE_ID" \         
+        --json --auth="$NETLIFY_AUTH_TOKEN") > netlify-deploy.json
           DEPLOY_URL=$(jq -r '.deploy_url' netlify-deploy.json)
           echo "DEPLOY_URL=$DEPLOY_URL" >> $GITHUB_ENV
           echo "Deployed preview to $DEPLOY_URL"
