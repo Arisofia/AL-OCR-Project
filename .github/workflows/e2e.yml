@@ -69,7 +69,7 @@ jobs:
       - name: Install Node deps
         working-directory: ./frontend
         run: |
-          npm ci
+          npm ci --legacy-peer-deps
 
       - name: Run npm audit
         working-directory: ./frontend
