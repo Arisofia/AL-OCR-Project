@@ -122,7 +122,7 @@ jobs:
 
       - name: Deploy to Netlify (optional)
         if: ${{ steps.check_netlify_secrets.outputs.has_netlify == 'true' }}
-                continue-on-error: true
+                inue-on-error: true
         working-directory: ./frontend
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
