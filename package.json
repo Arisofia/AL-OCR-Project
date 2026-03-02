@@ -13,7 +13,7 @@
     "frontend:dev": "cd frontend && npm run dev",
     "frontend:build": "cd frontend && npm run build",
     "frontend:lint": "cd frontend && npm run lint",
-    "deploy": "./tools/deploy_app.sh",
+    "deploy": "bash ocr_service/deploy.sh",
     "api:dev": "python -m ocr_service.main",
     "test:all": "pytest ocr_service/tests/ ocr_reconstruct/tests/",
     "lint:python": "ruff check .",

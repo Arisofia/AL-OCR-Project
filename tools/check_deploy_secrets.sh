@@ -29,7 +29,6 @@ check_var() {
 echo "[secrets] Checking deploy and CI/CD secret environment values"
 
 # Primary deploy workflow (push to main + npm run deploy)
-check_var GHCR_PAT required
 check_var OCR_API_KEY required
 check_var AWS_ACCOUNT_ID required
 check_var AWS_ROLE_TO_ASSUME required

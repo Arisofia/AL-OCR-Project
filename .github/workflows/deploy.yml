@@ -31,10 +31,7 @@ jobs:
 
       - name: Deploy application
         env:
-          # Replace generic API_KEY / ACCESS_TOKEN variable names with
-          # actual repository secret names used by this project.
-          API_KEY: ${{ secrets.OCR_API_KEY }}
-          ACCESS_TOKEN: ${{ secrets.GHCR_PAT }}
+          OCR_API_KEY: ${{ secrets.OCR_API_KEY }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
           S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
