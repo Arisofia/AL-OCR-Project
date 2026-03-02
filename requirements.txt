@@ -37,7 +37,7 @@ opentelemetry-api==1.39.1
 opentelemetry-sdk==1.39.1
 python-dotenv==1.2.1
 python-json-logger==4.0.0
-python-multipart==0.0.24
+python-multipart==0.0.22
 redis==7.1.1
 requests>=2.31.0
 ruff==0.4.4
