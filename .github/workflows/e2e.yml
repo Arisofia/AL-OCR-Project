@@ -131,7 +131,7 @@ jobs:
           (npx -y netlify-cli deploy \
           --dir=dist \
           --site="$NETLIFY_SITE_ID" \         
-                  --json -auth="$NETLIFY_AUTH_TOKEN") > netlify-deploy.json
+                  --json --auth="$NETLIFY_AUTH_TOKEN") > netlify-deploy.json
           DEPLOY_URL=$(jq -r '.deploy_url' netlify-deploy.json)
           echo "DEPLOY_URL=$DEPLOY_URL" >> $GITHUB_ENV
           echo "Deployed preview to $DEPLOY_URL"
