@@ -77,9 +77,10 @@ jobs:
           DEFAULT_FUNCTION_NAME="AL-OCR-Upload-API"
           FUNCTION_NAME="${FUNCTION_NAME_SECRET:-$DEFAULT_FUNCTION_NAME}"
           FUNCTION_NAME="${FUNCTION_NAME#"${FUNCTION_NAME%%[![:space:]]*}"}"
-          FUNCTION_NAME="${FUNCTION_NAME%"${FUNCTION_NAME##*[![:space:]]}"}"  
-          FUNCTION_NAME="${FUNCTION_NAME#\"}"
-          FUNCTION_NAME="${FUNCTION_NAME%\"}"
+          FUNCTION_NAME="${FUNCTION_NAME%"${FUNCTION_NAME##*[![:space:]]}"}"
+          FUNCTION_NAME="${FUNCTION_NAME#"}"
+          FUNCTION_NAME="${FUNCTION_NAME%"}"
+
           if [[ "$FUNCTION_NAME" == arn:*:function:* ]]; then
             FUNCTION_NAME="${FUNCTION_NAME##*:function:}"
           fi
