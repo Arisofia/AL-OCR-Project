@@ -191,9 +191,11 @@ def test_low_confidence_when_ambiguous_chars(extractor):
     text = "DNI: 1234?678X\n"
     fields, warnings = extractor.extract(text, "id_document")
     doc_field = next((f for f in fields if f.name == "document_number"), None)
-    if doc_field:
-        assert doc_field.confidence_level == "low"
-        assert any("low confidence" in w for w in warnings)
+    assert doc_field is not None, (
+        "document_number field should be present for DNI input"
+    )
+    assert doc_field.confidence_level == "low"
+    assert any("low confidence" in w for w in warnings)
 
 
 def test_warnings_generated_for_partial_reconstructions(extractor):

@@ -176,7 +176,15 @@ async def perform_document_ocr(
 
         plain_text: str = result.get("text", "")
         document_type: str = result.get("document_type", "generic_document")
-        type_confidence: float = float(result.get("type_confidence", 0.40))
+        default_type_confidence: float = 0.40
+        raw_type_confidence = result.get("type_confidence")
+        if raw_type_confidence is None:
+            type_confidence: float = default_type_confidence
+        else:
+            try:
+                type_confidence = float(raw_type_confidence)
+            except (TypeError, ValueError):
+                type_confidence = default_type_confidence
 
         # Extract structured fields
         raw_fields, warnings = _doc_extractor.extract(plain_text, document_type)

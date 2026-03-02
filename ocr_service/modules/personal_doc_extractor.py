@@ -64,8 +64,8 @@ _DATE_PATTERNS = [
 ]
 
 _DOC_NUMBER_PATTERNS = [
-    # Alphanumeric IDs like "A1234567" or "DNI 12345678X"
-    r"\b(?:DNI|NIE|NIF|ID|No\.?|NUM\.?|CÉDULA|CEDULA|DOC)[\s:#]*([A-Z0-9]{6,20})\b",
+    # Alphanumeric IDs like "A1234567" or "DNI 12345678X"; allow '?' for OCR uncertainty
+    r"\b(?:DNI|NIE|NIF|ID|No\.?|NUM\.?|CÉDULA|CEDULA|DOC)[\s:#]*([A-Z0-9?]{6,20})\b",
     r"\b([A-Z]{1,3}\s?\d{6,12})\b",
     r"\b(\d{7,12}[A-Z]?)\b",
 ]
@@ -407,18 +407,25 @@ def _validate_pan(
     Validate a card PAN (Primary Account Number).
 
     Checks (in order):
-    1. Stripped value must be digits only (no mixed alpha/symbol chars).
-    2. Length must be 13-19 digits (ISO 7812 range).
+    1. Raw value may contain only digits, spaces, or hyphens.
+    2. Stripped value must have length 13-19 digits (ISO 7812 range).
     3. Luhn algorithm must pass.
 
     Returns:
         ("high", positive note)   – all checks pass
         ("low",  warning note)    – any check fails
     """
+    # Reject PANs that include alphabetic or symbol characters beyond
+    # benign separators (spaces and hyphens).
+    if not re.fullmatch(r"[0-9\s\-]+", raw):
+        return "low", (
+            "card_number contains invalid characters (only digits, spaces, and "
+            "hyphens are allowed); value likely misread"
+        )
     digits = re.sub(r"\D", "", raw)
     if not digits:
         return "low", (
-            "card_number contains non-digit characters; value likely misread"
+            "card_number does not contain any digits; value likely misread"
         )
     if not (13 <= len(digits) <= 19):
         return "low", (
@@ -573,7 +580,7 @@ class PersonalDocExtractor:
             display_value = normalized
             if is_sensitive or field_name in _SENSITIVE_FIELDS:
                 display_value = _mask_pan(normalized)
-                logger.info(
+                logger.debug(
                     "Sensitive field '%s' extracted and masked (last 4 preserved). "
                     "Raw value NOT logged.",
                     field_name,
