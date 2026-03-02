@@ -125,11 +125,10 @@ jobs:
         working-directory: ./frontend
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-                    NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
         id: netlify_deploy
         run: |
           (npx -y netlify-cli deploy \
-          --dir=dist \
           --site="$NETLIFY_SITE_ID" \         
                   --json --auth="$NETLIFY_AUTH_TOKEN") > netlify-deploy.json
           DEPLOY_URL=$(jq -r '.deploy_url' netlify-deploy.json)
