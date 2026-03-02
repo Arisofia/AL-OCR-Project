@@ -20,12 +20,12 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v6.0.2
         with:
           fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@424c97335fa24205f509f939082f5300166ed27f # v6.0.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
@@ -74,7 +74,7 @@ jobs:
 
       - name: Upload Test Coverage
         if: always() && hashFiles('coverage.xml') != ''
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@615b319043f96c023d576c760823c515962f60f0 # v6.0.0
         with:
           name: coverage-report-${{ matrix.python-version }}
           path: coverage.xml
