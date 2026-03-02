@@ -4,24 +4,19 @@
 
 Sophisticated Fintech OCR System for financial document intelligence, built with FastAPI, React, and AWS (S3/Textract). Features automated infrastructure via Terraform and CI/CD.
 
-**Related:** Background on image inpainting techniques — see `docs/inpainting.md`.
-
-**Operational Playbook:** Fintech-grade CTO execution protocol — see `docs/elite_cto_execution_prompt.md`.
 ## Testing & Local Development
-
-This repository includes an automated script to create a reproducible Python 3.11 test environment and run the test-suite.
 
 ### Quick Start
 1. Ensure Python 3.11 is available on your PATH.
-2. Run the helper script:
+2. Create and activate a virtual environment, then install dependencies:
    ```bash
-   ./tools/setup_test_env.sh
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -U pip
+   pip install -r requirements.txt
+   pip install -e ./ocr_reconstruct
+   pytest
    ```
-
-The script will create a `.venv`, install dependencies, and run the tests.
-
-### Fallback (Docker)
-If Python 3.11 is not available locally, the script automatically falls back to running tests inside a Docker container.
 
 ### Full Repository Validation
 Run the production validation entrypoint to verify backend and frontend checks:
@@ -78,7 +73,7 @@ graph TD
 
 ### Local Development with Docker Compose
 
-For a fully containerized development environment including a simulated AWS environment (LocalStack):
+For a fully containerized development environment:
 
 1. Ensure Docker and Docker Compose are installed.
 2. Run:
@@ -91,7 +86,6 @@ For a fully containerized development environment including a simulated AWS envi
 
 - **Unified Toolchain**: We use [Ruff](https://github.com/astral-sh/ruff) for linting and formatting, [MyPy](https://mypy-lang.org/) for type checking, and [Pytest](https://pytest.org/) for testing. Configuration is centralized in `pyproject.toml`.
 - **Pre-commit Hooks**: We use `pre-commit` to ensure code quality. Install it via `pip install pre-commit && pre-commit install`.
-- **Contributing**: Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on our development process.
 - **License**: This project is licensed under the [MIT License](LICENSE).
 
 ### Continuous Integration
