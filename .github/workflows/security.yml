@@ -28,7 +28,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
-        uses: actions/setup-python@f67713930256393969f8273536b95a445d066417 # v6.0.0
+        uses: actions/setup-python@e797f83459a444597b054c973588f7055240f191 # v6.0.0
         with:
           python-version: "3.11"
 
