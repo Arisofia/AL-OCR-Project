@@ -47,12 +47,19 @@ async def health_check() -> HealthResponse:
         components["redis"] = {"ok": False, "error": str(exc)}
 
     # Storage (S3) check
-    try:
-        storage_service = StorageService()
-        components["s3"] = {"ok": storage_service.check_connection()}
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.exception("Health check storage dependency failed")
-        components["s3"] = {"ok": False, "error": str(exc)}
+    if not curr_settings.s3_bucket_name:
+        components["s3"] = {
+            "ok": True,
+            "skipped": True,
+            "detail": "s3_bucket_name not configured",
+        }
+    else:
+        try:
+            storage_service = StorageService()
+            components["s3"] = {"ok": storage_service.check_connection()}
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.exception("Health check storage dependency failed")
+            components["s3"] = {"ok": False, "error": str(exc)}
 
     overall_ok = all(component.get("ok") for component in components.values())
     status = "ok" if overall_ok else "degraded"

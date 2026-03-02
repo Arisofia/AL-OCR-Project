@@ -48,6 +48,7 @@ npm run dev:up
 This starts:
 - Backend on `http://127.0.0.1:8000`
 - Frontend on `http://127.0.0.1:5173`
+- Redis on `127.0.0.1:6379` (auto-started via Docker only when not already running)
 
 The script reads `OCR_API_KEY` from your environment or root `.env` and injects it into both services so OCR calls from the frontend work locally.
 
@@ -56,6 +57,9 @@ To stop both services:
 ```bash
 npm run dev:down
 ```
+
+Optional:
+- Disable Redis auto-start: `REDIS_AUTOSTART=false npm run dev:up`
 
 
 ### Architecture Diagram

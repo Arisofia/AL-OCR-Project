@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUN_DIR="${ROOT_DIR}/.run"
 BACKEND_PID_FILE="${RUN_DIR}/backend.pid"
 FRONTEND_PID_FILE="${RUN_DIR}/frontend.pid"
+REDIS_MANAGED_FILE="${RUN_DIR}/redis.managed"
 
 stop_from_pid_file() {
   local pid_file="$1"
@@ -40,3 +41,12 @@ stop_from_pid_file() {
 
 stop_from_pid_file "${FRONTEND_PID_FILE}" "frontend"
 stop_from_pid_file "${BACKEND_PID_FILE}" "backend"
+
+if [[ -f "${REDIS_MANAGED_FILE}" ]]; then
+  redis_container="$(cat "${REDIS_MANAGED_FILE}")"
+  if [[ -n "${redis_container}" ]] && command -v docker >/dev/null 2>&1; then
+    docker stop "${redis_container}" >/dev/null 2>&1 || true
+    echo "redis: stopped managed container ${redis_container}"
+  fi
+  rm -f "${REDIS_MANAGED_FILE}"
+fi
