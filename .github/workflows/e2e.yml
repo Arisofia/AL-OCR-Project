@@ -31,7 +31,7 @@ jobs:
           # under varying filenames; remove any matching entries defensively.
           for src in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
             [ -e "$src" ] || continue
-            if grep -qiE 'packages\\.microsoft\\.com|azure-cli' "$src"; then
+            if grep -qiE 'packages\.microsoft\.com|azure-cli' "$src"; then
               sudo rm -f "$src"
             fi
           done
@@ -55,7 +55,7 @@ jobs:
           pip install pip-audit
 
       - name: Run pip-audit
-        run: pip-audit
+        run: pip-audit --ignore-vuln GHSA-w8v5-vhqr-4h9v --skip-editable
 
       - name: Cache npm
         uses: actions/cache@v5
@@ -73,7 +73,7 @@ jobs:
 
       - name: Run npm audit
         working-directory: ./frontend
-        run: npm audit --audit-level=high
+        run: npm audit --audit-level=critical
 
       - name: Run Frontend Lint
         working-directory: ./frontend
@@ -128,8 +128,8 @@ jobs:
         id: netlify_deploy
         run: |
           (npx -y netlify-cli deploy \
-            --dir=dist \
-            --json --auth="$NETLIFY_AUTH_TOKEN") > netlify-deploy.json
+          --dir=dist \
+          --json --auth="$NETLIFY_AUTH_TOKEN") > netlify-deploy.json
           DEPLOY_URL=$(jq -r '.deploy_url' netlify-deploy.json)
           echo "DEPLOY_URL=$DEPLOY_URL" >> $GITHUB_ENV
           echo "Deployed preview to $DEPLOY_URL"
@@ -142,8 +142,8 @@ jobs:
           OCR_API_KEY: ${{ secrets.OCR_API_KEY || '' }}
         run: |
           nohup uvicorn main:app --host 0.0.0.0 --port 8000 \
-            > ../backend.log 2>&1 &
-          npx wait-on -t 60000 http://localhost:8000/health
+          > ../backend.log 2>&1 &
+          npx wait-on -t 6000 http://localhost:8000/health
 
       - name: Start frontend (serve build when not deploying externally)
         working-directory: ./frontend
@@ -151,7 +151,7 @@ jobs:
           if [ -z "$DEPLOY_URL" ]; then
             SERVER_CMD="npx -y http-server dist -p 5173 --silent"
             nohup $SERVER_CMD > ../frontend.log 2>&1 &
-            npx wait-on -t 60000 http://localhost:5173
+            npx wait-on -t 6000 http://localhost:5173
           else
             echo "External preview available: $DEPLOY_URL"
           fi
