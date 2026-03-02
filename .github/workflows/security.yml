@@ -23,12 +23,12 @@ jobs:
           fetch-depth: 0
 
       - name: Gitleaks (Secret Scan)
-        uses: gitleaks/gitleaks-action@v2 # v2.3.9
+        uses: gitleaks/gitleaks-action@83373cf0369666678796707e78b1ad8e9741048e # v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
-        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        uses: actions/setup-python@8d9ed9a8d614326213d65127602772e1e8707f4d # v6.0.0
         with:
           python-version: "3.11"
 
@@ -49,7 +49,7 @@ jobs:
         run: docker build -t al-ocr-service:local -f ocr_service/Dockerfile .
 
       - name: Trivy Vulnerability Scan
-        uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284
+        uses: aquasecurity/trivy-action@8df58477568834a222044e290276f085da892051
         with:
           image-ref: "al-ocr-service:local"
           format: "table"

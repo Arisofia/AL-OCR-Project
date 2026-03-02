@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v6.0.2
 
       - name: Setup Python
-        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        uses: actions/setup-python@8d9ed9a8d614326213d65127602772e1e8707f4d # v6.0.0
         with:
           python-version: "3.11"
 
@@ -58,7 +58,7 @@ jobs:
         run: pip-audit --ignore-vuln GHSA-w8v5-vhqr-4h9v --skip-editable
 
       - name: Cache npm
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v5.0.3
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v5.0.3
         with:
           path: ~/.npm
           key:
@@ -80,7 +80,7 @@ jobs:
         run: npm run lint
 
       - name: Frontend Dependency Scan (Trivy)
-        uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284
+        uses: aquasecurity/trivy-action@8df58477568834a222044e290276f085da892051
         with:
           scan-type: "fs"
           scan-ref: "frontend"
@@ -90,7 +90,7 @@ jobs:
           severity: "CRITICAL,HIGH"
 
       - name: Cache Playwright browsers
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v5.0.3
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v5.0.3
         with:
           path: ~/.cache/ms-playwright
           key:
@@ -175,7 +175,7 @@ jobs:
 
       - name: Upload Playwright artifacts
         if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v6.0.0
         with:
           name: playwright-artifacts
           path: |

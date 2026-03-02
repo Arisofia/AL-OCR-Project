@@ -27,7 +27,7 @@ jobs:
         run: npm install
 
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v6.0.0
+        uses: aws-actions/configure-aws-credentials@010d0da01d0b5a38af31e9c7ec00174257bba011 # v6.0.0
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ secrets.AWS_REGION }}
