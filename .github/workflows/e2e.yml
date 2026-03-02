@@ -21,7 +21,7 @@ jobs:
           python-version: "3.11"
 
       - name: Setup Node
-        uses: actions/setup-node@v6 # v6.2.0
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v6.2.0
         with:
           node-version: "20"
 
@@ -58,7 +58,7 @@ jobs:
         run: pip-audit --ignore-vuln GHSA-w8v5-vhqr-4h9v --skip-editable
 
       - name: Cache npm
-        uses: actions/cache@v5 # v5.0.3
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v5.0.3
         with:
           path: ~/.npm
           key:
@@ -90,7 +90,7 @@ jobs:
           severity: "CRITICAL,HIGH"
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v5 # v5.0.3
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v5.0.3
         with:
           path: ~/.cache/ms-playwright
           key:
