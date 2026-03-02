@@ -22,7 +22,7 @@ jobs:
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       OCR_API_KEY: ${{ secrets.OCR_API_KEY }}
       OCR_BACKEND_URL:
-        ${{ vars.OCR_BACKEND_URL || 'https://e2bb7336nub3gwutziiz355cbm0geswv.lambda-url.us-east-1.on.aws' }}
+        ${{ fromJSON(toJSON(vars))[format('{0}', 'OCR_BACKEND_URL')] || 'https://e2bb7336nub3gwutziiz355cbm0geswv.lambda-url.us-east-1.on.aws' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v6.0.2

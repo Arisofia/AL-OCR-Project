@@ -41,11 +41,11 @@ jobs:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
           S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
-          DATASET_UPLOAD_KEY: ${{ secrets.DATASET_UPLOAD_KEY || '' }}
+          DATASET_UPLOAD_KEY: ${{ fromJSON(toJSON(secrets))[format('{0}', 'DATASET_UPLOAD_KEY')] || '' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || '' }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || '' }}
           HUGGING_FACE_HUB_TOKEN: ${{ secrets.HUGGING_FACE_HUB_TOKEN || '' }}
-          ENABLE_BIN_LOOKUP: ${{ vars.ENABLE_BIN_LOOKUP || '' }}
+          ENABLE_BIN_LOOKUP: ${{ fromJSON(toJSON(vars))[format('{0}', 'ENABLE_BIN_LOOKUP')] || '' }}
           # Fall back to production defaults when optional secrets are missing.
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY || 'al-ocr-service' }}
           LAMBDA_FUNCTION_NAME: ${{ secrets.AWS_LAMBDA_FUNCTION_NAME || 'AL-OCR-Upload-API' }}
