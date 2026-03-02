@@ -11,12 +11,12 @@ jobs:
   gitleaks:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v6.0.2
         with:
           fetch-depth: 0
 
       - name: Gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@f699513b049573f8a4a19bb0836f8c4609755ff1 # v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -28,12 +28,12 @@ jobs:
         python-version: ["3.10", "3.11"]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v6.0.2
         with:
           fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@424c97335fa24205f509f939082f5300166ed27f # v6.0.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
@@ -87,7 +87,7 @@ jobs:
 
       - name: Upload Coverage
         if: always() && hashFiles('coverage.xml') != ''
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@615b319043f96c023d576c760823c515962f60f0 # v6.0.0
         with:
           name: coverage-report-${{ matrix.python-version }}
           path: coverage.xml

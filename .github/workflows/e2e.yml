@@ -13,15 +13,15 @@ jobs:
   e2e:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v6.0.2
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@424c97335fa24205f509f939082f5300166ed27f # v6.0.0
         with:
           python-version: "3.11"
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@32258e835f987b079ad89e56b0d2ad64769c124b # v6.2.0
         with:
           node-version: "20"
 
@@ -58,7 +58,7 @@ jobs:
         run: pip-audit --ignore-vuln GHSA-w8v5-vhqr-4h9v --skip-editable
 
       - name: Cache npm
-        uses: actions/cache@v5
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           path: ~/.npm
           key:
@@ -90,7 +90,7 @@ jobs:
           severity: "CRITICAL,HIGH"
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v5
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           path: ~/.cache/ms-playwright
           key:
@@ -175,7 +175,7 @@ jobs:
 
       - name: Upload Playwright artifacts
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@615b319043f96c023d576c760823c515962f60f0 # v6.0.0
         with:
           name: playwright-artifacts
           path: |

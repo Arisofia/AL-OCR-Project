@@ -11,10 +11,10 @@ jobs:
   run:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v6.0.2
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@424c97335fa24205f509f939082f5300166ed27f # v6.0.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -39,7 +39,7 @@ jobs:
 
       - name: Set up CML
         id: setup_cml
-        uses: iterative/setup-cml@v3
+        uses: iterative/setup-cml@797697806a22b261077d6684a10c20645d8574a8 # v3.0.1
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

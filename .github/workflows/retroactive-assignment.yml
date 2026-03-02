@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Assign reviewers
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed5974112e19d61ce22c46888f8f929b10297137 # v8.0.0
         with:
           script: |
             const prNumber = parseInt(core.getInput('pr_number'));
