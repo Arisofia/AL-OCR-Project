@@ -71,26 +71,50 @@ TC-06 — Dockle / CIS
 ---
 
 ## CI Integration
-Add a GitHub Actions workflow that:
+Use the existing GitHub Actions workflow:
 - Builds the container image
 - Runs `tests/container/run_container_checks.sh` against it
 - Runs Trivy scan (using `aquasecurity/trivy-action`)
 - Runs Dockle (using `goodwithtech/dockle-action`)
 - Uploads scan artifacts for auditing
 
-We will add `./.github/workflows/container-security.yml` (see implementation in repository).
+Workflow file: `./.github/workflows/container-security.yml`.
 
 ---
 
-## Artifacts Provided
-- `TEST_PLAN_Secure_Docker_Image.md` — this test plan
-- `./tests/container/run_container_checks.sh` — a script with runtime checks
-- `./.github/workflows/container-security.yml` — CI job to run scans and tests
+## Consolidated Checklist
+
+| ID | Title | Priority | Automated | Pass |
+|---|---|---|---|---|
+| TC-01 | Verify Docker image build succeeds | Critical | Yes | [ ] |
+| TC-02 | Confirm runtime user is non-root (`whoami`, `id`) | Critical | Yes | [ ] |
+| TC-03 | Verify `/var/task` ownership and expected write behavior | High | Yes | [ ] |
+| TC-04 | Verify write/delete permissions in `/tmp` | High | Yes | [ ] |
+| TC-05 | Run OCR flow as non-root user | Critical | Yes | [ ] |
+| TC-06 | Verify graceful shutdown on SIGTERM | High | Yes | [ ] |
+| TC-07 | Verify Tesseract data access (`tesseract --list-langs`) | High | Yes | [ ] |
 
 ---
+
+## Real Commands
+
+```bash
+# Build image
+docker build -t al-ocr-service:ci -f ocr_service/Dockerfile .
+
+# Run runtime checks
+./tests/container/run_container_checks.sh
+
+# Verify non-root user
+docker run --rm --entrypoint '' al-ocr-service:ci sh -c 'whoami && id -u && id -g'
+
+# Verify /tmp write
+docker run --rm --entrypoint '' al-ocr-service:ci sh -c 'echo ok > /tmp/ci_test.txt && ls -l /tmp/ci_test.txt'
+
+# Security scan (example)
+trivy image --severity CRITICAL,HIGH al-ocr-service:ci
+```
 
 ## Notes
-- Policy decisions (e.g., acceptable severity thresholds) should be set in CI via repository secrets or variables.
-- If GPU is required, test cases and the Docker runtime policy will be extended to verify device access.
-
-If this plan looks good, I will commit the CI job and script into the repository and enable the workflow.
+- Policy thresholds (severity/fail-open rules) are enforced in CI.
+- If GPU support is introduced, extend tests to verify device access and runtime groups.

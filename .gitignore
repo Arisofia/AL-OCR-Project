@@ -42,8 +42,8 @@ logs/
 .mypy_cache/
 ocr_reconstruct/.mypy_cache/
 
-# Trunk logs
-.trunk/logs/
+# Trunk local cache/symlinks
+.trunk/
 
 # Docker
 docker-compose.override.yml
@@ -92,6 +92,7 @@ htmlcov/
 .ruff_cache/
 frontend/playwright-report/
 frontend/test-results/
+*.tsbuildinfo
 .coverage*
 *.log
 gitleaks
