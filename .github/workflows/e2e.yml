@@ -122,7 +122,6 @@ jobs:
 
       - name: Deploy to Netlify (optional)
         if: ${{ steps.check_netlify_secrets.outputs.has_netlify == 'true' }}
-                inue-on-error: true
         working-directory: ./frontend
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
@@ -131,7 +130,7 @@ jobs:
         run: |
           (npx -y netlify-cli deploy \
           --site="$NETLIFY_SITE_ID" \         
-                  --json --auth="$NETLIFY_AUTH_TOKEN") > netlify-deploy.json
+                  --json --auth="$NETLIFY_AUTH_TOKEN") > netlify-deploy.json || true
           DEPLOY_URL=$(jq -r '.deploy_url' netlify-deploy.json)
           echo "DEPLOY_URL=$DEPLOY_URL" >> $GITHUB_ENV
           echo "Deployed preview to $DEPLOY_URL"
