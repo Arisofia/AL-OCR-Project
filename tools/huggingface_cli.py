@@ -4,22 +4,23 @@
 CLI tool to interact with the Hugging Face Vision Provider for testing and
 reconstruction.
 """
+# pylint: disable=duplicate-code
 
 import argparse
 import asyncio
-import os
+import contextlib
+import importlib
 import sys
 from pathlib import Path
 
 # Add project root to sys.path for local development
-sys.path.append(str(Path(__file__).parent.parent))
+with contextlib.suppress(Exception):
+    sys.path.append(str(Path(__file__).parent.parent))
 
-# pylint: disable=wrong-import-position
-from ocr_service.config import get_settings  # noqa: E402
-from ocr_service.modules.ai_providers import (  # noqa: E402
-    AIProviderError,
-    HuggingFaceVisionProvider,
-)
+get_settings = importlib.import_module("ocr_service.config").get_settings
+_providers_mod = importlib.import_module("ocr_service.modules.ai_providers")
+AIProviderError = _providers_mod.AIProviderError
+HuggingFaceVisionProvider = _providers_mod.HuggingFaceVisionProvider
 
 
 async def main():

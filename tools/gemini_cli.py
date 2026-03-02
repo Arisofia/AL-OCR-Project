@@ -2,6 +2,7 @@
 """
 CLI tool to interact with the Gemini Vision Provider for testing and reconstruction.
 """
+# pylint: disable=duplicate-code
 
 import argparse
 import asyncio

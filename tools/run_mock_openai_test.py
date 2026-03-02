@@ -4,13 +4,22 @@ Simulates API responses including error scenarios like quota exceeded.
 """
 
 import asyncio
+import contextlib
+import importlib
 import logging
+import sys
 from pathlib import Path
 from typing import Optional
 
 import httpx
 
-from ocr_service.modules.ai_providers import AIProviderError, OpenAIVisionProvider
+# Add project root to sys.path for local development
+with contextlib.suppress(Exception):
+    sys.path.append(str(Path(__file__).parent.parent))
+
+_providers_mod = importlib.import_module("ocr_service.modules.ai_providers")
+AIProviderError = _providers_mod.AIProviderError
+OpenAIVisionProvider = _providers_mod.OpenAIVisionProvider
 
 # Use a stable, minimal binary file for image bytes (no external deps)
 img_path = Path("test_image.bin")
