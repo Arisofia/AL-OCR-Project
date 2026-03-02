@@ -2,7 +2,7 @@
 Pydantic schemas for the OCR service API.
 """
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -47,7 +47,7 @@ class DocumentField(BaseModel):
     name: str
     value: str
     raw_ocr: Optional[str] = None
-    confidence_level: str  # "high", "medium", or "low"
+    confidence_level: Literal["high", "medium", "low"]
 
 
 class DocumentAnalytics(BaseModel):

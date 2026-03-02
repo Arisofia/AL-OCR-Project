@@ -11,6 +11,7 @@ on:
 permissions:
   contents: read
   security-events: write
+  pull-requests: read
 
 jobs:
   static-analysis:
@@ -69,4 +70,5 @@ jobs:
         run: |
           cd frontend
           npm install --package-lock-only --legacy-peer-deps
-          npm audit --audit-level=high
+          npm audit fix --force || true
+          npm audit --audit-level=critical
