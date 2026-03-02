@@ -25,7 +25,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@83679a8666666666666666666666666666666666 # v6.0.0
+        uses: actions/setup-python@39751155f0af13c2f8dbf60102c14c7427eda028 # v6.0.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
@@ -74,7 +74,7 @@ jobs:
 
       - name: Upload Test Coverage
         if: always() && hashFiles('coverage.xml') != ''
-        uses: actions/upload-artifact@615b319043f96c023d576c760823c515962f60f0 # v6.0.0
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v6.0.0
         with:
           name: coverage-report-${{ matrix.python-version }}
           path: coverage.xml

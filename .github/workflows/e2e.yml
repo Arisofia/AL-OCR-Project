@@ -16,12 +16,12 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v6.0.2
 
       - name: Setup Python
-        uses: actions/setup-python@83679a8666666666666666666666666666666666 # v6.0.0
+        uses: actions/setup-python@39751155f0af13c2f8dbf60102c14c7427eda028 # v6.0.0
         with:
           python-version: "3.11"
 
       - name: Setup Node
-        uses: actions/setup-node@6044e13666666666666666666666666666666666 # v6.2.0
+        uses: actions/setup-node@1d99fba2f9c7b3d41c80019117ef33847d0a2495 # v6.2.0
         with:
           node-version: "20"
 
@@ -58,7 +58,7 @@ jobs:
         run: pip-audit --ignore-vuln GHSA-w8v5-vhqr-4h9v --skip-editable
 
       - name: Cache npm
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        uses: actions/cache@d4323d4df104b026a6aa633f9c1b89003b820236 # v5.0.3
         with:
           path: ~/.npm
           key:
@@ -90,7 +90,7 @@ jobs:
           severity: "CRITICAL,HIGH"
 
       - name: Cache Playwright browsers
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        uses: actions/cache@d4323d4df104b026a6aa633f9c1b89003b820236 # v5.0.3
         with:
           path: ~/.cache/ms-playwright
           key:
@@ -175,7 +175,7 @@ jobs:
 
       - name: Upload Playwright artifacts
         if: always()
-        uses: actions/upload-artifact@615b319043f96c023d576c760823c515962f60f0 # v6.0.0
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v6.0.0
         with:
           name: playwright-artifacts
           path: |

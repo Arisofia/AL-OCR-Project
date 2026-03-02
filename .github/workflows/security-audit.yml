@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@83679a8666666666666666666666666666666666 # v6.0.0
+        uses: actions/setup-python@39751155f0af13c2f8dbf60102c14c7427eda028 # v6.0.0
         with:
           python-version: "3.11"
 
@@ -32,7 +32,7 @@ jobs:
         run: pip-audit -r requirements.txt --ignore-vuln CVE-2025-69872
 
       - name: Set up Node.js
-        uses: actions/setup-node@6044e13666666666666666666666666666666666 # v6.2.0
+        uses: actions/setup-node@1d99fba2f9c7b3d41c80019117ef33847d0a2495 # v6.2.0
         with:
           node-version: "18"
 
@@ -52,7 +52,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload security reports
-        uses: actions/upload-artifact@615b319043f96c023d576c760823c515962f60f0 # v6.0.0
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v6.0.0
         with:
           name: security-reports
           path: |
