@@ -120,17 +120,17 @@ jobs:
           fi
 
       - name: Deploy to Netlify (optional)
+        id: netlify_deploy
         if: ${{ steps.check_netlify_secrets.outputs.has_netlify == 'true' }}
         working-directory: ./frontend
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-        id: netlify_deploy
         run: |
           (npx -y netlify-cli deploy \
-          --dir=dist \
-          --site="$NETLIFY_SITE_ID" \
-          --json --auth="$NETLIFY_AUTH_TOKEN") > netlify-deploy.json || true
+            --dir=dist \
+            --site="$NETLIFY_SITE_ID" \
+            --json --auth="$NETLIFY_AUTH_TOKEN") > netlify-deploy.json || true
           DEPLOY_URL=$(jq -r '.deploy_url' netlify-deploy.json)
           echo "DEPLOY_URL=$DEPLOY_URL" >> $GITHUB_ENV
           echo "Deployed preview to $DEPLOY_URL"
@@ -142,7 +142,7 @@ jobs:
           OCR_API_KEY: ${{ secrets.OCR_API_KEY || '' }}
         run: |
           nohup uvicorn main:app --host 0.0.0.0 --port 8000 \
-          > ../backend.log 2>&1 &
+            > ../backend.log 2>&1 &
           npx wait-on -t 6000 http://localhost:8000/health
 
       - name: Start frontend (serve build when not deploying externally)
