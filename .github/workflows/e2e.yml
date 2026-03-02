@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v6.0.2
 
       - name: Setup Python
-        uses: actions/setup-python@e797f83459a444597b054c973588f7055240f191 # v6.0.0
+        uses: actions/setup-python@397525782c16c74a026bb9f248147482888e98a3 # v6.0.0
         with:
           python-version: "3.11"
 
@@ -175,7 +175,7 @@ jobs:
 
       - name: Upload Playwright artifacts
         if: always()
-        uses: actions/upload-artifact@4cec3d8ad04fe25bd47b124429530a98c1c1fd5a # v6.0.0
+        uses: actions/upload-artifact@65c86b38a0357c228d7bfb17554440211b17c9bb # v6.0.0
         with:
           name: playwright-artifacts
           path: |

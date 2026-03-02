@@ -38,10 +38,7 @@ def main():
         print(text)
         print("\n--- Metadata ---")
         print(f"Iterations completed: {len(meta.get('iterations', []))}")
-    except FileNotFoundError as e:
-        print(f"Error: {e}")
-        sys.exit(1)
-    except ValueError as e:
+    except (FileNotFoundError, ValueError) as e:
         print(f"Error: {e}")
         sys.exit(1)
 
