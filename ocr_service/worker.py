@@ -1,3 +1,5 @@
+"""Asynchronous Redis-backed OCR worker for queued document processing."""
+
 import asyncio
 import json
 import logging
@@ -46,7 +48,9 @@ class RedisWorker:
         while True:
             try:
                 # Blocking pop from the queue
-                task = await self.redis_client.blpop([self.queue_name], timeout=5)  # type: ignore[misc]
+                task = await self.redis_client.blpop(  # type: ignore[misc]
+                    [self.queue_name], timeout=5
+                )
                 if not task:
                     continue
 
@@ -58,7 +62,7 @@ class RedisWorker:
             except redis.ConnectionError:
                 logger.error("Redis connection lost | Retrying in 5s...")
                 await asyncio.sleep(5)
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 logger.exception("Unexpected error in worker loop: %s", e)
                 await asyncio.sleep(1)
 
@@ -86,9 +90,15 @@ class RedisWorker:
                 cached_status_raw = await self.redis_client.get(idempotency_key)
                 if cached_status_raw:
                     cached_data = json.loads(cached_status_raw)
-                    status = cached_data.get("status")
-                    if status in [JobStatus.COMPLETED, JobStatus.PROCESSING]:
-                        logger.info("Job %s is already %s, skipping", job_id, status)
+                    if cached_data.get("status") in [
+                        JobStatus.COMPLETED,
+                        JobStatus.PROCESSING,
+                    ]:
+                        logger.info(
+                            "Job %s is already %s, skipping",
+                            job_id,
+                            cached_data.get("status"),
+                        )
                         return
 
                 # If FAILED or missing, try to reclaim (NX prevented above)
@@ -131,7 +141,7 @@ class RedisWorker:
 
             logger.info("Job completed | ID: %s | RID: %s", job_id, request_id)
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logger.exception("Job failed | ID: %s | RID: %s", job_id, request_id)
             await self._handle_job_failure(job_key, job_id, e, request_id)
 
@@ -183,11 +193,12 @@ class RedisWorker:
                     }
                 )
                 await self.redis_client.set(job_key, json.dumps(job_data))
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.exception("Failed to record job failure for ID: %s", job_id)
 
 
 async def main():
+    """Initialize monitoring and run the Redis OCR worker loop."""
     settings = get_settings()
     init_monitoring(settings)
     worker = RedisWorker(settings=settings)

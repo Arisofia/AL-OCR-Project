@@ -1,3 +1,6 @@
+"""Worker service for handling S3-triggered Textract processing flows."""
+
+from dataclasses import dataclass
 import logging
 import os
 import urllib.parse
@@ -10,6 +13,17 @@ from ocr_service.services.storage import StorageService
 from ocr_service.services.textract import TextractService, TextractServiceError
 
 logger = logging.getLogger("ocr-service.worker")
+
+
+@dataclass(frozen=True)
+class ProcessingContext:
+    """Immutable context for handling one S3 record processing flow."""
+
+    bucket: str
+    key: str
+    out_key: str
+    request_id: str
+    storage: StorageService
 
 
 class WorkerService:
@@ -44,6 +58,13 @@ class WorkerService:
         out_key = (
             f"{self.settings.output_prefix.rstrip('/')}/{os.path.basename(key)}.json"
         )
+        context = ProcessingContext(
+            bucket=bucket,
+            key=key,
+            out_key=out_key,
+            request_id=request_id,
+            storage=storage_service,
+        )
 
         try:
             if key.lower().endswith(".pdf"):
@@ -59,18 +80,21 @@ class WorkerService:
                 logger.info("Result persisted | Path: s3://%s/%s", bucket, out_key)
 
         except ClientError as e:
-            self._handle_aws_error(e, bucket, key, out_key, storage_service)
+            self._handle_aws_error(e, context)
             raise
         except TextractServiceError as e:
-            self._handle_textract_error(
-                e, bucket, key, out_key, request_id, storage_service
-            )
+            self._handle_textract_error(e, context)
             raise
-        except Exception as e:
-            self._handle_generic_error(
-                e, bucket, key, out_key, request_id, storage_service
-            )
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            self._handle_generic_error(e, context)
             raise
+
+    def process_s3_event(
+        self, event: dict[str, Any], request_id: str = "N/A"
+    ) -> None:
+        """Process all records from an S3 event payload."""
+        for record in event.get("Records", []):
+            self.process_s3_record(record, request_id=request_id)
 
     def _handle_async_pdf(
         self, bucket: str, key: str, request_id: str
@@ -95,61 +119,53 @@ class WorkerService:
         logger.info("Sync analysis completed | Key: %s", key)
         return output
 
-    def _handle_aws_error(
-        self,
-        e: ClientError,
-        bucket: str,
-        key: str,
-        out_key: str,
-        storage: StorageService,
-    ):
+    def _handle_aws_error(self, e: ClientError, context: ProcessingContext):
         req_id = e.response.get("ResponseMetadata", {}).get("RequestId", "N/A")
         logger.error(
-            "AWS Service Failure | Key: %s | RID: %s | Error: %s", key, req_id, e
+            "AWS Service Failure | Key: %s | RID: %s | Error: %s",
+            context.key,
+            req_id,
+            e,
         )
         err_obj = {
             "error": "aws_service_failure",
             "message": str(e),
             "requestId": req_id,
-            "input": {"bucket": bucket, "key": key},
+            "input": {"bucket": context.bucket, "key": context.key},
         }
-        storage.save_json(err_obj, out_key)
+        context.storage.save_json(err_obj, context.out_key)
 
     def _handle_textract_error(
         self,
         e: TextractServiceError,
-        bucket: str,
-        key: str,
-        out_key: str,
-        request_id: str,
-        storage: StorageService,
+        context: ProcessingContext,
     ):
-        logger.error("Textract processing failed for key %s: %s", key, e)
+        logger.error("Textract processing failed for key %s: %s", context.key, e)
         err_obj = {
             "error": "textract_service_failure",
             "message": str(e),
-            "requestId": request_id,
-            "input": {"bucket": bucket, "key": key},
+            "requestId": context.request_id,
+            "input": {"bucket": context.bucket, "key": context.key},
         }
-        storage.save_json(err_obj, out_key)
+        context.storage.save_json(err_obj, context.out_key)
 
     def _handle_generic_error(
         self,
         e: Exception,
-        bucket: str,
-        key: str,
-        out_key: str,
-        request_id: str,
-        storage: StorageService,
+        context: ProcessingContext,
     ):
-        logger.exception("Operational failure: Object %s in bucket %s", key, bucket)
+        logger.exception(
+            "Operational failure: Object %s in bucket %s",
+            context.key,
+            context.bucket,
+        )
         err_obj = {
             "error": "internal_pipeline_failure",
             "message": str(e),
-            "requestId": request_id,
-            "input": {"bucket": bucket, "key": key},
+            "requestId": context.request_id,
+            "input": {"bucket": context.bucket, "key": context.key},
         }
         try:
-            storage.save_json(err_obj, out_key)
-        except Exception as se:
+            context.storage.save_json(err_obj, context.out_key)
+        except Exception as se:  # pylint: disable=broad-exception-caught
             logger.error("Critical storage failure during error logging: %s", se)

@@ -1,3 +1,5 @@
+"""FastAPI application factory and lifecycle hooks for the OCR service."""
+
 import logging
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -22,6 +24,7 @@ logger = logging.getLogger("ocr-service")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Manage startup/shutdown resources for the FastAPI application."""
     # Startup
     settings = getattr(app.state, "settings", None) or get_settings()
     app.state.redis_client = get_redis_client(settings)
@@ -41,7 +44,7 @@ async def lifespan(app: FastAPI):
             app.state.redis_diagnostics = redis_status
             app.state.degraded = not redis_status.get("ok", False)
             logger.info("Startup dependency check: %s", redis_status)
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             logger.exception("Startup dependency check failed")
             app.state.degraded = True
             app.state.redis_diagnostics = {"ok": False}
