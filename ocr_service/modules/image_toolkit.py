@@ -24,6 +24,8 @@ class ImageToolkitError(Exception):
 
 
 class ImageToolkit:
+    """Helpers for image byte normalization, decoding, and OCR preprocessing."""
+
     @staticmethod
     def prepare_image_bytes(data: Any) -> Optional[bytes]:
         """
@@ -59,7 +61,7 @@ class ImageToolkit:
             try:
                 nparr = np.frombuffer(image_bytes, np.uint8)
                 img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            except Exception as cv_exc:
+            except (RuntimeError, ValueError, TypeError) as cv_exc:
                 logger.warning(
                     "cv2.imdecode raised an exception; attempting Pillow fallback: %s",
                     cv_exc,
@@ -105,9 +107,7 @@ class ImageToolkit:
 
         def _encode():
             success, encoded_img = cv2.imencode(format_ext, img)
-            if success:
-                return encoded_img.tobytes()
-            return None
+            return encoded_img.tobytes() if success else None
 
         return await asyncio.to_thread(_encode)
 

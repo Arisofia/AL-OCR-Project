@@ -156,10 +156,9 @@ class StorageService:
             return None
 
         s3_key = f"{prefix}/{uuid.uuid4()}-{filename}"
-        success = self.put_object(s3_key, content, content_type)
-        if success:
+        if success := self.put_object(s3_key, content, content_type):
             return s3_key
-        logger.error("upload_file failed for key: %s", s3_key)
+        logger.error("upload_file failed for key: %s (success=%s)", s3_key, success)
         return None
 
     def upload_json(

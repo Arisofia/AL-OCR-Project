@@ -6,7 +6,7 @@ Uses evidently to compare production data against training reference.
 import logging
 import os
 from importlib import import_module
-from typing import Optional
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -18,26 +18,59 @@ TEST_SUITE_CLS = None
 TEST_DRIFTED_COLUMNS_CLS = None
 
 try:
-    _metric_preset_mod = import_module("evidently.metric_preset")
-    _report_mod = import_module("evidently.report")
-    _test_suite_mod = import_module("evidently.test_suite")
-    _tests_mod = import_module("evidently.tests")
+    METRIC_PRESET_MOD = import_module("evidently.metric_preset")
+    REPORT_MOD = import_module("evidently.report")
+    TEST_SUITE_MOD = import_module("evidently.test_suite")
+    TESTS_MOD = import_module("evidently.tests")
 except ImportError:
-    _metric_preset_mod = None
-    _report_mod = None
-    _test_suite_mod = None
-    _tests_mod = None
+    METRIC_PRESET_MOD = None
+    REPORT_MOD = None
+    TEST_SUITE_MOD = None
+    TESTS_MOD = None
 
-if _metric_preset_mod is not None:
-    DATA_DRIFT_PRESET_CLS = getattr(_metric_preset_mod, "DataDriftPreset", None)
-if _report_mod is not None:
-    REPORT_CLS = getattr(_report_mod, "Report", None)
-if _test_suite_mod is not None:
-    TEST_SUITE_CLS = getattr(_test_suite_mod, "TestSuite", None)
-if _tests_mod is not None:
-    TEST_DRIFTED_COLUMNS_CLS = getattr(_tests_mod, "TestNumberOfDriftedColumns", None)
+if METRIC_PRESET_MOD is not None:
+    DATA_DRIFT_PRESET_CLS = getattr(METRIC_PRESET_MOD, "DataDriftPreset", None)
+if REPORT_MOD is not None:
+    REPORT_CLS = getattr(REPORT_MOD, "Report", None)
+if TEST_SUITE_MOD is not None:
+    TEST_SUITE_CLS = getattr(TEST_SUITE_MOD, "TestSuite", None)
+if TESTS_MOD is not None:
+    TEST_DRIFTED_COLUMNS_CLS = getattr(TESTS_MOD, "TestNumberOfDriftedColumns", None)
 
 logger = logging.getLogger("ocr-service.drift")
+
+
+def _run_drift_report_and_suite(
+    reference_data: pd.DataFrame,
+    current_data: pd.DataFrame,
+    actual_report_path: str,
+    report_cls: Any,
+    data_drift_preset_cls: Any,
+    test_suite_cls: Any,
+    test_drifted_columns_cls: Any,
+) -> bool:
+    """Generate Evidently report + test suite and return whether drift is detected."""
+    # 1. Generate Drift Report (for human visualization)
+    drift_report = report_cls(metrics=[data_drift_preset_cls()])
+    drift_report.run(reference_data=reference_data, current_data=current_data)
+
+    # Ensure directory exists for report
+    os.makedirs(os.path.dirname(actual_report_path), exist_ok=True)
+    drift_report.save_html(actual_report_path)
+
+    # 2. Run Automated Test Suite
+    data_test = test_suite_cls(tests=[test_drifted_columns_cls()])
+    data_test.run(reference_data=reference_data, current_data=current_data)
+
+    summary = data_test.as_dict()["summary"]
+    if not summary["all_passed"]:
+        logger.warning(
+            "DRIFT DETECTED! Significant divergence in input data distribution."
+        )
+        return True
+
+    logger.info("No significant drift detected.")
+    return False
 
 
 def check_for_drift(
@@ -63,27 +96,15 @@ def check_for_drift(
         return False
 
     try:
-        # 1. Generate Drift Report (for human visualization)
-        drift_report = REPORT_CLS(metrics=[DATA_DRIFT_PRESET_CLS()])
-        drift_report.run(reference_data=reference_data, current_data=current_data)
-
-        # Ensure directory exists for report
-        os.makedirs(os.path.dirname(actual_report_path), exist_ok=True)
-        drift_report.save_html(actual_report_path)
-
-        # 2. Run Automated Test Suite
-        data_test = TEST_SUITE_CLS(tests=[TEST_DRIFTED_COLUMNS_CLS()])
-        data_test.run(reference_data=reference_data, current_data=current_data)
-
-        summary = data_test.as_dict()["summary"]
-        if not summary["all_passed"]:
-            logger.warning(
-                "DRIFT DETECTED! Significant divergence in input data distribution."
-            )
-            return True
-
-        logger.info("No significant drift detected.")
-        return False
+        return _run_drift_report_and_suite(
+            reference_data=reference_data,
+            current_data=current_data,
+            actual_report_path=actual_report_path,
+            report_cls=REPORT_CLS,
+            data_drift_preset_cls=DATA_DRIFT_PRESET_CLS,
+            test_suite_cls=TEST_SUITE_CLS,
+            test_drifted_columns_cls=TEST_DRIFTED_COLUMNS_CLS,
+        )
     except (OSError, RuntimeError, ValueError, KeyError, TypeError) as e:
         logger.exception("Drift detection failed: %s", e)
         return False

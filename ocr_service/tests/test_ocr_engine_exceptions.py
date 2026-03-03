@@ -1,7 +1,7 @@
 """Regression tests for OCR engine fallbacks and preprocessing behavior."""
 
 # OpenCV binary modules commonly trigger false `no-member` in pylint.
-# pylint: disable=missing-function-docstring,no-member,import-error,protected-access
+# pylint: disable=missing-function-docstring,no-member,import-error,protected-access,too-many-lines
 
 import logging
 import asyncio
