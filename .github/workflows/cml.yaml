@@ -1,0 +1,108 @@
+---
+name: Model-Training-Workflow
+on: [push]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  run:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@397525782c16c74a026bb9f248147482888e98a3
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Validate Secrets
+        run: |
+          for secret in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            if [ -z "${!secret}" ]; then
+              echo "::warning::Secret $secret is not set!"
+            else
+              echo "✅ $secret is set."
+            fi
+          done
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --no-cache-dir -r requirements.txt
+
+      - name: Set up CML
+        id: setup_cml
+        uses: iterative/setup-cml@v2.0.1
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull data from DVC
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
+        run: |
+          if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+            echo "::warning ::AWS secrets not set. Skipping dvc pull."
+          else
+            # dvc remote modify storage url s3://custom-bucket/path if needed
+            if ! dvc pull data/raw.dvc; then
+              echo "::warning ::dvc pull failed. Continuing without remote data."
+            fi
+          fi
+
+      - name: Train Model
+        env:
+          REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ENABLE_CML_COMMENT=false
+          if command -v cml >/dev/null 2>&1; then
+            if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+              ENABLE_CML_COMMENT=true
+            fi
+          else
+            echo "::warning::cml CLI unavailable; report comment publishing will be skipped."
+          fi
+
+          # If src/train.py is missing, this will fail gracefully with clear error
+          if [ ! -f src/train.py ]; then
+            echo "## Training Error" > report.md
+            echo "File \`src/train.py\` not found. Skipping training." >> report.md
+            if [ "$ENABLE_CML_COMMENT" = true ]; then
+              cml comment create report.md || \
+                echo "::warning::Failed to publish CML report comment."
+            fi
+            exit 1
+          fi
+
+          python src/train.py
+
+          echo "## Model Metrics" > report.md
+          if [ -f metrics.json ]; then
+            echo "" >> report.md
+            echo '```json' >> report.md
+            cat metrics.json >> report.md
+            echo '```' >> report.md
+          else
+            echo "Metrics not found." >> report.md
+          fi
+
+          echo "## Confusion Matrix" >> report.md
+          if [ -f confusion_matrix.png ]; then
+            echo "![Confusion matrix](./confusion_matrix.png)" >> report.md
+          else
+            echo "Confusion matrix image not found." >> report.md
+          fi
+
+          if [ "$ENABLE_CML_COMMENT" = true ]; then
+            cml comment create report.md || \
+              echo "::warning::Failed to publish CML report comment."
+          fi
