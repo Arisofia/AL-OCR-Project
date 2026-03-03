@@ -36,6 +36,7 @@ class RedisWorker:
         engine_config = EngineConfig(
             max_iterations=self.settings.ocr_iterations,
             enable_reconstruction=self.settings.enable_reconstruction,
+            ocr_strategy_profile=self.settings.ocr_strategy_profile,
             enable_bin_lookup=self.settings.enable_bin_lookup,
         )
         self.engine = IterativeOCREngine(config=engine_config)

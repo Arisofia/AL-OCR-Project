@@ -31,3 +31,22 @@ class EngineConfig(BaseModel):
     enable_bin_lookup: bool = False
     card_ocr_pass_limit: int = 2
     card_ocr_timeout_seconds: float = 8.0
+    ocr_strategy_profile: str = "hybrid"
+
+    @property
+    def normalized_strategy_profile(self) -> str:
+        profile = (self.ocr_strategy_profile or "hybrid").strip().lower()
+        if profile in {"deterministic", "layout_aware", "hybrid"}:
+            return profile
+        return "hybrid"
+
+    def allows_vision_quality_fallback(self) -> bool:
+        return self.normalized_strategy_profile != "deterministic"
+
+    def prefers_layout_regions(self) -> bool:
+        return self.normalized_strategy_profile == "layout_aware"
+
+    def effective_use_reconstruction(self, requested: bool) -> bool:
+        if self.prefers_layout_regions():
+            return True
+        return requested

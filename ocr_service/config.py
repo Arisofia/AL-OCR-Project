@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     ocr_card_iterations: int = 1
     ocr_card_pass_limit: int = 2
     ocr_card_timeout_seconds: float = 8.0
+    ocr_strategy_profile: str = "hybrid"
     enable_bin_lookup: bool = False
 
     # Redis Configuration

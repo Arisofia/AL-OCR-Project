@@ -46,6 +46,10 @@ Notes:
 - The Dockerfile uses the AWS Lambda base image and includes Tesseract and language packs.
 - The Lambda container's entrypoint is `lambda_handler.handler` and supports S3 event triggers: PDF files use Textract async jobs, images use synchronous analyze_document.
 - Reconstruction preprocessor: You can enable the optional reconstruction preprocessor (integrates the `ocr_reconstruct` pipeline) by setting the environment variable `ENABLE_RECONSTRUCTION=true`. Control reconstruction iterations with `RECON_ITERATIONS`.
+- OCR strategy profile: choose `OCR_STRATEGY_PROFILE` to tune behavior by workload:
+  - `deterministic`: disables vision-LLM quality fallback; favors reproducible classic OCR paths.
+  - `hybrid` (default): keeps traditional OCR with quality fallbacks, including vision-LLM when needed.
+  - `layout_aware`: prioritizes early region-based extraction and forces reconstruction for layout-heavy documents.
 - For production, secure CI credentials and use a locked-down IAM role and stricter Terraform policies (avoid wildcards in ARNs).
 
 ---
