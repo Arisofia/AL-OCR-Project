@@ -242,8 +242,14 @@ class GeminiVisionProvider(BaseVisionProvider):
             logger.error("google-generativeai package not installed")
             raise ProviderConfigError("Gemini package missing")
         try:
-            genai.configure(api_key=self.api_key)
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            genai_mod = cast(Any, genai)
+            configure_fn = getattr(genai_mod, "configure", None)
+            model_cls = getattr(genai_mod, "GenerativeModel", None)
+            if configure_fn is None or model_cls is None:
+                raise ProviderConfigError("Gemini SDK missing expected APIs")
+
+            configure_fn(api_key=self.api_key)
+            model = model_cls("gemini-1.5-flash")
             image_part = {"mime_type": "image/jpeg", "data": image_bytes}
             # Cast to Any to satisfy mypy
             response = await model.generate_content_async(

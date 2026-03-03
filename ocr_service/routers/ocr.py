@@ -1,6 +1,8 @@
+"""OCR API routes for generic and document-aware extraction endpoints."""
+
 import logging
 import time
-from typing import Optional
+from typing import Annotated, Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Header, Request, UploadFile
 
@@ -13,6 +15,7 @@ from ocr_service.modules.decision_readiness import (
     quality_band,
 )
 from ocr_service.modules.personal_doc_extractor import (
+    ExtractedField,
     PersonalDocExtractor,
     detect_metadata,
 )
@@ -25,6 +28,7 @@ from ocr_service.schemas import (
     OCRResponse,
 )
 from ocr_service.utils.limiter import limiter
+from ocr_service.utils.tracing import get_current_trace_id
 
 logger = logging.getLogger("ocr-service.routers.ocr")
 
@@ -33,19 +37,211 @@ router = APIRouter()
 _doc_extractor = PersonalDocExtractor()
 
 
-@router.post("/ocr", response_model=OCRResponse)
+def _normalize_confidence_level(value: str) -> Literal["high", "medium", "low"]:
+    normalized = (value or "").strip().lower()
+    confidence_map: dict[str, Literal["high", "medium", "low"]] = {
+        "high": "high",
+        "medium": "medium",
+        "low": "low",
+    }
+    return confidence_map.get(normalized, "low")
+
+
+def _coerce_optional_float(value: object) -> Optional[float]:
+    if value is None:
+        return None
+    if not isinstance(value, (int, float, str)):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_type_confidence(raw_type_confidence: object, default_value: float) -> float:
+    if raw_type_confidence is None:
+        return default_value
+    if not isinstance(raw_type_confidence, (int, float, str)):
+        return default_value
+    try:
+        return float(raw_type_confidence)
+    except (TypeError, ValueError):
+        return default_value
+
+
+def _coerce_str(value: object, default_value: str) -> str:
+    return value if isinstance(value, str) else default_value
+
+
+def _coerce_processing_time(value: object, default_value: float) -> float:
+    coerced = _coerce_optional_float(value)
+    return coerced if coerced is not None else default_value
+
+
+def _resolve_document_type(
+    requested_doc_type: str,
+    detected_document_type: str,
+    type_confidence: float,
+    low_confidence_threshold: float,
+) -> tuple[str, float]:
+    if (
+        requested_doc_type != "generic"
+        and type_confidence < low_confidence_threshold
+        and detected_document_type in {"generic_document", "statement", "form"}
+    ):
+        return requested_doc_type, low_confidence_threshold
+    return detected_document_type, type_confidence
+
+
+def _build_document_fields(raw_fields: list[ExtractedField]) -> list[DocumentField]:
+    return [
+        DocumentField(
+            name=field.name,
+            value=field.value,
+            raw_ocr=field.raw_ocr,
+            confidence_level=_normalize_confidence_level(field.confidence_level),
+        )
+        for field in raw_fields
+    ]
+
+
+def _build_remediation_hints(
+    band: str,
+    missing_mandatory_fields: list[str],
+) -> list[str]:
+    hints: list[str] = []
+    if band == "poor":
+        hints.append(
+            "Image quality is poor; consider re-scanning at higher resolution."
+        )
+    elif band == "fair":
+        hints.append(
+            "Image quality is fair; manual verification recommended."
+        )
+    hints.extend(
+        [
+            (
+                f"Mandatory field '{mandatory_field}' could not be extracted; "
+                "verify manually."
+            )
+            for mandatory_field in missing_mandatory_fields
+        ]
+    )
+    return hints
+
+
+def _compute_completeness_ratio(expected_count: int, missing_mandatory: list[str]) -> Optional[float]:
+    mandatory_present = max(0, expected_count - len(missing_mandatory))
+    if not expected_count:
+        return None
+    ratio = mandatory_present / expected_count
+    ratio = max(0.0, min(1.0, ratio))
+    return round(ratio, 4)
+
+
+def _build_document_analytics(
+    result: dict[str, object],
+    document_type: str,
+    raw_fields: list[ExtractedField],
+    doc_fields: list[DocumentField],
+    type_confidence: float,
+) -> DocumentAnalytics:
+    decision_readiness = compute_decision_readiness(
+        document_type, raw_fields, type_confidence
+    )
+    band = quality_band(type_confidence)
+    requires_review = band in ("fair", "poor") or not decision_readiness["ready"]
+
+    missing_mandatory = decision_readiness.get("missing_mandatory", []) or []
+    expected_count = len(MANDATORY_FIELDS.get(document_type, []))
+    extracted_count = len(doc_fields)
+    remediation_hints = _build_remediation_hints(band, missing_mandatory)
+    completeness = _compute_completeness_ratio(expected_count, missing_mandatory)
+
+    return DocumentAnalytics(
+        pixel_coverage_ratio=_coerce_optional_float(result.get("pixel_coverage_ratio")),
+        readability_index=_coerce_optional_float(result.get("readability_index")),
+        decision_readiness=decision_readiness,
+        iteration_convergence=_coerce_optional_float(result.get("iteration_convergence")),
+        pixel_rescue_applied=bool(result.get("pixel_rescue_applied", False)),
+        quality_band=band,
+        requires_manual_review=requires_review,
+        remediation_hints=remediation_hints,
+        field_completeness_ratio=completeness,
+        fields_extracted_count=extracted_count,
+        fields_expected_count=expected_count,
+    )
+
+
+def _build_document_response(
+    *,
+    result: dict[str, object],
+    file: UploadFile,
+    doc_type: str,
+    request_id: str,
+    start_time: float,
+) -> DocumentResponse:
+    plain_text = _coerce_str(result.get("text"), "")
+    detected_document_type = _coerce_str(
+        result.get("document_type"), "generic_document"
+    )
+    default_type_confidence: float = 0.40
+    type_confidence = _coerce_type_confidence(
+        result.get("type_confidence"), default_type_confidence
+    )
+    _low_confidence_threshold = 0.65
+    document_type, type_confidence = _resolve_document_type(
+        doc_type,
+        detected_document_type,
+        type_confidence,
+        _low_confidence_threshold,
+    )
+
+    raw_fields, warnings = _doc_extractor.extract(plain_text, document_type)
+    doc_fields = _build_document_fields(raw_fields)
+
+    metadata = detect_metadata(plain_text)
+    metadata["ocr_method"] = result.get("method")
+    analytics = _build_document_analytics(
+        result=result,
+        document_type=document_type,
+        raw_fields=raw_fields,
+        doc_fields=doc_fields,
+        type_confidence=type_confidence,
+    )
+
+    return DocumentResponse(
+        filename=_coerce_str(result.get("filename"), file.filename or "unknown"),
+        document_type=document_type,
+        type_confidence=round(type_confidence, 2),
+        plain_text=plain_text,
+        fields=doc_fields,
+        warnings=warnings,
+        metadata=metadata,
+        processing_time=_coerce_processing_time(
+            result.get("processing_time"), round(time.time() - start_time, 3)
+        ),
+        request_id=request_id,
+        s3_key=_coerce_str(result.get("s3_key"), "") or None,
+        analytics=analytics,
+    )
+
+
+@router.post("/ocr")
 @limiter.limit("10/minute")
 async def perform_ocr(
     request: Request,
-    file: UploadFile = File(...),
+    file: Annotated[UploadFile, File(...)],
+    _api_key: Annotated[str, Depends(get_api_key)],
+    request_id: Annotated[str, Depends(get_request_id)],
+    curr_settings: Annotated[Settings, Depends(get_settings)],
+    processor: Annotated[OCRProcessor, Depends(get_ocr_processor)],
     reconstruct: bool = False,
     advanced: bool = False,
     doc_type: str = "generic",
-    _api_key: str = Depends(get_api_key),
-    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
-    request_id: str = Depends(get_request_id),
-    curr_settings: Settings = Depends(get_settings),
-    processor: OCRProcessor = Depends(get_ocr_processor),
+    idempotency_key: Annotated[
+        Optional[str], Header(alias="Idempotency-Key")
+    ] = None,
 ) -> OCRResponse:
     """
     Primary OCR entry point.
@@ -81,10 +277,6 @@ async def perform_ocr(
         OCR_ERROR_COUNT.labels(phase=e.phase, error_type=type(e).__name__).inc()
         raise  # Re-raise the exception after logging
     except Exception:
-        from ocr_service.utils.tracing import (
-            get_current_trace_id,  # pylint: disable=import-outside-toplevel
-        )
-
         trace_id = get_current_trace_id()
         logger.exception(
             "Unexpected error handling OCR request | method=%s | RID=%s | TID=%s",
@@ -104,19 +296,21 @@ async def perform_ocr(
         OCR_REQUEST_COUNT.labels(method=request.method, status=status).inc()
 
 
-@router.post("/ocr/documents", response_model=DocumentResponse)
+@router.post("/ocr/documents")
 @limiter.limit("10/minute")
 async def perform_document_ocr(
     request: Request,
-    file: UploadFile = File(...),
+    file: Annotated[UploadFile, File(...)],
+    _api_key: Annotated[str, Depends(get_api_key)],
+    request_id: Annotated[str, Depends(get_request_id)],
+    curr_settings: Annotated[Settings, Depends(get_settings)],
+    processor: Annotated[OCRProcessor, Depends(get_ocr_processor)],
     reconstruct: bool = False,
     advanced: bool = False,
     doc_type: str = "generic",
-    _api_key: str = Depends(get_api_key),
-    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
-    request_id: str = Depends(get_request_id),
-    curr_settings: Settings = Depends(get_settings),
-    processor: OCRProcessor = Depends(get_ocr_processor),
+    idempotency_key: Annotated[
+        Optional[str], Header(alias="Idempotency-Key")
+    ] = None,
 ) -> DocumentResponse:
     """
     Personal document OCR endpoint.
@@ -175,128 +369,19 @@ async def perform_document_ocr(
             redis_client=redis_client,
         )
 
-        plain_text: str = result.get("text", "")
-        document_type: str = result.get("document_type", "generic_document")
-        default_type_confidence: float = 0.40
-        raw_type_confidence = result.get("type_confidence")
-        if raw_type_confidence is None:
-            type_confidence: float = default_type_confidence
-        else:
-            try:
-                type_confidence = float(raw_type_confidence)
-            except (TypeError, ValueError):
-                type_confidence = default_type_confidence
-
-        _low_confidence_threshold = 0.65
-        if (
-            doc_type != "generic"
-            and type_confidence < _low_confidence_threshold
-            and document_type in {"generic_document", "statement", "form"}
-        ):
-            document_type = doc_type
-            type_confidence = _low_confidence_threshold
-
-        # Extract structured fields
-        raw_fields, warnings = _doc_extractor.extract(plain_text, document_type)
-        doc_fields = [
-            DocumentField(
-                name=f.name,
-                value=f.value,
-                raw_ocr=f.raw_ocr,
-                confidence_level=f.confidence_level,
-            )
-            for f in raw_fields
-        ]
-
-        metadata = detect_metadata(plain_text)
-        metadata["ocr_method"] = result.get("method")
-
-        # --- Analytics -------------------------------------------------------
-        decision_readiness = compute_decision_readiness(
-            document_type, raw_fields, type_confidence
-        )
-
-        band = quality_band(type_confidence)
-        requires_review = band in ("fair", "poor") or not decision_readiness["ready"]
-
-        remediation_hints: list[str] = []
-        if band == "poor":
-            remediation_hints.append(
-                "Image quality is poor; consider re-scanning at higher resolution."
-            )
-        elif band == "fair":
-            remediation_hints.append(
-                "Image quality is fair; manual verification recommended."
-            )
-        for mf in decision_readiness.get("missing_mandatory", []):
-            remediation_hints.append(
-                f"Mandatory field '{mf}' could not be extracted; verify manually."
-            )
-
-        expected_count = len(MANDATORY_FIELDS.get(document_type, []))
-        # Total number of fields extracted (mandatory + optional)
-        extracted_count = len(doc_fields)
-        # Number of mandatory fields that are present
-        missing_mandatory = decision_readiness.get("missing_mandatory", []) or []
-        mandatory_present = max(0, expected_count - len(missing_mandatory))
-        if expected_count:
-            ratio = mandatory_present / expected_count
-            # Clamp ratio to [0, 1] to avoid over- or underflow due to inconsistencies
-            ratio = max(0.0, min(1.0, ratio))
-            completeness = round(ratio, 4)
-        else:
-            completeness = None
-
-        def _coerce_optional_float(value: object) -> Optional[float]:
-            if value is None:
-                return None
-            try:
-                return float(value)
-            except (TypeError, ValueError):
-                return None
-
-        analytics = DocumentAnalytics(
-            pixel_coverage_ratio=_coerce_optional_float(
-                result.get("pixel_coverage_ratio")
-            ),
-            readability_index=_coerce_optional_float(result.get("readability_index")),
-            decision_readiness=decision_readiness,
-            iteration_convergence=_coerce_optional_float(
-                result.get("iteration_convergence")
-            ),
-            pixel_rescue_applied=bool(result.get("pixel_rescue_applied", False)),
-            quality_band=band,
-            requires_manual_review=requires_review,
-            remediation_hints=remediation_hints,
-            field_completeness_ratio=completeness,
-            fields_extracted_count=extracted_count,
-            fields_expected_count=expected_count,
-        )
-        # --- End analytics ---------------------------------------------------
-
         status = "success"
-        return DocumentResponse(
-            filename=result.get("filename", file.filename or "unknown"),
-            document_type=document_type,
-            type_confidence=round(type_confidence, 2),
-            plain_text=plain_text,
-            fields=doc_fields,
-            warnings=warnings,
-            metadata=metadata,
-            processing_time=result.get("processing_time", round(time.time() - start_time, 3)),
+        return _build_document_response(
+            result=result,
+            file=file,
+            doc_type=doc_type,
             request_id=request_id,
-            s3_key=result.get("s3_key"),
-            analytics=analytics,
+            start_time=start_time,
         )
 
     except OCRPipelineError as e:
         OCR_ERROR_COUNT.labels(phase=e.phase, error_type=type(e).__name__).inc()
         raise
     except Exception:
-        from ocr_service.utils.tracing import (
-            get_current_trace_id,  # pylint: disable=import-outside-toplevel
-        )
-
         trace_id = get_current_trace_id()
         logger.exception(
             "Unexpected error in /ocr/documents | method=%s | RID=%s | TID=%s",

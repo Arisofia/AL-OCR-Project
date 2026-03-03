@@ -131,7 +131,11 @@ class ImageToolkit:
         """
         # OpenCV's `value` behaves differently for multi-channel images:
         # `value=[255]` only sets the first channel. Make the border white.
-        border_value = 255 if len(roi.shape) < 3 else [255] * roi.shape[2]
+        if len(roi.shape) < 3:
+            border_value = (255.0,)
+        else:
+            channels = int(roi.shape[2])
+            border_value = tuple([255.0] * max(1, channels))
         return cv2.copyMakeBorder(
             roi,
             padding,

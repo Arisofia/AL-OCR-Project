@@ -196,6 +196,84 @@ class DocumentProcessor:
             textract_text = await self.extract_text_textract(image_bytes)
             return textract_text or ""
 
+    @staticmethod
+    def _build_card_focus_views(focus_img: np.ndarray) -> list[np.ndarray]:
+        """Create full-frame and ROI views for numeric-focused card OCR."""
+        focus_views: list[np.ndarray] = [focus_img]
+        if len(focus_img.shape) < 2:
+            return focus_views
+
+        height = int(focus_img.shape[0])
+        for start, end in ((0.25, 0.70), (0.32, 0.78), (0.40, 0.88)):
+            y1 = max(0, min(height - 1, int(height * start)))
+            y2 = max(y1 + 1, min(height, int(height * end)))
+            roi = focus_img[y1:y2, :]
+            if roi.size > 0 and roi.shape[0] >= 20:
+                focus_views.append(roi)
+        return focus_views
+
+    def _digits_only_config(self, psm: int) -> str:
+        return (
+            f"--oem {self.ocr_config.oem} --psm {psm} -l eng "
+            "-c tessedit_char_whitelist=0123456789 "
+            "-c classify_bln_numeric_mode=1"
+        )
+
+    @staticmethod
+    def _compact_digit_score(compact_digits: str) -> tuple[int, int, int]:
+        compact_len = len(compact_digits)
+        return (
+            1 if compact_len >= 13 else 0,
+            -abs(16 - compact_len),
+            compact_len,
+        )
+
+    async def _run_compact_digit_pass(
+        self,
+        view: np.ndarray,
+        psm: int,
+    ) -> tuple[bool, str]:
+        """Run one digits-only OCR pass, returning (stop_psm_loop, compact_digits)."""
+        try:
+            candidate_raw = await asyncio.to_thread(
+                pytesseract.image_to_string,
+                view,
+                config=self._digits_only_config(psm),
+            )
+        except (
+            pytesseract.pytesseract.TesseractNotFoundError,
+            pytesseract.pytesseract.TesseractError,
+        ):
+            return True, ""
+        except Exception as e:
+            logger.debug(
+                "Digits-only card fallback pass failed (psm=%d): %s",
+                psm,
+                e,
+            )
+            return False, ""
+
+        compact = re.sub(r"\D", "", candidate_raw or "")
+        return (False, compact) if 8 <= len(compact) <= 19 else (False, "")
+
+    async def _collect_best_compact_digits(self, focus_views: list[np.ndarray]) -> str:
+        best_compact = ""
+        best_score = (-1, float("-inf"), -1)
+
+        for view in focus_views:
+            for psm in (7, 6, 11, 13):
+                stop_psm_loop, compact = await self._run_compact_digit_pass(view, psm)
+                if stop_psm_loop:
+                    break
+                if not compact:
+                    continue
+
+                score = self._compact_digit_score(compact)
+                if score > best_score:
+                    best_score = score
+                    best_compact = compact
+        return best_compact
+
     async def extract_text_card_digits_only(self, image_bytes: bytes) -> str:
         """
         Card-focused fallback that extracts only digit sequences from source bytes.
@@ -218,58 +296,8 @@ class DocumentProcessor:
             logger.warning("Digits-only card fallback preprocessing failed: %s", e)
             return ""
 
-        focus_views: list[np.ndarray] = [focus_img]
-        if len(focus_img.shape) >= 2:
-            height = int(focus_img.shape[0])
-            for start, end in ((0.25, 0.70), (0.32, 0.78), (0.40, 0.88)):
-                y1 = max(0, min(height - 1, int(height * start)))
-                y2 = max(y1 + 1, min(height, int(height * end)))
-                roi = focus_img[y1:y2, :]
-                if roi.size > 0 and roi.shape[0] >= 20:
-                    focus_views.append(roi)
-
-        best_compact = ""
-        best_score = (-1, float("-inf"), -1)
-        for view in focus_views:
-            for psm in (7, 6, 11, 13):
-                config = (
-                    f"--oem {self.ocr_config.oem} --psm {psm} -l eng "
-                    "-c tessedit_char_whitelist=0123456789 "
-                    "-c classify_bln_numeric_mode=1"
-                )
-                try:
-                    candidate_raw = await asyncio.to_thread(
-                        pytesseract.image_to_string,
-                        view,
-                        config=config,
-                    )
-                except (
-                    pytesseract.pytesseract.TesseractNotFoundError,
-                    pytesseract.pytesseract.TesseractError,
-                ):
-                    break
-                except Exception as e:
-                    logger.debug(
-                        "Digits-only card fallback pass failed (psm=%d): %s",
-                        psm,
-                        e,
-                    )
-                    continue
-
-                compact = re.sub(r"\D", "", candidate_raw or "")
-                compact_len = len(compact)
-                if compact_len < 8 or compact_len > 19:
-                    continue
-
-                score = (
-                    1 if compact_len >= 13 else 0,
-                    -abs(16 - compact_len),
-                    compact_len,
-                )
-                if score > best_score:
-                    best_score = score
-                    best_compact = compact
-
+        focus_views = self._build_card_focus_views(focus_img)
+        best_compact = await self._collect_best_compact_digits(focus_views)
         if not best_compact:
             return ""
         return " ".join(
@@ -444,9 +472,7 @@ class DocumentProcessor:
         if bottom <= top or right <= left:
             return None
         roi = focus_img[top:bottom, left:right]
-        if roi.size == 0:
-            return None
-        return roi
+        return None if roi.size == 0 else roi
 
     @staticmethod
     def _roi_ink_ratio(roi: np.ndarray) -> float:
@@ -478,17 +504,40 @@ class DocumentProcessor:
             "-c tessedit_char_whitelist=0123456789 "
             "-c classify_bln_numeric_mode=1"
         )
+        best_digit, best_conf = self._read_best_digit_from_data(roi, char_config)
+        if not best_digit:
+            best_digit, best_conf = self._fallback_single_digit(roi, char_config)
+        if not best_digit:
+            return ""
+
+        h, w = roi.shape[:2]
+        aspect_ratio = (w / float(h)) if h else 0.0
+        if self._should_reject_single_digit(
+            best_digit=best_digit,
+            best_conf=best_conf,
+            ink_ratio=ink_ratio,
+            aspect_ratio=aspect_ratio,
+        ):
+            return ""
+
+        return best_digit
+
+    @staticmethod
+    def _fallback_single_digit(roi: np.ndarray, char_config: str) -> tuple[str, float]:
+        candidate = pytesseract.image_to_string(roi, config=char_config)
+        digit = re.sub(r"\D", "", candidate)
+        return (digit, 40.0) if len(digit) == 1 else ("", -1.0)
+
+    @staticmethod
+    def _read_best_digit_from_data(roi: np.ndarray, char_config: str) -> tuple[str, float]:
         data = pytesseract.image_to_data(
             roi,
             config=char_config,
             output_type=pytesseract.Output.DICT,
         )
-
         best_digit = ""
         best_conf = -1.0
-        texts = data.get("text", [])
-        confs = data.get("conf", [])
-        for raw_text, raw_conf in zip(texts, confs):
+        for raw_text, raw_conf in zip(data.get("text", []), data.get("conf", [])):
             digit = re.sub(r"\D", "", raw_text or "")
             if len(digit) != 1:
                 continue
@@ -499,25 +548,19 @@ class DocumentProcessor:
             if conf > best_conf:
                 best_digit = digit
                 best_conf = conf
+        return best_digit, best_conf
 
-        if not best_digit:
-            candidate = pytesseract.image_to_string(roi, config=char_config)
-            digit = re.sub(r"\D", "", candidate)
-            if len(digit) != 1:
-                return ""
-            best_digit = digit
-            best_conf = 40.0
-
-        h, w = roi.shape[:2]
-        aspect_ratio = (w / float(h)) if h else 0.0
+    @staticmethod
+    def _should_reject_single_digit(
+        *,
+        best_digit: str,
+        best_conf: float,
+        ink_ratio: float,
+        aspect_ratio: float,
+    ) -> bool:
         if best_digit == "0":
-            # Conservative rule: uncertain or very thin "0" is usually gap/noise.
-            if best_conf < 65.0 or ink_ratio < 0.08 or aspect_ratio < 0.35:
-                return ""
-        elif best_conf < 45.0:
-            return ""
-
-        return best_digit
+            return best_conf < 65.0 or ink_ratio < 0.08 or aspect_ratio < 0.35
+        return best_conf < 45.0
 
     @staticmethod
     def _format_digits_like_base(digits: str, base_text: str) -> str:
@@ -575,8 +618,7 @@ class DocumentProcessor:
                 recovered.append(glyph)
                 continue
 
-            digit = self._read_single_digit(roi)
-            if digit:
+            if digit := self._read_single_digit(roi):
                 recovered.append(digit)
                 continue
 
@@ -619,38 +661,12 @@ class DocumentProcessor:
         base_digits = self._digit_count(base_text)
         best_text = base_text
         best_score = self._digit_candidate_score(base_text)
-
-        for psm in (7, 6, 11):
-            config = (
-                f"--oem {self.ocr_config.oem} --psm {psm} -l eng "
-                "-c tessedit_char_whitelist=0123456789 "
-                "-c classify_bln_numeric_mode=1"
-            )
-            try:
-                candidate_raw = await asyncio.to_thread(
-                    pytesseract.image_to_string, focus_img, config=config
-                )
-            except (
-                pytesseract.pytesseract.TesseractNotFoundError,
-                pytesseract.pytesseract.TesseractError,
-            ):
-                break
-            except Exception as e:
-                logger.debug("Digit rescue OCR pass failed (psm=%d): %s", psm, e)
-                continue
-
-            candidate = self._normalize_digit_candidate(candidate_raw)
-            if not candidate:
-                continue
-
-            candidate_digits = self._digit_count(candidate)
-            if candidate_digits < base_digits:
-                continue
-
-            score = self._digit_candidate_score(candidate)
-            if score > best_score:
-                best_text = candidate
-                best_score = score
+        best_text, best_score = await self._run_rescue_digit_passes(
+            focus_img=focus_img,
+            base_digits=base_digits,
+            initial_text=best_text,
+            initial_score=best_score,
+        )
 
         if best_text != base_text:
             logger.info(
@@ -682,6 +698,56 @@ class DocumentProcessor:
                     return boxed_candidate
         return best_text
 
+    async def _run_rescue_digit_passes(
+        self,
+        *,
+        focus_img: np.ndarray,
+        base_digits: int,
+        initial_text: str,
+        initial_score: tuple[int, int, int],
+    ) -> tuple[str, tuple[int, int, int]]:
+        best_text = initial_text
+        best_score = initial_score
+        for psm in (7, 6, 11):
+            candidate = await self._run_single_rescue_pass(focus_img, psm)
+            if not candidate:
+                if candidate is None:
+                    break
+                continue
+            if self._digit_count(candidate) < base_digits:
+                continue
+            score = self._digit_candidate_score(candidate)
+            if score > best_score:
+                best_text = candidate
+                best_score = score
+        return best_text, best_score
+
+    async def _run_single_rescue_pass(
+        self,
+        focus_img: np.ndarray,
+        psm: int,
+    ) -> Optional[str]:
+        config = (
+            f"--oem {self.ocr_config.oem} --psm {psm} -l eng "
+            "-c tessedit_char_whitelist=0123456789 "
+            "-c classify_bln_numeric_mode=1"
+        )
+        try:
+            candidate_raw = await asyncio.to_thread(
+                pytesseract.image_to_string,
+                focus_img,
+                config=config,
+            )
+        except (
+            pytesseract.pytesseract.TesseractNotFoundError,
+            pytesseract.pytesseract.TesseractError,
+        ):
+            return None
+        except Exception as e:
+            logger.debug("Digit rescue OCR pass failed (psm=%d): %s", psm, e)
+            return ""
+        return self._normalize_digit_candidate(candidate_raw)
+
     async def _rescue_ambiguous_digits_from_bytes(
         self, image_bytes: bytes, text: str
     ) -> str:
@@ -694,9 +760,7 @@ class DocumentProcessor:
         except Exception as e:
             logger.warning("Digit rescue decode failed: %s", e)
             return text
-        if img is None:
-            return text
-        return await self._rescue_ambiguous_digits(img, text)
+        return text if img is None else await self._rescue_ambiguous_digits(img, text)
 
     async def extract_text_textract(self, image_bytes: bytes) -> str:
         """
@@ -777,137 +841,11 @@ class DocumentProcessor:
             return ""
 
     async def _extract_text_textract_async(self, image_bytes: bytes) -> str:
-        """Asynchronous Textract for large/complex documents."""
-
-        def _start_async_detection() -> str:
-            client = boto3.client("textract")
-
-            # Start asynchronous document text detection
-            response = client.start_document_text_detection(
-                Document={"Bytes": image_bytes}
-            )
-            job_id = response["JobId"]
-            logger.info("Started Textract async job: %s", job_id)
-
-            # Poll for completion (with optimized timeout)
-            max_attempts = 60  # 5 minutes max with variable intervals
-            attempt = 0
-
-            while attempt < max_attempts:
-                attempt += 1
-
-                # Poll more frequently at first (every 5s for first 2 minutes),
-                # then every 10s.
-                if attempt <= 24:  # First 2 minutes
-                    time.sleep(5)
-                else:
-                    time.sleep(10)
-
-                status_response = client.get_document_text_detection(JobId=job_id)
-                status = status_response.get("JobStatus")
-
-                if status == "SUCCEEDED":
-                    # Collect all text from all pages
-                    all_text = []
-                    next_token = None
-
-                    while True:
-                        if next_token:
-                            result_response = client.get_document_text_detection(
-                                JobId=job_id, NextToken=next_token
-                            )
-                        else:
-                            result_response = status_response
-
-                        blocks = result_response.get("Blocks", [])
-                        page_text = []
-                        for block in blocks:
-                            if block.get("BlockType") == "LINE" and block.get("Text"):
-                                text = block.get("Text", "")
-                                if text and isinstance(text, str):
-                                    try:
-                                        sanitized = self.sanitize_text(text.strip())
-                                        if sanitized:
-                                            page_text.append(sanitized)
-                                            logger.debug(
-                                                "Async LINE block: '%s'",
-                                                sanitized,
-                                            )
-                                    except (
-                                        UnicodeDecodeError,
-                                        UnicodeEncodeError,
-                                    ) as e:
-                                        logger.warning(
-                                            "Skipping corrupted async text block: %s",
-                                            e,
-                                        )
-                                        continue
-                        all_text.extend(page_text)
-
-                        next_token = result_response.get("NextToken")
-                        if not next_token:
-                            break
-
-                    final_text = "\n".join(line for line in all_text if line).strip()
-                    # Final sanitization of the complete result
-                    final_text = self.sanitize_text(final_text)
-                    logger.info(
-                        "Async Textract completed: %d lines from %s "
-                        "(final length: %d)",
-                        len(all_text),
-                        job_id,
-                        len(final_text),
-                    )
-                    return final_text
-
-                if status == "FAILED":
-                    error_message = status_response.get(
-                        "StatusMessage",
-                        "Unknown error",
-                    )
-                    logger.error("Textract async job failed: %s", error_message)
-                    raise RuntimeError(f"Textract job failed: {error_message}")
-
-                if status in ["PARTIAL_SUCCESS", "IN_PROGRESS"]:
-                    logger.info(
-                        "Textract job %s: %s (attempt %d/%d)",
-                        job_id,
-                        status,
-                        attempt,
-                        max_attempts,
-                    )
-                    continue
-
-                logger.warning("Unexpected Textract status: %s", status)
-
-            raise RuntimeError(
-                f"Textract job timeout after {max_attempts * 10} seconds"
-            )
-
-        try:
-            text = await asyncio.to_thread(_start_async_detection)
-            if text:
-                logger.info(
-                    "Async Textract OCR succeeded - extracted %d characters, "
-                    "text preview: %s",
-                    len(text),
-                    text[:100],
-                )
-            else:
-                logger.warning("Async Textract OCR returned empty text")
-            return text
-        except (ClientError, BotoCoreError) as e:
-            logger.error("Async Textract OCR failed: %s", e)
-            OCR_ERROR_COUNT.labels(
-                phase="async_fallback_textract", error_type=type(e).__name__
-            ).inc()
-            return ""
-        except Exception as e:
-            logger.exception("Unexpected async Textract OCR failure")
-            OCR_ERROR_COUNT.labels(
-                phase="async_fallback_textract", error_type=type(e).__name__
-            ).inc()
-            return ""
+        """Byte-input fallback: async Textract requires S3 DocumentLocation."""
+        logger.info(
+            "Async Textract requires S3 DocumentLocation; falling back to sync"
+        )
+        return await self._extract_text_textract_sync(image_bytes)
 
     async def run_reconstruction(self, ctx: DocumentContext, max_iterations: int):
         """Executes reconstruction preprocessor if enabled."""
@@ -1110,9 +1048,7 @@ class DocumentProcessor:
         (1-3 digits), common in cropped card snapshots.
         """
         groups = re.findall(r"\d+", text or "")
-        if not groups:
-            return False
-        return len(groups[-1]) in {1, 2, 3}
+        return bool(groups) and len(groups[-1]) in {1, 2, 3}
 
     def _score_card_text(
         self, text: str
@@ -1121,7 +1057,7 @@ class DocumentProcessor:
         analysis = DocumentIntelligence.analyze(text)
         card_analysis = analysis.get("card_analysis", {}) if analysis else {}
         candidates = card_analysis.get("candidates", [])
-        plausible_count = sum(1 for row in candidates if row.get("length", 0) >= 13)
+        plausible_count = sum(row.get("length", 0) >= 13 for row in candidates)
         max_len = max((row.get("length", 0) for row in candidates), default=0)
         valid_count = card_analysis.get("luhn_valid_count", 0)
         truncated_bonus = (
@@ -1168,10 +1104,9 @@ class DocumentProcessor:
         if card_analysis.get("luhn_valid_count", 0) > 0:
             return False
 
-        candidates = card_analysis.get("candidates", [])
-        if not candidates:
+        if not (candidates := card_analysis.get("candidates", [])):
             return False
-        return not any(row.get("length", 0) >= 13 for row in candidates)
+        return all(row.get("length", 0) < 13 for row in candidates)
 
     def _trim_spurious_trailing_zero_variant(self, text: str) -> str:
         """
@@ -1377,6 +1312,83 @@ class DocumentProcessor:
         )
         return selected
 
+    async def _extract_text_card_timeout_fallback(
+        self,
+        img: np.ndarray,
+        original_bytes: Optional[bytes],
+    ) -> str:
+        """Fallback path when card-mode OCR times out."""
+        timeout_candidates: list[tuple[str, str]] = []
+        if original_bytes:
+            digits_only_text = await self.extract_text_card_digits_only(original_bytes)
+            if digits_only_text := self.sanitize_text(digits_only_text):
+                timeout_candidates.append(
+                    ("card-timeout-digits-only", digits_only_text)
+                )
+
+        fast_text = await asyncio.to_thread(
+            pytesseract.image_to_string,
+            img,
+            config=self.ocr_config.flags,
+        )
+        if fast_text := self.sanitize_text(fast_text):
+            fast_text = await self._rescue_ambiguous_digits(img, fast_text)
+            timeout_candidates.append(("card-timeout-fast", fast_text))
+
+        if not timeout_candidates:
+            return ""
+        _, selected = self._select_best_card_candidate(timeout_candidates)
+        return selected
+
+    async def _extract_text_full_page(
+        self,
+        img: np.ndarray,
+        original_bytes: Optional[bytes],
+    ) -> str:
+        """Extract OCR text from full page with card-aware strategy."""
+        logger.info("Starting Tesseract OCR on full page (shape: %s)", img.shape)
+
+        if self._is_card_doc_type():
+            timeout_seconds = max(
+                1.0,
+                self.engine_config.card_ocr_timeout_seconds,
+            )
+            try:
+                text = await asyncio.wait_for(
+                    self._extract_text_card_mode(img),
+                    timeout=timeout_seconds,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "Card OCR timed out after %.1fs, using fast fallback pass",
+                    self.engine_config.card_ocr_timeout_seconds,
+                )
+                text = await self._extract_text_card_timeout_fallback(
+                    img,
+                    original_bytes,
+                )
+            return text
+
+        text = await asyncio.to_thread(
+            pytesseract.image_to_string,
+            img,
+            config=self.ocr_config.flags,
+        )
+        text = self.sanitize_text(text)
+        return await self._rescue_ambiguous_digits(img, text)
+
+    async def _extract_text_textract_fallback(
+        self,
+        img: np.ndarray,
+        original_bytes: Optional[bytes],
+    ) -> str:
+        """Fallback to Textract when local Tesseract is unavailable."""
+        if original_bytes:
+            return await self.extract_text_textract(original_bytes)
+
+        ok, encoded = cv2.imencode(".png", img)  # pylint: disable=no-member
+        return await self.extract_text_textract(encoded.tobytes()) if ok else ""
+
     async def extract_text(
         self,
         img: np.ndarray,
@@ -1392,39 +1404,7 @@ class DocumentProcessor:
                 logger.info("Extracting text from %d regions", len(regions))
                 text = await self._extract_from_regions(img, regions)
             else:
-                logger.info(
-                    "Starting Tesseract OCR on full page (shape: %s)",
-                    img.shape,
-                )
-                if self._is_card_doc_type():
-                    try:
-                        text = await asyncio.wait_for(
-                            self._extract_text_card_mode(img),
-                            timeout=max(
-                                1.0,
-                                self.engine_config.card_ocr_timeout_seconds,
-                            ),
-                        )
-                    except asyncio.TimeoutError:
-                        logger.warning(
-                            "Card OCR timed out after %.1fs, using fast fallback pass",
-                            self.engine_config.card_ocr_timeout_seconds,
-                        )
-                        text = await asyncio.to_thread(
-                            pytesseract.image_to_string,
-                            img,
-                            config=self.ocr_config.flags,
-                        )
-                        text = self.sanitize_text(text)
-                else:
-                    text = await asyncio.to_thread(
-                        pytesseract.image_to_string,
-                        img,
-                        config=self.ocr_config.flags,
-                    )
-                    # Sanitize Tesseract output
-                    text = self.sanitize_text(text)
-                    text = await self._rescue_ambiguous_digits(img, text)
+                text = await self._extract_text_full_page(img, original_bytes)
                 logger.info("Tesseract completed - extracted %d characters", len(text))
             status = "success"
             return text
@@ -1448,14 +1428,7 @@ class DocumentProcessor:
                 error_type=type(e).__name__,
             ).inc()
             try:
-                if original_bytes:
-                    return await self.extract_text_textract(original_bytes)
-                # Fallback: encode processed image when original bytes are not
-                # available.
-                ok, encoded = cv2.imencode(".png", img)  # pylint: disable=no-member
-                if not ok:
-                    return ""
-                return await self.extract_text_textract(encoded.tobytes())
+                return await self._extract_text_textract_fallback(img, original_bytes)
             except Exception:
                 logger.exception(
                     "Textract fallback failed after missing tesseract binary"
@@ -1563,10 +1536,9 @@ class IterativeOCREngine:
         start_time = time.time()
         status = "failure"
         try:
-            validation_error = ImageToolkit.validate_image(
+            if validation_error := ImageToolkit.validate_image(
                 image_bytes, self.config.max_image_size_mb
-            )
-            if validation_error:
+            ):
                 return {"error": validation_error}
 
             ctx = DocumentContext(
@@ -1631,6 +1603,15 @@ class IterativeOCREngine:
             for i in range(iterations):
                 OCR_ITERATION_COUNT.inc()
                 await self._run_iteration(ctx, i)
+                if self.processor.is_card_doc_type():
+                    card_score = self.processor.score_card_text(ctx.best_text)
+                    if card_score[0] > 0 or card_score[4] >= 13:
+                        logger.info(
+                            "Card OCR early stop at iteration %d with score=%s",
+                            i + 1,
+                            card_score,
+                        )
+                        break
 
             await self._maybe_apply_quality_fallbacks(ctx)
 
@@ -1653,10 +1634,9 @@ class IterativeOCREngine:
         start_time = time.time()
         status = "failure"
         try:
-            validation_error = ImageToolkit.validate_image(
+            if validation_error := ImageToolkit.validate_image(
                 image_bytes, self.config.max_image_size_mb
-            )
-            if validation_error:
+            ):
                 return {"error": validation_error}
 
             ctx = DocumentContext(
@@ -1893,14 +1873,12 @@ class IterativeOCREngine:
             digit_text = await self.processor.extract_text_card_digits_only(
                 ctx.image_bytes
             )
-            digit_text = self.processor.sanitize_text(digit_text)
-            if digit_text:
+            if digit_text := self.processor.sanitize_text(digit_text):
                 candidates.append(("digits-only-quality-fallback", digit_text))
 
         if not is_card_mode:
             textract_text = await self.processor.extract_text_textract(ctx.image_bytes)
-            textract_text = self.processor.sanitize_text(textract_text)
-            if textract_text:
+            if textract_text := self.processor.sanitize_text(textract_text):
                 candidates.append(("textract-quality-fallback", textract_text))
 
         direct_text = await self.processor.extract_text_direct(ctx.image_bytes)
@@ -1959,12 +1937,19 @@ class IterativeOCREngine:
         """Decide whether fallback candidate should replace current best output."""
         better_confidence = selected_conf > (best_confidence + 0.02)
         better_coverage = (
-            len(selected_text) > len(best_text) * 1.5
+            not is_card_mode
+            and len(selected_text) > len(best_text) * 1.5
             and selected_conf >= best_confidence
         )
         selected_digits = self.processor.digit_count(selected_text)
         base_digits = self.processor.digit_count(best_text)
         digit_gain = selected_digits > base_digits
+        better_card_score = False
+        if is_card_mode:
+            better_card_score = (
+                self.processor.score_card_text(selected_text)
+                > self.processor.score_card_text(best_text)
+            )
         partial_card_recovery = (
             is_card_mode and selected_digits >= 8 and base_digits < 8
         )
@@ -1975,6 +1960,7 @@ class IterativeOCREngine:
             better_confidence
             or better_coverage
             or digit_gain
+            or better_card_score
             or partial_card_recovery
             or ambiguity_resolved
         )
@@ -2012,6 +1998,10 @@ class IterativeOCREngine:
         best_text, low_confidence, too_short, ambiguous_digits = (
             self._quality_fallback_state(ctx)
         )
+        if self.processor.is_card_doc_type():
+            card_score = self.processor.score_card_text(best_text)
+            if card_score[0] > 0 or card_score[4] >= 13:
+                return
         if not (low_confidence or too_short or ambiguous_digits):
             return
 

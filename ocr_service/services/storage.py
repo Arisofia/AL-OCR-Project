@@ -18,6 +18,8 @@ from tenacity import (
     wait_exponential,
 )
 
+from ocr_service.config import get_settings
+
 logger = logging.getLogger("ocr-service.storage")
 
 
@@ -45,8 +47,6 @@ class StorageService:
         Initializes the StorageService with S3 client and configuration.
         """
         if not settings:
-            from ocr_service.config import get_settings
-
             settings = get_settings()
 
         self.bucket_name = bucket_name or getattr(settings, "s3_bucket_name", None)
@@ -100,7 +100,7 @@ class StorageService:
                 "S3 connectivity check failed for bucket %s: %s", self.bucket_name, e
             )
             self._last_check_result = False
-        except Exception as e:
+        except BotoCoreError as e:
             logger.warning("Unexpected error during S3 connectivity check: %s", e)
             self._last_check_result = False
 
@@ -169,9 +169,7 @@ class StorageService:
         Serializes data to JSON and uploads it to S3.
         """
         s3_key = f"{prefix}/{uuid.uuid4()}-{filename}.json"
-        if self.save_json(data, s3_key):
-            return s3_key
-        return None
+        return s3_key if self.save_json(data, s3_key) else None
 
     def save_json(self, data: Any, key: str) -> bool:
         """
@@ -188,7 +186,8 @@ class StorageService:
         """
         Put an object into S3 with tenacity retry logic for transient errors.
         """
-        if not self.s3_client or not self.bucket_name:
+        bucket_name = self.bucket_name
+        if not self.s3_client or not bucket_name:
             logger.debug("No s3 client or bucket configured; put_object skipped")
             return False
 
@@ -205,11 +204,11 @@ class StorageService:
                     raise RuntimeError("S3 client is not initialized")
                 logger.debug(
                     "Attempting to put object to S3: bucket=%s, key=%s",
-                    self.bucket_name,
+                    bucket_name,
                     key,
                 )
                 self.s3_client.put_object(
-                    Bucket=self.bucket_name,
+                    Bucket=bucket_name,
                     Key=key,
                     Body=body,
                     ContentType=content_type,

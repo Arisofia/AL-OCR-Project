@@ -12,11 +12,15 @@ def decode_image(data: Union[str, bytes]) -> Optional[bytes]:
     if isinstance(data, bytes):
         return data
 
+    if not isinstance(data, str):
+        return None
+
     try:
+        data_str: str = data
         # Check if it's a data URL
-        if data.startswith("data:image"):
-            data = data.split(",")[1]
-        return base64.b64decode(data)
+        if data_str.startswith("data:image"):
+            data_str = data_str.split(",", 1)[1]
+        return base64.b64decode(data_str)
     except (OSError, ValueError) as e:
         logger.error("Failed to decode image data: %s", e)
         return None

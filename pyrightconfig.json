@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/pyright/main/packages/pyright/schema/pyrightconfig.schema.json",
+  "include": [
+    "ocr_service"
+  ],
+  "exclude": [
+    "**/.*",
+    ".venv",
+    "**/__pycache__",
+    "ocr_service/tests",
+    "frontend",
+    "node_modules"
+  ],
+  "venvPath": ".",
+  "venv": ".venv",
+  "typeCheckingMode": "basic"
+}

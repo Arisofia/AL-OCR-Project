@@ -17,9 +17,11 @@ class OCRModel(Protocol):
 
     def get_embeddings(self, data: np.ndarray) -> np.ndarray:
         """Return embeddings for the given data."""
+        raise NotImplementedError
 
     def predict_proba(self, data: np.ndarray) -> np.ndarray:
         """Return probability predictions for the given data."""
+        raise NotImplementedError
 
 
 class QueryStrategy:
@@ -28,6 +30,7 @@ class QueryStrategy:
     def select_indices(
         self, model: OCRModel, unlabeled_data: np.ndarray, n_samples: int
     ) -> list[int]:
+        """Return indices selected for labeling from unlabeled data."""
         raise NotImplementedError
 
 
@@ -68,7 +71,7 @@ class HybridSampling(QueryStrategy):
         # Select samples from each cluster to ensure coverage
         for i in range(actual_n_clusters):
             # Get indices belonging to this cluster
-            cluster_indices = np.where(cluster_labels == i)[0]
+            cluster_indices = np.nonzero(cluster_labels == i)[0]
 
             if len(cluster_indices) == 0:
                 continue
@@ -90,7 +93,7 @@ class HybridSampling(QueryStrategy):
             needed = n_samples - len(selected_indices)
             remaining_mask = np.ones(len(uncertainty), dtype=bool)
             remaining_mask[selected_indices] = False
-            remaining_indices = np.where(remaining_mask)[0]
+            remaining_indices = np.nonzero(remaining_mask)[0]
 
             if len(remaining_indices) > 0:
                 extra_needed = min(needed, len(remaining_indices))

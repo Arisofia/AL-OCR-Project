@@ -2,12 +2,22 @@
 Entry point for ocr-service modules.
 """
 
+from typing import Any
+
 from .advanced_recon import AdvancedPixelReconstructor
 from .ocr_engine import IterativeOCREngine
 
+ImageEnhancer: Any
+PixelReconstructor: Any
+
 try:
-    from ocr_reconstruct.modules.enhance import ImageEnhancer
-    from ocr_reconstruct.modules.reconstruct import PixelReconstructor
+    from ocr_reconstruct.modules.enhance import ImageEnhancer as _ImageEnhancer
+    from ocr_reconstruct.modules.reconstruct import (
+        PixelReconstructor as _PixelReconstructor,
+    )
+
+    ImageEnhancer = _ImageEnhancer
+    PixelReconstructor = _PixelReconstructor
 except ImportError:
     # Provide lightweight fallbacks so the ocr-service can run
     # without the optional ocr_reconstruct package.
@@ -15,7 +25,7 @@ except ImportError:
     import cv2
     import numpy as _np
 
-    class ImageEnhancer:  # type: ignore[no-redef]
+    class _FallbackImageEnhancer:
         """Minimal ImageEnhancer fallback used for tests and lightweight deployments."""
 
         def sharpen(self, img: _np.ndarray) -> _np.ndarray:
@@ -32,12 +42,15 @@ except ImportError:
             _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY)
             return thresh
 
-    class PixelReconstructor:  # type: ignore[no-redef]
+    class _FallbackPixelReconstructor:
         """Very small stub of PixelReconstructor to satisfy imports in tests."""
 
         def reconstruct(self, img: _np.ndarray) -> _np.ndarray:
             """Passthrough reconstruction stub."""
             return img
+
+    ImageEnhancer = _FallbackImageEnhancer
+    PixelReconstructor = _FallbackPixelReconstructor
 
 
 from .learning_engine import LearningEngine

@@ -16,6 +16,8 @@ from tenacity import (  # type: ignore
     wait_exponential,
 )
 
+from ocr_service.config import get_settings
+
 if TYPE_CHECKING:
     from mypy_boto3_textract import TextractClient
 else:
@@ -38,8 +40,6 @@ class TextractService:
 
     def __init__(self, settings: Optional[Any] = None):
         if not settings:
-            from ocr_service.config import get_settings
-
             settings = get_settings()
 
         self.max_retries = getattr(settings, "aws_max_retries", 3)
@@ -63,7 +63,8 @@ class TextractService:
                 reraise=True,
             )
             def _do_start() -> Optional[str]:
-                resp = self.client.start_document_text_detection(
+                client_any = cast(Any, self.client)
+                resp = client_any.start_document_text_detection(
                     DocumentLocation={"S3Object": {"Bucket": bucket, "Name": key}}
                 )
                 return cast(Optional[str], resp.get("JobId"))
@@ -91,9 +92,10 @@ class TextractService:
                 reraise=True,
             )
             def _do_analyze() -> dict[str, Any]:
+                client_any = cast(Any, self.client)
                 return cast(
                     dict[str, Any],
-                    self.client.analyze_document(
+                    client_any.analyze_document(
                         Document={"S3Object": {"Bucket": bucket, "Name": key}},
                         FeatureTypes=features,
                     ),
@@ -109,7 +111,11 @@ class TextractService:
         attempt = 0
         while attempt < self.MAX_POLL_ATTEMPTS:
             try:
-                resp = self.client.get_document_text_detection(JobId=job_id)
+                client_any = cast(Any, self.client)
+                resp = cast(
+                    dict[str, Any],
+                    client_any.get_document_text_detection(JobId=job_id),
+                )
                 status = resp.get("JobStatus")
                 if status == "SUCCEEDED":
                     return self._collect_all_pages(job_id, resp)
@@ -138,7 +144,8 @@ class TextractService:
         if not next_token:
             return first_response
 
-        paginator = self.client.get_paginator("get_document_text_detection")
+        client_any = cast(Any, self.client)
+        paginator = client_any.get_paginator("get_document_text_detection")
         page_iterator = paginator.paginate(
             JobId=job_id, PaginationConfig={"StartingToken": next_token}
         )

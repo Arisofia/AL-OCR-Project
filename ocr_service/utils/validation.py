@@ -4,9 +4,14 @@ Uses Great Expectations to validate data integrity before training or labeling.
 """
 
 import logging
+from importlib import import_module
 
-import great_expectations as gx
 import pandas as pd
+
+try:
+    GX_MODULE = import_module("great_expectations")
+except ImportError:
+    GX_MODULE = None  # type: ignore[assignment]
 
 logger = logging.getLogger("ocr-service.validation")
 
@@ -17,7 +22,11 @@ def validate_ocr_batch(df: pd.DataFrame) -> bool:
     Schema: [image_path, ocr_text, confidence, user_label]
     """
     try:
-        context = gx.get_context()
+        if GX_MODULE is None:
+            logger.warning("great_expectations is not installed; validation skipped")
+            return False
+
+        context = GX_MODULE.get_context()
 
         # Define Validator
         validator = context.sources.pandas_default.read_dataframe(df)  # type: ignore
@@ -49,6 +58,6 @@ def validate_ocr_batch(df: pd.DataFrame) -> bool:
 
         logger.info("Data Validation PASSED.")
         return True
-    except Exception as e:
+    except (AttributeError, TypeError, ValueError, KeyError) as e:
         logger.exception("Critical error during data validation: %s", e)
         return False

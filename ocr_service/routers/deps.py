@@ -1,3 +1,5 @@
+"""Dependency providers for OCR API routes."""
+
 from typing import Optional
 
 import redis.asyncio as redis
@@ -17,13 +19,13 @@ api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
 dataset_key_header = APIKeyHeader(name="X-DATASET-KEY", auto_error=False)
 
 
-async def get_api_key(
+def get_api_key(
     header_value: Optional[str] = Security(api_key_header),
     curr_settings: Settings = Depends(get_settings),
 ) -> str:
     """Enforces API Key authentication for protected resources."""
     # Ensure api_key_header name matches settings if dynamic name is needed
-    if header_value == curr_settings.ocr_api_key:
+    if header_value is not None and header_value == curr_settings.ocr_api_key:
         return header_value
     raise HTTPException(
         status_code=403, detail="Unauthorized: Invalid or missing API Key"
@@ -35,7 +37,7 @@ def get_request_id(request: Request) -> str:
     return get_request_id_from_scope(request.scope)
 
 
-async def get_dataset_upload_key(
+def get_dataset_upload_key(
     header_value: Optional[str] = Security(dataset_key_header),
     curr_settings: Settings = Depends(get_settings),
 ) -> str:
@@ -43,7 +45,7 @@ async def get_dataset_upload_key(
     expected = (curr_settings.dataset_upload_key or "").strip()
     if not expected:
         raise HTTPException(status_code=503, detail="Dataset uploads are disabled")
-    if header_value == expected:
+    if header_value is not None and header_value == expected:
         return header_value
     raise HTTPException(
         status_code=403, detail="Unauthorized: Invalid or missing Dataset key"
