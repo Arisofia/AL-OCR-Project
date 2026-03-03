@@ -5,7 +5,7 @@ Refactored into modular components for better maintainability and performance.
 
 # This engine intentionally catches broad exceptions at API and provider boundaries
 # to preserve fallback behavior and service availability.
-# pylint: disable=broad-exception-caught
+# pylint: disable=broad-exception-caught,too-many-lines
 
 import asyncio
 import logging
@@ -122,6 +122,10 @@ class DocumentProcessor:
             "debit_card",
         }
 
+    def is_card_doc_type(self) -> bool:
+        """Public wrapper for card-mode checks used by the orchestration layer."""
+        return self._is_card_doc_type()
+
     async def decode_and_validate(self, ctx: DocumentContext) -> bool:
         """Decodes image and performs initial validation."""
         try:
@@ -177,9 +181,7 @@ class DocumentProcessor:
                 phase="direct_fallback_tesseract", error_type=type(e).__name__
             ).inc()
             textract_text = await self.extract_text_textract(image_bytes)
-            if textract_text:
-                return textract_text
-            return ""
+            return textract_text if textract_text else ""
         except UnidentifiedImageError as e:
             logger.error("Direct fallback could not open image bytes: %s", e)
             OCR_ERROR_COUNT.labels(
@@ -256,7 +258,7 @@ class DocumentProcessor:
 
             # Limit reasonable text length (prevent memory issues)
             if len(sanitized) > 10000:
-                sanitized = sanitized[:10000] + "..."
+                sanitized = f"{sanitized[:10000]}..."
 
             return sanitized
 
@@ -268,6 +270,10 @@ class DocumentProcessor:
     def _digit_count(text: str) -> int:
         """Count numeric characters in a text string."""
         return sum(char.isdigit() for char in text)
+
+    def digit_count(self, text: str) -> int:
+        """Public wrapper for digit counting utility."""
+        return self._digit_count(text)
 
     def _needs_digit_rescue(self, text: str) -> bool:
         """
@@ -283,10 +289,11 @@ class DocumentProcessor:
             return False
 
         has_ambiguous = any(char.isalpha() or char in "!|" for char in compact)
-        if not has_ambiguous:
-            return False
+        return has_ambiguous and (digits / len(compact)) >= 0.65
 
-        return (digits / len(compact)) >= 0.65
+    def needs_digit_rescue(self, text: str) -> bool:
+        """Public wrapper for ambiguous digit rescue checks."""
+        return self._needs_digit_rescue(text)
 
     def _prepare_digit_focus_image(self, img: np.ndarray) -> np.ndarray:
         """Generate a high-contrast frame optimized for digit OCR retries."""
@@ -886,12 +893,60 @@ class DocumentProcessor:
         cleaned[skin_mask > 0] = (255, 255, 255)
         return cleaned
 
+    def _remove_colored_stroke(self, img: np.ndarray) -> np.ndarray:
+        """
+        Detect colored marker/pen strokes (green, yellow, blue, red) and use
+        TELEA inpainting to reconstruct underlying pixels from surrounding
+        context rather than simply blanking with background color.
+        Operates only when the stroke covers 0.5%-60% of the image area.
+        """
+        if len(img.shape) != 3:
+            return img
+
+        hsv = cast(
+            np.ndarray,
+            cv2.cvtColor(img, cv2.COLOR_BGR2HSV),  # pylint: disable=no-member
+        )
+
+        green_lo, green_hi = np.array([35, 80, 60]), np.array([85, 255, 255])
+        yellow_lo, yellow_hi = np.array([18, 120, 100]), np.array([35, 255, 255])
+        blue_lo, blue_hi = np.array([95, 80, 60]), np.array([135, 255, 255])
+        red_lo1, red_hi1 = np.array([0, 100, 80]), np.array([12, 255, 255])
+        red_lo2, red_hi2 = np.array([158, 100, 80]), np.array([180, 255, 255])
+
+        combined = np.zeros(img.shape[:2], dtype=np.uint8)
+        for lo, hi in (
+            (green_lo, green_hi),
+            (yellow_lo, yellow_hi),
+            (blue_lo, blue_hi),
+            (red_lo1, red_hi1),
+            (red_lo2, red_hi2),
+        ):
+            combined = cv2.bitwise_or(  # pylint: disable=no-member
+                combined,
+                cv2.inRange(hsv, lo, hi),  # pylint: disable=no-member
+            )
+
+        ratio = float(np.count_nonzero(combined)) / float(combined.size or 1)
+        if ratio < 0.005 or ratio > 0.60:
+            return img
+
+        kernel = np.ones((3, 3), np.uint8)
+        combined = cv2.dilate(  # pylint: disable=no-member
+            combined, kernel, iterations=1
+        )
+        return cast(
+            np.ndarray,
+            cv2.inpaint(img, combined, 7, cv2.INPAINT_TELEA),  # pylint: disable=no-member
+        )
+
     def preprocess_frame(
         self, img: np.ndarray, iteration: int, use_recon: bool
     ) -> np.ndarray:
         """Applies iterative preprocessing with a pixel-rescue pass."""
         working = img
         if self._is_card_doc_type():
+            working = self._remove_colored_stroke(working)
             working = self._remove_skin_occlusion(working)
 
         if use_recon and iteration == 0 and self.reconstructor:
@@ -1058,6 +1113,10 @@ class DocumentProcessor:
         if not self._has_suspicious_partial_zero_tail(cleaned):
             return cleaned
         return re.sub(r"0$", "?", cleaned)
+
+    def mark_uncertain_partial_card_tail(self, text: str) -> str:
+        """Public wrapper to normalize uncertain trailing partial PAN glyphs."""
+        return self._mark_uncertain_partial_card_tail(text)
 
     async def _extract_text_card_mode(self, img: np.ndarray) -> str:
         """
@@ -1385,7 +1444,7 @@ class IterativeOCREngine:
                     await self.processor.extract_text_direct(image_bytes)
                 ).strip()
                 if fallback_text:
-                    fallback_text = self.processor._mark_uncertain_partial_card_tail(
+                    fallback_text = self.processor.mark_uncertain_partial_card_tail(
                         self.processor.sanitize_text(fallback_text)
                     )
                     fallback_confidence = self.confidence_scorer.calculate(
@@ -1423,7 +1482,7 @@ class IterativeOCREngine:
             # Iteration loop. Card mode has a tighter budget to reduce
             # serverless timeout risk on low-CPU runtimes.
             iterations = self.config.max_iterations
-            if self.processor._is_card_doc_type():
+            if self.processor.is_card_doc_type():
                 iterations = min(
                     iterations,
                     max(1, int(self.config.max_iterations_card)),
@@ -1490,7 +1549,7 @@ class IterativeOCREngine:
                     doc_type=ctx.doc_type,
                 )
 
-            extracted_text = self.processor._mark_uncertain_partial_card_tail(
+            extracted_text = self.processor.mark_uncertain_partial_card_tail(
                 self.processor.sanitize_text(ai_result.get("text", ""))
             )
 
@@ -1554,7 +1613,7 @@ class IterativeOCREngine:
 
             self.processor.set_active_doc_type(ctx.doc_type)
 
-            if self.processor._is_card_doc_type():
+            if self.processor.is_card_doc_type():
                 ocr_input = ctx.current_img
             else:
                 ocr_input = self.processor.preprocess_frame(
@@ -1615,12 +1674,28 @@ class IterativeOCREngine:
         if not providers:
             return ""
 
-        strict_rules = (
-            "Return only text that is visibly present in the image. "
-            "Do not infer, complete, or guess occluded characters. "
-            "For card-like numbers, if a character is uncertain, output '?'. "
-            "Never generate missing PAN digits or check digits."
-        )
+        is_card_empty = self.processor.is_card_doc_type() and len(
+            (ctx.best_text or "").strip()
+        ) < 4
+        if is_card_empty:
+            strict_rules = (
+                "This is a payment card image with a colored stroke partially covering "
+                "the card number. Examine the pixel remnants and partial digit shapes "
+                "visible at the edges of and underneath the colored overlay. "
+                "Extract every digit or partial digit you can infer from visible "
+                "pixels. "
+                "For each digit position you cannot determine from visible pixels, "
+                "output '?'. Never fabricate digits with no pixel evidence. "
+                "Report the card number in groups of 4 (e.g. 4388 54?? ???? 0665). "
+                "Also extract expiry date and cardholder name if visible."
+            )
+        else:
+            strict_rules = (
+                "Return only text that is visibly present in the image. "
+                "Do not infer, complete, or guess occluded characters. "
+                "For card-like numbers, if a character is uncertain, output '?'. "
+                "Never generate missing PAN digits or check digits."
+            )
         context = {
             "layout_type": ctx.layout_type,
             "doc_type": ctx.doc_type,
@@ -1644,7 +1719,7 @@ class IterativeOCREngine:
             return ""
 
         text = self.processor.sanitize_text(ai_result.get("text", ""))
-        return self.processor._mark_uncertain_partial_card_tail(text)
+        return self.processor.mark_uncertain_partial_card_tail(text)
 
     async def _maybe_apply_quality_fallbacks(self, ctx: DocumentContext) -> None:
         """
@@ -1655,7 +1730,7 @@ class IterativeOCREngine:
         best_text = (ctx.best_text or "").strip()
         low_confidence = ctx.best_confidence < self.config.confidence_threshold
         too_short = len(best_text) < 12
-        ambiguous_digits = self.processor._needs_digit_rescue(best_text)
+        ambiguous_digits = self.processor.needs_digit_rescue(best_text)
         if not (low_confidence or too_short or ambiguous_digits):
             return
 
@@ -1667,7 +1742,7 @@ class IterativeOCREngine:
             ambiguous_digits,
         )
         candidates: list[tuple[str, str]] = []
-        is_card_mode = self.processor._is_card_doc_type()
+        is_card_mode = self.processor.is_card_doc_type()
 
         if not is_card_mode:
             textract_text = await self.processor.extract_text_textract(ctx.image_bytes)
@@ -1704,11 +1779,11 @@ class IterativeOCREngine:
             len(selected_text) > len(best_text) * 1.5
             and selected_conf >= ctx.best_confidence
         )
-        selected_digits = self.processor._digit_count(selected_text)
-        base_digits = self.processor._digit_count(best_text)
+        selected_digits = self.processor.digit_count(selected_text)
+        base_digits = self.processor.digit_count(best_text)
         digit_gain = selected_digits > base_digits
         ambiguity_resolved = (
-            ambiguous_digits and not self.processor._needs_digit_rescue(selected_text)
+            ambiguous_digits and not self.processor.needs_digit_rescue(selected_text)
         )
         if not (
             better_confidence
@@ -1803,7 +1878,7 @@ class IterativeOCREngine:
         """Formats the final engine output."""
         # Final sanitization of the best text before response
         final_text = self.processor.sanitize_text(ctx.best_text)
-        final_text = self.processor._mark_uncertain_partial_card_tail(final_text)
+        final_text = self.processor.mark_uncertain_partial_card_tail(final_text)
         analysis = DocumentIntelligence.analyze(
             final_text,
             layout_type=ctx.layout_type,

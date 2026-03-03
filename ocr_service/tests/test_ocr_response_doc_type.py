@@ -8,7 +8,7 @@ class _FakeProcessor:
     def sanitize_text(self, text: str) -> str:
         return text
 
-    def _mark_uncertain_partial_card_tail(self, text: str) -> str:
+    def mark_uncertain_partial_card_tail(self, text: str) -> str:
         return text
 
 
