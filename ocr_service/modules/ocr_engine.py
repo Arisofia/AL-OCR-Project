@@ -1812,9 +1812,9 @@ class IterativeOCREngine:
         if not providers:
             return ""
 
-        is_card_empty = self.processor.is_card_doc_type() and len(
-            (ctx.best_text or "").strip()
-        ) < 4
+        best_text = (ctx.best_text or "").strip()
+        best_digit_count = self.processor.digit_count(best_text)
+        is_card_empty = self.processor.is_card_doc_type() and best_digit_count < 8
         if is_card_empty:
             strict_rules = (
                 "This is a payment card image with a colored stroke partially covering "
@@ -1908,7 +1908,11 @@ class IterativeOCREngine:
         if direct_text:
             candidates.append(("direct-quality-fallback", direct_text))
 
-        needs_vision_fallback = not is_card_mode or (too_short and not direct_text)
+        direct_text_digit_count = self.processor.digit_count(direct_text)
+        direct_text_weak = not direct_text or direct_text_digit_count < 8
+        needs_vision_fallback = not is_card_mode or (
+            too_short and direct_text_weak
+        )
         if needs_vision_fallback:
             vision_text = await self._extract_text_multimodal_fallback(ctx)
             if vision_text:
