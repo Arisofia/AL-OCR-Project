@@ -55,13 +55,25 @@ except ImportError:
 
 
 from .learning_engine import LearningEngine
+from .open_source_ocr_stack import (
+    DocumentInput,
+    DocumentResult,
+    FintechNormalizer,
+    FintechQualityEvaluator,
+    OpenSourceOCRRouter,
+)
 from .processor import OCRProcessor
 
 __all__ = [
     "AdvancedPixelReconstructor",
+    "DocumentInput",
+    "DocumentResult",
+    "FintechNormalizer",
+    "FintechQualityEvaluator",
     "ImageEnhancer",
     "IterativeOCREngine",
     "LearningEngine",
+    "OpenSourceOCRRouter",
     "OCRProcessor",
     "PixelReconstructor",
 ]
