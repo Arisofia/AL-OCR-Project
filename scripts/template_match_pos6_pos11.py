@@ -37,6 +37,12 @@ import pytesseract
 IMG = "/Users/jenineferderas/Desktop/card_image.jpg"
 WL = "-c tessedit_char_whitelist=0123456789"
 OCR_EXCEPTIONS = (pytesseract.TesseractError, RuntimeError, TypeError, ValueError)
+OCR_TIMEOUT_SEC = 0.8
+FAST_OCR_SWEEP = True
+MAX_OCR_CALLS_PER_POS = 2500 if FAST_OCR_SWEEP else 12000
+OCR_SWEEP_DX = [-8, -3, 0, 3, 8] if FAST_OCR_SWEEP else [-12, -8, -5, -3, 0, 3, 5, 8, 12]
+GRAY_ENH_LIMIT = 10 if FAST_OCR_SWEEP else None
+BGR_ENH_LIMIT = 3 if FAST_OCR_SWEEP else 6
 
 # =============================================================================
 # Geometry
@@ -325,59 +331,101 @@ print("=" * 60)
 OCR_CONFIGS = [
     f"--oem 3 --psm 10 {WL}",
     f"--oem 3 --psm 13 {WL}",
-    f"--oem 3 --psm 8 {WL}",
-    f"--oem 3 --psm 7 {WL}",
 ]
-THRESHOLDS = [100, 120, 130, 150, 170]
+if not FAST_OCR_SWEEP:
+    OCR_CONFIGS.extend([f"--oem 3 --psm 8 {WL}", f"--oem 3 --psm 7 {WL}"])
+THRESHOLDS = [120, 150] if FAST_OCR_SWEEP else [100, 120, 130, 150, 170]
 
 
-def ocr_reads(img_in: np.ndarray) -> list[str]:
-    """Run OCR on one image, return list of digit reads."""
+def ocr_reads(img_in: np.ndarray, budget: int) -> tuple[list[str], int]:
+    """Run OCR on one image, return (digit reads, OCR calls used)."""
     results: list[str] = []
+    calls_used = 0
+    if budget <= 0:
+        return results, calls_used
+
     for cfg in OCR_CONFIGS:
+        if calls_used >= budget:
+            break
         try:
-            txt = pytesseract.image_to_string(img_in, config=cfg).strip()
+            txt = pytesseract.image_to_string(
+                img_in,
+                config=cfg,
+                timeout=OCR_TIMEOUT_SEC,
+            ).strip()
             digit_str = re.sub(r"\D", "", txt)
             if digit_str:
                 results.append(digit_str[0])
         except OCR_EXCEPTIONS:
             pass
+        calls_used += 1
 
         for thr in THRESHOLDS:
+            if calls_used >= budget:
+                break
             try:
                 _, bw = cv2.threshold(img_in, thr, 255, cv2.THRESH_BINARY)
-                txt = pytesseract.image_to_string(bw, config=cfg).strip()
+                txt = pytesseract.image_to_string(
+                    bw,
+                    config=cfg,
+                    timeout=OCR_TIMEOUT_SEC,
+                ).strip()
                 digit_str = re.sub(r"\D", "", txt)
                 if digit_str:
                     results.append(digit_str[0])
             except OCR_EXCEPTIONS:
                 pass
-    return results
+            calls_used += 1
+    return results, calls_used
 
 
 for target_pos in TARGET_POS:
     print(f"\n--- OCR sweep: POSITION {target_pos} (cx={CENTERS[target_pos]}) ---")
     votes: Counter = Counter()
+    budget_remaining = MAX_OCR_CALLS_PER_POS
 
-    for dx in [-12, -8, -5, -3, 0, 3, 5, 8, 12]:
+    for dx in OCR_SWEEP_DX:
+        if budget_remaining <= 0:
+            break
         zone_raw = extract_zone(target_pos, dx)
 
         # Gray enhancements
-        for _, enh_img in make_enhancements(zone_raw):
-            for digit_read in ocr_reads(enh_img):
+        gray_enhs = make_enhancements(zone_raw)
+        if GRAY_ENH_LIMIT is not None:
+            gray_enhs = gray_enhs[:GRAY_ENH_LIMIT]
+        for _, enh_img in gray_enhs:
+            digit_reads, calls_used = ocr_reads(enh_img, budget_remaining)
+            budget_remaining -= calls_used
+            for digit_read in digit_reads:
                 votes[digit_read] += 1
+            if budget_remaining <= 0:
+                break
 
         # BGR channels
+        if budget_remaining <= 0:
+            break
         zone_bgr = extract_zone_bgr(target_pos, dx)
         zone_bgr_up = upscale(zone_bgr)
         for ch_idx in range(3):
+            if budget_remaining <= 0:
+                break
             ch = zone_bgr_up[:, :, ch_idx]
-            better_enhs = make_enhancements(ch)[:6]
+            better_enhs = make_enhancements(ch)
+            if BGR_ENH_LIMIT is not None:
+                better_enhs = better_enhs[:BGR_ENH_LIMIT]
             for _, enh_img in better_enhs:
-                for digit_read in ocr_reads(enh_img):
+                digit_reads, calls_used = ocr_reads(enh_img, budget_remaining)
+                budget_remaining -= calls_used
+                for digit_read in digit_reads:
                     votes[digit_read] += 1
+                if budget_remaining <= 0:
+                    break
 
     total = sum(votes.values())
+    calls_done = MAX_OCR_CALLS_PER_POS - budget_remaining
+    print(f"  OCR calls used: {calls_done}/{MAX_OCR_CALLS_PER_POS}")
+    if budget_remaining <= 0:
+        print("  NOTE: OCR call budget reached; keeping highest-confidence votes.")
     print(f"  Total OCR reads: {total}")
     for digit, n in votes.most_common(8):
         pct = n / total * 100 if total else 0

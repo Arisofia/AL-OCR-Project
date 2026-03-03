@@ -32,6 +32,9 @@ OCR_EXCEPTIONS = (
     TypeError,
     ValueError,
 )
+OCR_TIMEOUT_SEC = 0.8
+FAST_OCR_SWEEP = True
+MAX_OCR_CALLS_PER_POS = 1200 if FAST_OCR_SWEEP else 4000
 
 img_bgr = cv2.imread(IMG)
 h, w = img_bgr.shape[:2]
@@ -309,31 +312,49 @@ print("=" * 65)
 CONFIGS = [
     f"--oem 3 --psm 10 {WL}",
     f"--oem 3 --psm 13 {WL}",
-    f"--oem 3 --psm 8 {WL}",
 ]
-THRESHOLDS = [110, 130, 150]
+if not FAST_OCR_SWEEP:
+    CONFIGS.append(f"--oem 3 --psm 8 {WL}")
+THRESHOLDS = [120, 150] if FAST_OCR_SWEEP else [110, 130, 150]
 
 
-def ocr_digit(im):
+def ocr_digit(im, budget):
     reads = []
+    calls_used = 0
+    if budget <= 0:
+        return reads, calls_used
     for cfg in CONFIGS:
+        if calls_used >= budget:
+            break
         try:
-            txt = pytesseract.image_to_string(im, config=cfg).strip()
+            txt = pytesseract.image_to_string(
+                im,
+                config=cfg,
+                timeout=OCR_TIMEOUT_SEC,
+            ).strip()
             d = re.sub(r"\D", "", txt)
             if d:
                 reads.append(d[0])
         except OCR_EXCEPTIONS:
             pass
+        calls_used += 1
         for thr in THRESHOLDS:
+            if calls_used >= budget:
+                break
             _, bw = cv2.threshold(im, thr, 255, cv2.THRESH_BINARY)
             try:
-                txt = pytesseract.image_to_string(bw, config=cfg).strip()
+                txt = pytesseract.image_to_string(
+                    bw,
+                    config=cfg,
+                    timeout=OCR_TIMEOUT_SEC,
+                ).strip()
                 d = re.sub(r"\D", "", txt)
                 if d:
                     reads.append(d[0])
             except OCR_EXCEPTIONS:
                 pass
-    return reads
+            calls_used += 1
+    return reads, calls_used
 
 
 # Different vertical crop strategies
@@ -341,18 +362,24 @@ v_crops = [
     ("full", 0.0, 1.0),
     ("mid70", 0.15, 0.85),
     ("mid50", 0.25, 0.75),
-    ("top60", 0.0, 0.6),
-    ("bot60", 0.4, 1.0),
 ]
+if not FAST_OCR_SWEEP:
+    v_crops.extend([("top60", 0.0, 0.6), ("bot60", 0.4, 1.0)])
 
 for target_pos in [11, 10]:
     print(f"\n--- POS {target_pos} tight-crop OCR ---")
     all_votes = Counter()
+    budget_remaining = MAX_OCR_CALLS_PER_POS
 
     for crop_name, vy0_frac, vy1_frac in v_crops:
+        if budget_remaining <= 0:
+            break
         crop_votes = Counter()
 
-        for dx in [-5, -2, 0, 2, 5]:
+        dx_offsets = [-3, 0, 3] if FAST_OCR_SWEEP else [-5, -2, 0, 2, 5]
+        for dx in dx_offsets:
+            if budget_remaining <= 0:
+                break
             cx = CENTERS[target_pos] + dx
             x0 = max(0, cx - HALF)
             x1 = min(rw, cx + HALF)
@@ -365,16 +392,23 @@ for target_pos in [11, 10]:
             cropped = zone[vy0:vy1, :]
             cropped_up = upscale(cropped)
 
-            for enh_fn in [
+            enh_fns = [
                 lambda z: enhance_clahe(z, 8),
                 lambda z: enhance_clahe(z, 16),
                 lambda z: enhance_clahe(z, 32),
                 lambda z: enhance_gamma(z, 0.3),
                 enhance_tophat,
                 enhance_unsharp,
-            ]:
+            ]
+            if FAST_OCR_SWEEP:
+                enh_fns = enh_fns[:4]
+            for enh_fn in enh_fns:
+                if budget_remaining <= 0:
+                    break
                 enh = enh_fn(cropped_up)
-                for d in ocr_digit(enh):
+                reads, calls_used = ocr_digit(enh, budget_remaining)
+                budget_remaining -= calls_used
+                for d in reads:
                     crop_votes[d] += 1
                     all_votes[d] += 1
 
@@ -385,6 +419,10 @@ for target_pos in [11, 10]:
             print(f"  {crop_name:>6}: {summary}  (n={total_crop})")
 
     total = sum(all_votes.values())
+    calls_done = MAX_OCR_CALLS_PER_POS - budget_remaining
+    print(f"  OCR calls used: {calls_done}/{MAX_OCR_CALLS_PER_POS}")
+    if budget_remaining <= 0:
+        print("  NOTE: OCR call budget reached; using current vote totals.")
     print(f"\n  COMBINED: {total} reads")
     for d, n in all_votes.most_common(6):
         pct = n / total * 100 if total else 0

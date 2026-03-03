@@ -8,8 +8,13 @@ import pytesseract
 
 IMG = "/Users/jenineferderas/Desktop/card_image.jpg"
 WL = "-c tessedit_char_whitelist=0123456789"
+OCR_TIMEOUT_SEC = 0.8
+FAST_OCR_SWEEP = True
+MAX_OCR_CALLS_PER_POS = 900 if FAST_OCR_SWEEP else 3000
 
 img = cv2.imread(IMG)
+if img is None:
+    raise FileNotFoundError(f"Cannot load image: {IMG}")
 h, w = img.shape[:2]
 y0, y1 = int(h * 0.25), int(h * 0.55)
 roi = img[y0:y1]
@@ -23,9 +28,10 @@ SCALE = 4
 CONFIGS = [
     f"--oem 3 --psm 10 {WL}",
     f"--oem 3 --psm 13 {WL}",
-    f"--oem 3 --psm 8 {WL}",
 ]
-THRESHOLDS = [120, 150]
+if not FAST_OCR_SWEEP:
+    CONFIGS.append(f"--oem 3 --psm 8 {WL}")
+THRESHOLDS = [120, 150] if FAST_OCR_SWEEP else [100, 120, 150]
 
 
 def upscale(im, factor=SCALE):
@@ -48,26 +54,43 @@ def enhance_variants(zone):
     return out
 
 
-def ocr_digit(im):
+def ocr_digit(im, budget):
     reads = []
+    calls_used = 0
+    if budget <= 0:
+        return reads, calls_used
     for cfg in CONFIGS:
+        if calls_used >= budget:
+            break
         try:
-            txt = pytesseract.image_to_string(im, config=cfg).strip()
+            txt = pytesseract.image_to_string(
+                im,
+                config=cfg,
+                timeout=OCR_TIMEOUT_SEC,
+            ).strip()
             d = re.sub(r"\D", "", txt)
             if d:
                 reads.append(d[0])
         except Exception:
             pass
+        calls_used += 1
         for thr in THRESHOLDS:
+            if calls_used >= budget:
+                break
             _, bw = cv2.threshold(im, thr, 255, cv2.THRESH_BINARY)
             try:
-                txt = pytesseract.image_to_string(bw, config=cfg).strip()
+                txt = pytesseract.image_to_string(
+                    bw,
+                    config=cfg,
+                    timeout=OCR_TIMEOUT_SEC,
+                ).strip()
                 d = re.sub(r"\D", "", txt)
                 if d:
                     reads.append(d[0])
             except Exception:
                 pass
-    return reads
+            calls_used += 1
+    return reads, calls_used
 
 
 print(f"Image: {w}x{h}, ROI: {rw}x{rh}")
@@ -77,28 +100,48 @@ all_results = {}
 
 for pos, cx in sorted(CENTERS.items()):
     votes = Counter()
+    budget_remaining = MAX_OCR_CALLS_PER_POS
+    dx_offsets = [-5, -2, 0, 2, 5] if FAST_OCR_SWEEP else [-10, -5, -2, 0, 2, 5, 10]
 
-    for dx in [-10, -5, -2, 0, 2, 5, 10]:
+    for dx in dx_offsets:
+        if budget_remaining <= 0:
+            break
         x0 = max(0, cx + dx - HALF)
         x1 = min(rw, cx + dx + HALF)
         zone = gray[:, x0:x1]
         zone_up = upscale(zone)
 
-        for enh in enhance_variants(zone_up):
-            for d in ocr_digit(enh):
+        gray_enh = enhance_variants(zone_up)
+        if FAST_OCR_SWEEP:
+            gray_enh = gray_enh[:6]
+        for enh in gray_enh:
+            reads, calls_used = ocr_digit(enh, budget_remaining)
+            budget_remaining -= calls_used
+            for d in reads:
                 votes[d] += 1
+            if budget_remaining <= 0:
+                break
 
         # R channel
+        if budget_remaining <= 0:
+            break
         zone_r = roi[:, x0:x1, 2]
         zone_r_up = upscale(zone_r)
         for enh in enhance_variants(zone_r_up)[:4]:
-            for d in ocr_digit(enh):
+            reads, calls_used = ocr_digit(enh, budget_remaining)
+            budget_remaining -= calls_used
+            for d in reads:
                 votes[d] += 1
+            if budget_remaining <= 0:
+                break
 
     total = sum(votes.values())
     all_results[pos] = (votes, total)
+    calls_done = MAX_OCR_CALLS_PER_POS - budget_remaining
 
-    print(f"POS {pos} (cx={cx}): {total} reads")
+    print(f"POS {pos} (cx={cx}): {total} reads  | OCR calls {calls_done}/{MAX_OCR_CALLS_PER_POS}")
+    if budget_remaining <= 0:
+        print("  NOTE: OCR call budget reached; using accumulated votes.")
     for d, n in votes.most_common(5):
         pct = n / total * 100 if total else 0
         bar = "#" * max(1, int(pct / 2))

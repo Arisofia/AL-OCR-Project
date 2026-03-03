@@ -104,7 +104,7 @@ for roi_y0, roi_y1 in roi_candidates:
         scale = max(1, 600 // roi_h)
         up = cv2.resize(inv, (roi_w * scale, roi_h * scale), interpolation=cv2.INTER_CUBIC)
         for psm in [6, 7, 11]:
-            try:
+            with suppress(Exception):
                 cfg = f"--oem 3 --psm {psm} {WL}"
                 txt = pytesseract.image_to_string(up, config=cfg).strip()
                 digits = re.sub(r'\D', '', txt)
@@ -112,8 +112,6 @@ for roi_y0, roi_y1 in roi_candidates:
                     print(f"  ROI [{roi_y0}-{roi_y1}] R-ch CLAHE{clip} PSM{psm}: '{digits}' (len={len(digits)})")
                     if '4388' in digits or '0665' in digits:
                         print("    >>> MATCH!")
-            except Exception:
-                pass
 
     # Try gamma
     for gamma in [0.3, 0.5]:
@@ -123,7 +121,7 @@ for roi_y0, roi_y1 in roi_candidates:
         scale = max(1, 600 // roi_h)
         up = cv2.resize(inv, (roi_w * scale, roi_h * scale), interpolation=cv2.INTER_CUBIC)
         for psm in [6, 7]:
-            try:
+            with suppress(Exception):
                 cfg = f"--oem 3 --psm {psm} {WL}"
                 txt = pytesseract.image_to_string(up, config=cfg).strip()
                 digits = re.sub(r'\D', '', txt)
@@ -131,8 +129,6 @@ for roi_y0, roi_y1 in roi_candidates:
                     print(f"  ROI [{roi_y0}-{roi_y1}] Gamma{gamma} PSM{psm}: '{digits}' (len={len(digits)})")
                     if '4388' in digits or '0665' in digits:
                         print("    >>> MATCH!")
-            except Exception:
-                pass
 
 
 # ─── Step 3: Column brightness analysis to find digit centers ───
