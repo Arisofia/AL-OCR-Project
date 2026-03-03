@@ -40,6 +40,11 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || '' }}
           HUGGING_FACE_HUB_TOKEN: ${{ secrets.HUGGING_FACE_HUB_TOKEN || '' }}
           ENABLE_BIN_LOOKUP: ${{ fromJSON(toJSON(vars))[format('{0}', 'ENABLE_BIN_LOOKUP')] || '' }}
+          REDIS_HOST: ${{ fromJSON(toJSON(vars))[format('{0}', 'REDIS_HOST')] || '' }}
+          REDIS_PORT: ${{ fromJSON(toJSON(vars))[format('{0}', 'REDIS_PORT')] || '' }}
+          REDIS_DB: ${{ fromJSON(toJSON(vars))[format('{0}', 'REDIS_DB')] || '' }}
+          REDIS_PASSWORD: ${{ fromJSON(toJSON(secrets))[format('{0}', 'REDIS_PASSWORD')] || '' }}
+          REDIS_STARTUP_CHECK: ${{ fromJSON(toJSON(vars))[format('{0}', 'REDIS_STARTUP_CHECK')] || '' }}
           # Fall back to production defaults when optional secrets are missing.
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY || 'al-ocr-service' }}
           LAMBDA_FUNCTION_NAME: ${{ secrets.AWS_LAMBDA_FUNCTION_NAME || 'AL-OCR-Upload-API' }}

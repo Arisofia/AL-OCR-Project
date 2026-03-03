@@ -26,15 +26,25 @@ async def lifespan(app: FastAPI):
     settings = getattr(app.state, "settings", None) or get_settings()
     app.state.redis_client = get_redis_client(settings)
 
-    try:
-        redis_status = await verify_redis_connection(app.state.redis_client)
+    if not settings.redis_startup_check:
+        redis_status = {
+            "ok": True,
+            "skipped": True,
+            "detail": "redis_startup_check disabled",
+        }
         app.state.redis_diagnostics = redis_status
-        app.state.degraded = not redis_status.get("ok", False)
-        logger.info("Startup dependency check: %s", redis_status)
-    except Exception:
-        logger.exception("Startup dependency check failed")
-        app.state.degraded = True
-        app.state.redis_diagnostics = {"ok": False}
+        app.state.degraded = False
+        logger.info("Startup dependency check skipped: %s", redis_status)
+    else:
+        try:
+            redis_status = await verify_redis_connection(app.state.redis_client)
+            app.state.redis_diagnostics = redis_status
+            app.state.degraded = not redis_status.get("ok", False)
+            logger.info("Startup dependency check: %s", redis_status)
+        except Exception:
+            logger.exception("Startup dependency check failed")
+            app.state.degraded = True
+            app.state.redis_diagnostics = {"ok": False}
 
     yield
 

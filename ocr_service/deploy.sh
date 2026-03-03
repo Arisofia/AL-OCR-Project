@@ -59,6 +59,11 @@ keys = [
     "GEMINI_API_KEY",
     "HUGGING_FACE_HUB_TOKEN",
     "ENABLE_BIN_LOOKUP",
+    "REDIS_HOST",
+    "REDIS_PORT",
+    "REDIS_DB",
+    "REDIS_PASSWORD",
+    "REDIS_STARTUP_CHECK",
 ]
 
 desired = {k: os.environ.get(k) for k in keys if os.environ.get(k)}

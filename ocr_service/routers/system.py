@@ -36,15 +36,22 @@ async def health_check() -> HealthResponse:
     components: dict[str, Any] = {}
 
     # Redis check
-    try:
-        redis_client = get_redis_client(curr_settings)
-        redis_res = verify_redis_connection(redis_client)
-        if inspect.isawaitable(redis_res):
-            redis_res = await redis_res
-        components["redis"] = redis_res
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.exception("Health check redis dependency failed")
-        components["redis"] = {"ok": False, "error": str(exc)}
+    if not curr_settings.redis_startup_check:
+        components["redis"] = {
+            "ok": True,
+            "skipped": True,
+            "detail": "redis_startup_check disabled",
+        }
+    else:
+        try:
+            redis_client = get_redis_client(curr_settings)
+            redis_res = verify_redis_connection(redis_client)
+            if inspect.isawaitable(redis_res):
+                redis_res = await redis_res
+            components["redis"] = redis_res
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.exception("Health check redis dependency failed")
+            components["redis"] = {"ok": False, "error": str(exc)}
 
     # Storage (S3) check
     if not curr_settings.s3_bucket_name:
