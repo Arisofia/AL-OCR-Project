@@ -96,6 +96,22 @@ class ImageToolkit:
         return await asyncio.to_thread(ImageToolkit.decode_image, image_bytes)
 
     @staticmethod
+    async def encode_image_async(
+        img: np.ndarray, format_ext: str = ".jpg"
+    ) -> Optional[bytes]:
+        """
+        Asynchronously encodes a numpy image array into bytes.
+        """
+
+        def _encode():
+            success, encoded_img = cv2.imencode(format_ext, img)
+            if success:
+                return encoded_img.tobytes()
+            return None
+
+        return await asyncio.to_thread(_encode)
+
+    @staticmethod
     def validate_image(image_bytes: bytes, max_size_mb: int = 10) -> Optional[str]:
         """
         Validates image content and size.

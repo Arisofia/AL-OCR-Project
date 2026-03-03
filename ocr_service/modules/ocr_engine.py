@@ -396,7 +396,7 @@ class DocumentProcessor:
 
         # Contrast Limited Adaptive Histogram Equalization (CLAHE)
         # Specifically targets faint pixel remnants under thin occlusions.
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(8, 8))
         enhanced = clahe.apply(upscaled)
 
         denoised = self.enhancer.denoise(enhanced)
@@ -1026,9 +1026,16 @@ class DocumentProcessor:
         combined = cv2.dilate(  # pylint: disable=no-member
             combined, kernel, iterations=1
         )
+
+        # Double-pass inpainting: TELEA for texture, NS for structural smooth
+        telea = cv2.inpaint(  # pylint: disable=no-member
+            img, combined, 7, cv2.INPAINT_TELEA
+        )
         return cast(
             np.ndarray,
-            cv2.inpaint(img, combined, 7, cv2.INPAINT_TELEA),  # pylint: disable=no-member
+            cv2.inpaint(  # pylint: disable=no-member
+                telea, combined, 3, cv2.INPAINT_NS
+            ),
         )
 
     def preprocess_frame(
@@ -1832,8 +1839,18 @@ class IterativeOCREngine:
         }
 
         try:
+            # Send the preprocessed image (with colored stroke removed) to the LLM
+            # instead of the raw original for significantly better fidelity.
+            multimodal_img_bytes = ctx.image_bytes
+            if ctx.current_img is not None:
+                preprocessed_bytes = await ImageToolkit.encode_image_async(
+                    ctx.current_img
+                )
+                if preprocessed_bytes:
+                    multimodal_img_bytes = preprocessed_bytes
+
             ai_result = await self.advanced_reconstructor.reconstruct_with_ai(
-                ctx.image_bytes,
+                multimodal_img_bytes,
                 context=context,
                 fallback=True,
             )
