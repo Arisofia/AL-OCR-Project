@@ -258,7 +258,7 @@ class DocumentProcessor:
 
                 compact = re.sub(r"\D", "", candidate_raw or "")
                 compact_len = len(compact)
-                if compact_len < 12 or compact_len > 19:
+                if compact_len < 8 or compact_len > 19:
                     continue
 
                 score = (
@@ -1142,6 +1142,10 @@ class DocumentProcessor:
             -noise,
         )
 
+    def score_card_text(self, text: str) -> tuple[int, int, int, int, int, int, int]:
+        """Public wrapper for card candidate scoring."""
+        return self._score_card_text(text)
+
     def _has_suspicious_partial_zero_tail(self, text: str) -> bool:
         """
         Detect likely spurious trailing zero in short/partial card-like strings,
@@ -1914,12 +1918,29 @@ class IterativeOCREngine:
     def _select_best_quality_candidate(
         self,
         candidates: list[tuple[str, str]],
+        is_card_mode: bool = False,
     ) -> tuple[str, str, float]:
-        """Score and select highest-confidence fallback candidate."""
+        """Select fallback candidate using confidence and card-aware ranking."""
         scored = [
             (method, candidate_text, self.confidence_scorer.calculate(candidate_text))
             for method, candidate_text in candidates
         ]
+        if is_card_mode:
+            card_scored = [
+                (
+                    method,
+                    candidate_text,
+                    confidence,
+                    self.processor.score_card_text(candidate_text),
+                    self.processor.digit_count(candidate_text),
+                )
+                for method, candidate_text, confidence in scored
+            ]
+            method, candidate_text, confidence, _, _ = max(
+                card_scored,
+                key=lambda item: (item[3], item[4], item[2], len(item[1])),
+            )
+            return method, candidate_text, confidence
         return max(scored, key=lambda item: (item[2], len(item[1])))
 
     def _quality_candidate_is_better(
@@ -1929,6 +1950,7 @@ class IterativeOCREngine:
         selected_text: str,
         selected_conf: float,
         ambiguous_digits: bool,
+        is_card_mode: bool = False,
     ) -> bool:
         """Decide whether fallback candidate should replace current best output."""
         better_confidence = selected_conf > (best_confidence + 0.02)
@@ -1939,6 +1961,9 @@ class IterativeOCREngine:
         selected_digits = self.processor.digit_count(selected_text)
         base_digits = self.processor.digit_count(best_text)
         digit_gain = selected_digits > base_digits
+        partial_card_recovery = (
+            is_card_mode and selected_digits >= 8 and base_digits < 8
+        )
         ambiguity_resolved = (
             ambiguous_digits and not self.processor.needs_digit_rescue(selected_text)
         )
@@ -1946,6 +1971,7 @@ class IterativeOCREngine:
             better_confidence
             or better_coverage
             or digit_gain
+            or partial_card_recovery
             or ambiguity_resolved
         )
 
@@ -2002,7 +2028,8 @@ class IterativeOCREngine:
             return
 
         method, selected_text, selected_conf = self._select_best_quality_candidate(
-            candidates
+            candidates,
+            is_card_mode=is_card_mode,
         )
         if not self._quality_candidate_is_better(
             best_text=best_text,
@@ -2010,6 +2037,7 @@ class IterativeOCREngine:
             selected_text=selected_text,
             selected_conf=selected_conf,
             ambiguous_digits=ambiguous_digits,
+            is_card_mode=is_card_mode,
         ):
             return
 

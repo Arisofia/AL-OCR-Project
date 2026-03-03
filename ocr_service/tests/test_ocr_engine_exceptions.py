@@ -927,6 +927,70 @@ async def test_extract_text_card_digits_only_uses_roi_candidates(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_process_image_card_fallback_prefers_card_digits_over_noisy_text(
+    monkeypatch,
+):
+    engine = engine_mod.IterativeOCREngine(
+        config=engine_mod.EngineConfig(max_iterations=1, confidence_threshold=0.9)
+    )
+
+    async def _decode_ok(ctx):
+        ctx.current_img = np.zeros((32, 32, 3), dtype=np.uint8)
+        return True
+
+    async def _recon_noop(_ctx, _max_iterations):
+        return None
+
+    async def _layout_noop(ctx):
+        ctx.layout_regions = []
+        ctx.layout_type = "unknown"
+
+    def _preprocess(_img, _iteration, _use_recon):
+        return np.zeros((32, 32), dtype=np.uint8)
+
+    async def _extract_empty(_img, _regions=None, _original_bytes=None):
+        return ""
+
+    async def _direct_noisy(_image_bytes):
+        return "invoice total amount due"
+
+    async def _digits_only(_image_bytes):
+        return "4111 1111 1111 1111"
+
+    async def _vision_empty(_ctx):
+        return ""
+
+    def _confidence(text):
+        return 0.95 if "invoice" in text else 0.50
+
+    async def _enhance_noop(img):
+        return img
+
+    monkeypatch.setattr(engine.processor, "decode_and_validate", _decode_ok)
+    monkeypatch.setattr(engine.processor, "run_reconstruction", _recon_noop)
+    monkeypatch.setattr(engine, "_analyze_layout", _layout_noop)
+    monkeypatch.setattr(engine.processor, "preprocess_frame", _preprocess)
+    monkeypatch.setattr(engine.processor, "extract_text", _extract_empty)
+    monkeypatch.setattr(engine.processor, "extract_text_direct", _direct_noisy)
+    monkeypatch.setattr(
+        engine.processor,
+        "extract_text_card_digits_only",
+        _digits_only,
+    )
+    monkeypatch.setattr(engine, "_extract_text_multimodal_fallback", _vision_empty)
+    monkeypatch.setattr(engine.confidence_scorer, "calculate", _confidence)
+    monkeypatch.setattr(engine_mod.ImageToolkit, "enhance_iteration", _enhance_noop)
+
+    result = await engine.process_image(b"img-bytes", doc_type="bank_card")
+
+    assert result.get("text") == "4111 1111 1111 1111"
+    assert any(
+        i.get("method") == "digits-only-quality-fallback"
+        for i in result.get("iterations", [])
+    )
+
+
+@pytest.mark.asyncio
 async def test_extract_text_applies_digit_rescue_on_ambiguous_output(monkeypatch):
     processor = DocumentProcessor(
         enhancer=engine_mod.ImageEnhancer(),
