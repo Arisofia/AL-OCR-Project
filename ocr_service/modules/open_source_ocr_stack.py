@@ -16,6 +16,9 @@ from ocr_service.modules.ocr_engine import IterativeOCREngine
 
 DocumentStatus = Literal["OK", "PARTIAL", "FAILED"]
 QualityClass = Literal["GOOD", "PARTIAL", "UNUSABLE"]
+DATE_PATTERN = r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b"
+DATE_PATTERN = r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b"
+TXN_DATE_PATTERN = r"\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?"
 
 
 class DocumentInput(BaseModel):
@@ -62,9 +65,11 @@ class FintechQualityEvaluator:
     _txn_like = re.compile(r"\b\d{1,2}[/-]\d{1,2}([/-]\d{2,4})?\b")
     _currency = re.compile(r"\b(?:USD|EUR|GBP|MXN|COP|\$|€)\s?\d+[\d,\.]*\b")
     _account_like = re.compile(r"\b(?:acct|account|iban|clabe|iban:)\b", re.I)
-    _date_like = re.compile(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b")
+    _date_like = re.compile(DATE_PATTERN)
     _id_like = re.compile(r"\b(?:id|passport|dni|ssn|tax id)\b", re.I)
-    _merchant_like = re.compile(r"\b(?:store|market|shop|merchant|invoice|receipt)\b", re.I)
+    _merchant_like = re.compile(
+        r"\b(?:store|market|shop|merchant|invoice|receipt)\b", re.I
+    )
     _total_like = re.compile(r"\b(?:total|amount due|grand total)\b", re.I)
 
     def evaluate(
@@ -74,6 +79,7 @@ class FintechQualityEvaluator:
         structured_output: Optional[dict[str, Any]] = None,
         engine_metadata: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
+        """Score OCR quality and classify extraction usability by document type."""
         _ = structured_output
         _ = engine_metadata
         text = (raw_text or "").strip()
@@ -93,44 +99,85 @@ class FintechQualityEvaluator:
         reasons: list[str] = []
 
         doc_type = (document_type or "other").lower().strip()
+        score = self._apply_doc_type_signal_bonus(doc_type, text, score, reasons)
+        self._append_common_quality_reasons(
+            text=text,
+            alnum_ratio=alnum_ratio,
+            printable_ratio=printable_ratio,
+            reasons=reasons,
+        )
+        classification = self._classify_score(score)
+
+        return {
+            "quality_score": float(round(score, 4)),
+            "classification": classification,
+            "reasons": reasons,
+        }
+
+    def _apply_doc_type_signal_bonus(
+        self,
+        doc_type: str,
+        text: str,
+        score: float,
+        reasons: list[str],
+    ) -> float:
         if doc_type == "bank_statement":
-            hit_count = 0
-            if self._account_like.search(text):
-                hit_count += 1
-            if len(self._currency.findall(text)) >= 2:
-                hit_count += 1
-            if len(self._txn_like.findall(text)) >= 3:
-                hit_count += 1
-            score = min(1.0, score + (0.12 * hit_count))
+            hit_count = self._bank_statement_hits(text)
             if hit_count < 2:
                 reasons.append("BANK_STATEMENT_SIGNALS_WEAK")
-        elif doc_type in {"loan_application", "kyc_form"}:
-            hit_count = 0
-            if re.search(r"\bname\b", text, re.I):
-                hit_count += 1
-            if self._date_like.search(text):
-                hit_count += 1
-            if re.search(r"\baddress\b", text, re.I):
-                hit_count += 1
-            if self._id_like.search(text):
-                hit_count += 1
-            score = min(1.0, score + (0.10 * hit_count))
+            return min(1.0, score + (0.12 * hit_count))
+
+        if doc_type in {"loan_application", "kyc_form"}:
+            hit_count = self._kyc_hits(text)
             if hit_count < 2:
                 reasons.append("KYC_SIGNALS_WEAK")
-        elif doc_type in {"receipt", "invoice"}:
-            hit_count = 0
-            if self._merchant_like.search(text):
-                hit_count += 1
-            if self._date_like.search(text):
-                hit_count += 1
-            if self._total_like.search(text):
-                hit_count += 1
-            if self._currency.search(text):
-                hit_count += 1
-            score = min(1.0, score + (0.09 * hit_count))
+            return min(1.0, score + (0.10 * hit_count))
+
+        if doc_type in {"receipt", "invoice"}:
+            hit_count = self._receipt_hits(text)
             if hit_count < 2:
                 reasons.append("RECEIPT_SIGNALS_WEAK")
+            return min(1.0, score + (0.09 * hit_count))
 
+        return score
+
+    def _bank_statement_hits(self, text: str) -> int:
+        return sum(
+            (
+                bool(self._account_like.search(text)),
+                len(self._currency.findall(text)) >= 2,
+                len(self._txn_like.findall(text)) >= 3,
+            )
+        )
+
+    def _kyc_hits(self, text: str) -> int:
+        return sum(
+            (
+                bool(re.search(r"\bname\b", text, re.I)),
+                bool(self._date_like.search(text)),
+                bool(re.search(r"\baddress\b", text, re.I)),
+                bool(self._id_like.search(text)),
+            )
+        )
+
+    def _receipt_hits(self, text: str) -> int:
+        return sum(
+            (
+                bool(self._merchant_like.search(text)),
+                bool(self._date_like.search(text)),
+                bool(self._total_like.search(text)),
+                bool(self._currency.search(text)),
+            )
+        )
+
+    @staticmethod
+    def _append_common_quality_reasons(
+        *,
+        text: str,
+        alnum_ratio: float,
+        printable_ratio: float,
+        reasons: list[str],
+    ) -> None:
         if printable_ratio < 0.85:
             reasons.append("LOW_PRINTABLE_RATIO")
         if alnum_ratio < 0.35:
@@ -138,18 +185,13 @@ class FintechQualityEvaluator:
         if len(text) < 30:
             reasons.append("TEXT_TOO_SHORT")
 
+    @staticmethod
+    def _classify_score(score: float) -> QualityClass:
         if score >= 0.75:
-            classification: QualityClass = "GOOD"
-        elif score >= 0.45:
-            classification = "PARTIAL"
-        else:
-            classification = "UNUSABLE"
-
-        return {
-            "quality_score": float(round(score, 4)),
-            "classification": classification,
-            "reasons": reasons,
-        }
+            return "GOOD"
+        if score >= 0.45:
+            return "PARTIAL"
+        return "UNUSABLE"
 
     @staticmethod
     def _alnum_ratio(text: str) -> float:
@@ -175,6 +217,7 @@ class FintechNormalizer:
         raw_text: str,
         structured_output: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
+        """Normalize OCR text into document-specific fintech schema sections."""
         base = {
             "document_type": document_type,
             "raw_sections": self._split_sections(raw_text),
@@ -193,7 +236,11 @@ class FintechNormalizer:
 
     @staticmethod
     def _split_sections(text: str) -> list[str]:
-        return [chunk.strip() for chunk in re.split(r"\n\s*\n", text or "") if chunk.strip()]
+        return [
+            chunk.strip()
+            for chunk in re.split(r"\n\s*\n", text or "")
+            if chunk.strip()
+        ]
 
     def _normalize_bank_statement(self, text: str) -> dict[str, Any]:
         account_number = self._first_match(
@@ -206,12 +253,12 @@ class FintechNormalizer:
             r"(?i)(?:statement\s*period|period)[:\s-]*([\w\s\-/]{6,40})",
         )
 
-        txn_rows = []
-        for line in text.splitlines():
-            if re.search(r"\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?", line) and re.search(
-                r"[-+]?\$?\d+[\d,]*\.\d{2}", line
-            ):
-                txn_rows.append({"raw_line": line.strip()})
+        txn_rows = [
+            {"raw_line": line.strip()}
+            for line in text.splitlines()
+            if re.search(TXN_DATE_PATTERN, line)
+            and re.search(r"[-+]?\$?\d+[\d,]*\.\d{2}", line)
+        ]
 
         return {
             "account_holder": self._first_match(
@@ -231,7 +278,7 @@ class FintechNormalizer:
                     text,
                     r"(?i)(?:name)[:\s-]*([A-Z][A-Za-z\s\.'-]{3,80})",
                 ),
-                "dob": self._first_match(text, r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b"),
+                "dob": self._first_match(text, DATE_PATTERN),
                 "address": self._first_match(
                     text,
                     r"(?i)(?:address)[:\s-]*([^\n]{8,120})",
@@ -258,7 +305,10 @@ class FintechNormalizer:
             "loan_details": {
                 "amount": self._first_match(
                     text,
-                    r"(?i)(?:loan\s*amount|amount\s*requested)[:\s-]*([\$A-Z]{0,3}\s?\d+[\d,\.]{0,20})",
+                    (
+                        r"(?i)(?:loan\s*amount|amount\s*requested)"
+                        r"[:\s-]*([\$A-Z]{0,3}\s?\d+[\d,\.]{0,20})"
+                    ),
                 ),
                 "term": self._first_match(
                     text,
@@ -277,7 +327,7 @@ class FintechNormalizer:
                 text,
                 r"(?i)(?:merchant|store|vendor|shop|seller)[:\s-]*([^\n]{2,80})",
             ),
-            "date": self._first_match(text, r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b"),
+            "date": self._first_match(text, DATE_PATTERN),
             "items": [
                 {"description": line.strip()}
                 for line in text.splitlines()
@@ -286,7 +336,10 @@ class FintechNormalizer:
             ][:25],
             "total_amount": self._first_match(
                 text,
-                r"(?i)(?:grand\s*total|total\s*amount|amount\s*due|total)[:\s-]*([\$A-Z]{0,3}\s?\d+[\d,\.]{0,20})",
+                (
+                    r"(?i)(?:grand\s*total|total\s*amount|amount\s*due|total)"
+                    r"[:\s-]*([\$A-Z]{0,3}\s?\d+[\d,\.]{0,20})"
+                ),
             ),
             "taxes": self._first_match(
                 text,
@@ -300,8 +353,8 @@ class FintechNormalizer:
         if not match:
             return None
         if match.groups():
-            return (match.group(1) or "").strip() or None
-        return (match.group(0) or "").strip() or None
+            return (match[1] or "").strip() or None
+        return (match[0] or "").strip() or None
 
 
 class OpenSourceOCRRouter:
@@ -328,7 +381,11 @@ class OpenSourceOCRRouter:
 
         l1 = await self._run_layer1(payload, input_doc)
         fallback_chain.append(l1.engine_used)
-        q1 = self.evaluator.evaluate(l1.text, input_doc.document_type, l1.structured_output)
+        q1 = self.evaluator.evaluate(
+            l1.text,
+            input_doc.document_type,
+            l1.structured_output,
+        )
         if q1["classification"] == "GOOD":
             return self._build_result(input_doc, l1, q1, fallback_chain)
 
@@ -338,21 +395,31 @@ class OpenSourceOCRRouter:
 
         l2 = await self._run_layer2(payload, input_doc)
         fallback_chain.append(l2.engine_used)
-        q2 = self.evaluator.evaluate(l2.text, input_doc.document_type, l2.structured_output)
+        q2 = self.evaluator.evaluate(
+            l2.text,
+            input_doc.document_type,
+            l2.structured_output,
+        )
         if q2["classification"] == "GOOD":
             return self._build_result(input_doc, l2, q2, fallback_chain)
 
         if self._should_escalate_layer3(input_doc.document_type, q2["classification"]):
             l3 = await self._run_layer3(payload, input_doc)
             fallback_chain.append(l3.engine_used)
-            q3 = self.evaluator.evaluate(l3.text, input_doc.document_type, l3.structured_output)
+            q3 = self.evaluator.evaluate(
+                l3.text,
+                input_doc.document_type,
+                l3.structured_output,
+            )
             return self._build_result(input_doc, l3, q3, fallback_chain)
 
         return self._build_result(input_doc, l2, q2, fallback_chain)
 
     async def process_batch(self, inputs: list[DocumentInput]) -> list[DocumentResult]:
         """Process a batch of documents concurrently with bounded gather."""
-        return list(await asyncio.gather(*[self.process_document(doc) for doc in inputs]))
+        return list(
+            await asyncio.gather(*[self.process_document(doc) for doc in inputs])
+        )
 
     async def _run_layer1(self, payload: bytes, input_doc: DocumentInput) -> LayerOutput:
         result = await self.layer1_engine.process_image(
@@ -364,7 +431,7 @@ class OpenSourceOCRRouter:
             engine_used="layer1:iterative_tesseract",
             text=(result.get("text") or "").strip(),
             structured_output=result,
-            errors=["EMPTY_RESULT"] if not result.get("text") else [],
+            errors=[] if result.get("text") else ["EMPTY_RESULT"],
             debug_info={"layer": 1, "text_len": len(result.get("text") or "")},
         )
 
@@ -378,7 +445,7 @@ class OpenSourceOCRRouter:
             engine_used="layer2:layout_aware",
             text=(result.get("text") or "").strip(),
             structured_output=result,
-            errors=["EMPTY_RESULT"] if not result.get("text") else [],
+            errors=[] if result.get("text") else ["EMPTY_RESULT"],
             debug_info={
                 "layer": 2,
                 "layout_type": result.get("layout_type"),
@@ -395,7 +462,7 @@ class OpenSourceOCRRouter:
             engine_used="layer3:vision_llm",
             text=(result.get("text") or "").strip(),
             structured_output=result,
-            errors=["EMPTY_RESULT"] if not result.get("text") else [],
+            errors=[] if result.get("text") else ["EMPTY_RESULT"],
             debug_info={"layer": 3, "text_len": len(result.get("text") or "")},
         )
 
@@ -469,16 +536,15 @@ def preprocess_image(img: np.ndarray) -> np.ndarray:
     if img is None or not isinstance(img, np.ndarray):
         raise ValueError("Invalid image input")
 
-    if len(img.shape) == 3:
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    else:
-        gray = img
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
 
     target_width = 1800
-    h, w = gray.shape[:2]
-    if w > 0 and w < target_width:
+    _, w = gray.shape[:2]
+    if 0 < w < target_width:
         scale = target_width / float(w)
-        gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        gray = cv2.resize(
+            gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC
+        )
 
     denoised = cv2.bilateralFilter(gray, 7, 40, 40)
 
@@ -498,7 +564,7 @@ def preprocess_image(img: np.ndarray) -> np.ndarray:
 
 def _deskew(bin_img: np.ndarray) -> np.ndarray:
     """Estimate and correct skew angle using min-area rectangle orientation."""
-    points = np.column_stack(np.where(bin_img < 255))
+    points = np.column_stack(np.nonzero(bin_img < 255))
     if len(points) < 50:
         return bin_img
 
