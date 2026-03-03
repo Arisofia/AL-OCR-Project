@@ -1664,14 +1664,12 @@ class IterativeOCREngine:
 
             self.processor.set_active_doc_type(ctx.doc_type)
 
-            if self.processor.is_card_doc_type():
-                ocr_input = ctx.current_img
-            else:
-                ocr_input = self.processor.preprocess_frame(
-                    ctx.current_img, i, ctx.use_reconstruction
-                )
+            ocr_input = self.processor.preprocess_frame(
+                ctx.current_img, i, ctx.use_reconstruction
+            )
 
             use_regions = (
+
                 i == 1
                 and ctx.best_confidence < self.config.confidence_threshold
                 and len(ctx.layout_regions) > 1
@@ -1986,6 +1984,7 @@ class IterativeOCREngine:
 
     def _build_response(self, ctx: DocumentContext) -> dict[str, Any]:
         """Formats the final engine output."""
+        requested_type = (ctx.doc_type or "").strip().lower()
         # Final sanitization of the best text before response
         final_text = self.processor.sanitize_text(ctx.best_text)
         final_text = self.processor.mark_uncertain_partial_card_tail(final_text)
@@ -1994,28 +1993,6 @@ class IterativeOCREngine:
             layout_type=ctx.layout_type,
             include_bin_info=self.config.enable_bin_lookup,
         )
-        requested_type = (ctx.doc_type or "").strip().lower()
-        if requested_type and requested_type not in {"generic", "unknown"}:
-            detected_type = str(analysis.get("document_type", "")).strip().lower()
-            try:
-                detected_confidence = float(analysis.get("type_confidence", 0.0))
-            except (TypeError, ValueError):
-                detected_confidence = 0.0
-
-            weak_detected_type = detected_type in {
-                "",
-                "unknown",
-                "generic_document",
-                "statement",
-                "form",
-            }
-            if not final_text.strip() or (
-                weak_detected_type and detected_confidence <= 0.65
-            ):
-                # Respect explicit user intent when auto-classification is weak.
-                analysis["document_type"] = requested_type
-                analysis["type_confidence"] = round(max(detected_confidence, 0.50), 2)
-
         resp = {
             "text": final_text,
             "confidence": ctx.best_confidence,
@@ -2033,6 +2010,14 @@ class IterativeOCREngine:
             ),
             **analysis,
         }
+
+        # Override detected type with requested type if the user was explicit
+        # or if the detection was weak.
+        if requested_type and requested_type not in {"generic", "unknown"}:
+            resp["document_type"] = requested_type
+            if "type_confidence" in resp:
+                resp["type_confidence"] = max(resp["type_confidence"], 0.50)
+
         if ctx.reconstruction_info:
             resp["reconstruction"] = ctx.reconstruction_info
         return resp
