@@ -92,7 +92,7 @@ for ch_idx in range(3):
             votes[d] += 1
 
 total = sum(votes.values())
-print(f"\n=== POSITION 11 RESULTS ===")
+print("\n=== POSITION 11 RESULTS ===")
 print(f"Total reads: {total}\n")
 for d, n in votes.most_common(10):
     pct = n / total * 100 if total else 0

@@ -73,7 +73,7 @@ for seq, count in reads.items():
 
 if before_665:
     total = sum(before_665.values())
-    print(f"\nDigit immediately before '665' (= POS 12?):")
+    print("\nDigit immediately before '665' (= POS 12?):")
     for d, n in before_665.most_common(5):
         print(f"  '{d}': {n}/{total} = {n/total:.0%}")
 

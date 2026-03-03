@@ -221,7 +221,7 @@ for pos in range(6, 12):
           f"bL={f['b_left']:.0f} bR={f['b_right']:.0f}")
 
     # Feature distance to each known digit
-    print(f"\n  Distance to known digits (lower = more similar):")
+    print("\n  Distance to known digits (lower = more similar):")
     distances = {}
     for digit, avg_f in sorted(avg_features.items()):
         # Weighted L1 distance across structural features
@@ -276,7 +276,7 @@ for pos in range(6, 12):
     multi_enh = np.vstack(padded)
     cv2.imwrite(f"/tmp/pos{pos}_multi_enhance.png", multi_enh)
 
-print(f"\n\nDebug images saved to /tmp/pos*_6x_*.png and /tmp/pos*_multi_enhance.png")
+print("\n\nDebug images saved to /tmp/pos*_6x_*.png and /tmp/pos*_multi_enhance.png")
 
 
 # =============================================================================

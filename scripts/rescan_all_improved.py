@@ -94,7 +94,7 @@ def ocr_digit(im, budget):
 
 
 print(f"Image: {w}x{h}, ROI: {rw}x{rh}")
-print(f"Scanning positions 6-11 with improved pipeline\n")
+print("Scanning positions 6-11 with improved pipeline\n")
 
 all_results = {}
 

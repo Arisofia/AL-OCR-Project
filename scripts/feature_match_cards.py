@@ -68,7 +68,7 @@ if len(good) >= 4:
         # Y center of digit row in original image
         digit_y_orig = int(h1 * 0.40)  # approximately 40% from top
         
-        print(f"\n=== MAPPED DIGIT POSITIONS ===\n")
+        print("\n=== MAPPED DIGIT POSITIONS ===\n")
         mapped_centers = {}
         for pos in range(16):
             cx = ORIG_CENTERS[pos]
@@ -80,7 +80,7 @@ if len(good) >= 4:
             print(f"  pos{pos:2d}: ({cx},{digit_y_orig}) -> ({int(mx)},{int(my)}) [{known}]")
         
         # ─── Step 2: Read digits using mapped positions ───
-        print(f"\n=== READING DIGITS AT MAPPED POSITIONS ===\n")
+        print("\n=== READING DIGITS AT MAPPED POSITIONS ===\n")
         
         KNOWN = {0:"4", 1:"3", 2:"8", 3:"8", 4:"5", 5:"4", 12:"0", 13:"6", 14:"6", 15:"5"}
         r2 = img2[:,:,2]  # R-channel
@@ -141,7 +141,7 @@ if len(good) >= 4:
                 print(f"\n  >>> USING y_offset={y_offset} <<<\n")
                 
                 # Read ALL positions including hidden
-                print(f"  Known digit verification:")
+                print("  Known digit verification:")
                 for pos in sorted(KNOWN.keys()):
                     expected = KNOWN[pos]
                     mx, my = mapped_centers[pos]
@@ -179,7 +179,7 @@ if len(good) >= 4:
                     hit = "✓" if best == expected else "✗"
                     print(f"    pos{pos:2d}: expect='{expected}' got='{best}' [{hit}] ({top3})")
                 
-                print(f"\n  HIDDEN POSITIONS (6-11):")
+                print("\n  HIDDEN POSITIONS (6-11):")
                 hidden_votes = {}
                 for pos in range(6, 12):
                     mx, my = mapped_centers[pos]
@@ -258,7 +258,7 @@ if len(good) >= 4:
                     cv2.imwrite(f"/tmp/new2_pos{pos}_rchan.png", enh_r)
                 
                 # ─── Luhn with new image evidence ───
-                print(f"\n  LUHN CHECK on pattern 4388 5454 ???5 0665:")
+                print("\n  LUHN CHECK on pattern 4388 5454 ???5 0665:")
                 
                 # Focus on positions 8, 9, 10 which are the unknowns
                 def luhn(pan):
@@ -278,7 +278,7 @@ if len(good) >= 4:
                         print(f"    pos{pos}: {probs}")
                 
                 # Check all 100 Luhn-valid candidates
-                print(f"\n  Ranking among 100 Luhn-valid candidates for 4388 5454 ???5 0665:")
+                print("\n  Ranking among 100 Luhn-valid candidates for 4388 5454 ???5 0665:")
                 candidates = []
                 for d8 in range(10):
                     for d9 in range(10):
@@ -302,9 +302,9 @@ if len(good) >= 4:
                 
                 break  # Use first good y_offset
     else:
-        print(f"\nHomography failed!")
+        print("\nHomography failed!")
 else:
-    print(f"\nNot enough matches for homography!")
+    print("\nNot enough matches for homography!")
 
 # ─── Also try SIFT ───
 print("\n\n=== TRYING SIFT ===\n")
@@ -343,7 +343,7 @@ try:
                 12: 1133, 13: 1208, 14: 1283, 15: 1358,
             }
             
-            print(f"\n  SIFT-mapped positions:")
+            print("\n  SIFT-mapped positions:")
             for pos in range(16):
                 cx = ORIG_CENTERS[pos]
                 pt = np.float32([[[cx, digit_y_orig]]])
