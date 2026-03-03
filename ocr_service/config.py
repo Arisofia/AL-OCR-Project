@@ -6,7 +6,7 @@ supporting environment variable overrides and LRU caching for performance.
 """
 
 from functools import lru_cache
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -51,7 +51,9 @@ class Settings(BaseSettings):
     ocr_card_iterations: int = 1
     ocr_card_pass_limit: int = 2
     ocr_card_timeout_seconds: float = 8.0
-    ocr_strategy_profile: str = "hybrid"
+    ocr_strategy_profile: Literal[
+        "deterministic", "layout_aware", "hybrid"
+    ] = "hybrid"
     enable_bin_lookup: bool = False
 
     # Redis Configuration
@@ -102,6 +104,12 @@ class Settings(BaseSettings):
         if info.data.get("environment") == "production" and "*" in v:
             raise ValueError("Wildcard CORS origins are not allowed in production.")
         return v
+
+    @field_validator("ocr_strategy_profile", mode="before")
+    @classmethod
+    def normalize_ocr_strategy_profile(cls, value: str) -> str:
+        """Normalize OCR strategy profile input before Literal validation."""
+        return (value or "hybrid").strip().lower()
 
     model_config = SettingsConfigDict(
         env_file=".env",

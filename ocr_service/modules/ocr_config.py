@@ -2,15 +2,17 @@
 Configuration models for OCR engines.
 """
 
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class TesseractConfig(BaseModel):
     """Configuration for Tesseract OCR engine."""
 
-    oem: int = 3
-    psm: int = 6
-    lang: str = "spa+eng"
+    oem: int = Field(default=3, ge=0, le=3)
+    psm: int = Field(default=6, ge=0, le=13)
+    lang: str = Field(default="spa+eng", min_length=2, max_length=32)
 
     @property
     def flags(self) -> str:
@@ -21,18 +23,26 @@ class TesseractConfig(BaseModel):
 class EngineConfig(BaseModel):
     """General engine configuration."""
 
-    max_iterations: int = 3
-    max_iterations_card: int = 3
-    max_image_size_mb: int = 10
+    max_iterations: int = Field(default=3, ge=1, le=10)
+    max_iterations_card: int = Field(default=3, ge=1, le=10)
+    max_image_size_mb: int = Field(default=10, ge=1, le=50)
     default_doc_type: str = "generic"
     enable_reconstruction: bool = False
-    confidence_threshold: float = 0.5
-    max_upscale_factor: float = 2.0
-    max_long_side_px: int = 3000
+    confidence_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    max_upscale_factor: float = Field(default=2.0, ge=1.0, le=4.0)
+    max_long_side_px: int = Field(default=3000, ge=512, le=12000)
     enable_bin_lookup: bool = False
-    card_ocr_pass_limit: int = 2
-    card_ocr_timeout_seconds: float = 8.0
-    ocr_strategy_profile: str = "hybrid"
+    card_ocr_pass_limit: int = Field(default=2, ge=1, le=10)
+    card_ocr_timeout_seconds: float = Field(default=8.0, gt=0.0, le=60.0)
+    ocr_strategy_profile: Literal[
+        "deterministic", "layout_aware", "hybrid"
+    ] = "hybrid"
+
+    @field_validator("ocr_strategy_profile", mode="before")
+    @classmethod
+    def normalize_strategy_profile(cls, value: str) -> str:
+        """Normalize OCR strategy profile input before Literal validation."""
+        return (value or "hybrid").strip().lower()
 
     @property
     def normalized_strategy_profile(self) -> str:
