@@ -296,7 +296,10 @@ class DocumentProcessor:
         return self._needs_digit_rescue(text)
 
     def _prepare_digit_focus_image(self, img: np.ndarray) -> np.ndarray:
-        """Generate a high-contrast frame optimized for digit OCR retries."""
+        """
+        Generate a high-contrast frame optimized for digit OCR retries.
+        Uses 3x upscaling and CLAHE to bring out faint pixel remnants.
+        """
         if len(img.shape) == 3:
             gray = cast(
                 np.ndarray,
@@ -307,8 +310,18 @@ class DocumentProcessor:
         else:
             gray = img
 
-        upscaled = self.enhancer.upscale_and_smooth(gray, scale=2)
-        denoised = self.enhancer.denoise(upscaled)
+        # 3x upscale for higher fidelity on small/obscured digits
+        height, width = gray.shape[:2]
+        upscaled = cv2.resize(
+            gray, (width * 3, height * 3), interpolation=cv2.INTER_CUBIC
+        )
+
+        # Contrast Limited Adaptive Histogram Equalization (CLAHE)
+        # Specifically targets faint pixel remnants under thin occlusions.
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(upscaled)
+
+        denoised = self.enhancer.denoise(enhanced)
         return self.enhancer.apply_threshold(denoised)
 
     @staticmethod
@@ -1118,117 +1131,155 @@ class DocumentProcessor:
         """Public wrapper to normalize uncertain trailing partial PAN glyphs."""
         return self._mark_uncertain_partial_card_tail(text)
 
+    def _prepare_card_input_image(self, img: np.ndarray) -> np.ndarray:
+        """Apply conservative border padding for card OCR."""
+        try:
+            h, w = img.shape[:2]
+            pad = min(32, max(8, int(round(0.02 * max(h, w)))))
+            return ImageToolkit.prepare_roi(img, padding=pad)
+        except Exception as exc:
+            logger.debug("Card-mode border padding failed: %s", exc)
+            return img
+
+    def _card_strategy_images(self, img: np.ndarray) -> list[tuple[str, np.ndarray]]:
+        """Build candidate strategy images for card OCR."""
+        strategies: list[tuple[str, np.ndarray]] = [("raw", img)]
+        if len(img.shape) != 3:
+            return strategies
+
+        cleaned = self._remove_skin_occlusion(img)
+        if not np.array_equal(cleaned, img):
+            strategies.append(("skin-cleaned", cleaned))
+        return strategies
+
+    async def _prepare_card_focus_image(
+        self, work_img: np.ndarray
+    ) -> Optional[np.ndarray]:
+        """Prepare numeric-focused image used for box-level rescue."""
+        try:
+            return await asyncio.to_thread(self._prepare_digit_focus_image, work_img)
+        except Exception as e:
+            logger.debug("Card-mode focus preprocessing failed: %s", e)
+            return None
+
+    async def _append_card_candidate_variants(
+        self,
+        candidates: list[tuple[str, str]],
+        prefix: str,
+        label: str,
+        candidate_text: str,
+        focus_img: Optional[np.ndarray],
+    ) -> None:
+        """Append base/trimmed/box-rescued variants for a card OCR candidate."""
+        if not candidate_text:
+            return
+
+        full_label = f"{prefix}-{label}"
+        candidates.append((full_label, candidate_text))
+
+        trimmed_variant = self._trim_spurious_trailing_zero_variant(candidate_text)
+        if trimmed_variant and trimmed_variant != candidate_text:
+            candidates.append((f"{full_label}-trim", trimmed_variant))
+
+        if focus_img is None:
+            return
+
+        try:
+            boxed_candidate = await asyncio.to_thread(
+                self._char_box_digit_rescue,
+                focus_img,
+                candidate_text,
+                True,
+            )
+        except Exception as exc:
+            logger.debug("Card OCR box rescue failed for %s: %s", full_label, exc)
+            return
+
+        if boxed_candidate and boxed_candidate != candidate_text:
+            candidates.append((f"{full_label}-box", boxed_candidate))
+
+    async def _collect_card_candidates_for_strategy(
+        self,
+        work_img: np.ndarray,
+        prefix: str,
+    ) -> list[tuple[str, str]]:
+        """Collect OCR candidates for a single card strategy image."""
+        candidates: list[tuple[str, str]] = []
+        focus_img = await self._prepare_card_focus_image(work_img)
+
+        base_text = await asyncio.to_thread(
+            pytesseract.image_to_string,
+            work_img,
+            config=self.ocr_config.flags,
+        )
+        base_text = self.sanitize_text(base_text)
+        if base_text:
+            base_text = await self._rescue_ambiguous_digits(work_img, base_text)
+            await self._append_card_candidate_variants(
+                candidates, prefix, "default", base_text, focus_img
+            )
+
+        for idx, config in enumerate(self._card_ocr_configs(), start=1):
+            try:
+                candidate_text = await asyncio.to_thread(
+                    pytesseract.image_to_string,
+                    work_img,
+                    config=config,
+                )
+            except (
+                pytesseract.pytesseract.TesseractNotFoundError,
+                pytesseract.pytesseract.TesseractError,
+            ):
+                raise
+            except Exception as e:
+                logger.debug("Card OCR pass %d failed (%s): %s", idx, prefix, e)
+                continue
+
+            candidate_text = self.sanitize_text(candidate_text)
+            if not candidate_text:
+                continue
+
+            candidate_text = await self._rescue_ambiguous_digits(
+                work_img, candidate_text
+            )
+            if candidate_text:
+                await self._append_card_candidate_variants(
+                    candidates,
+                    prefix,
+                    f"card-pass-{idx}",
+                    candidate_text,
+                    focus_img,
+                )
+        return candidates
+
+    def _select_best_card_candidate(
+        self, candidates: list[tuple[str, str]]
+    ) -> tuple[str, str]:
+        """Select best candidate by card-aware scoring and mark uncertain tail."""
+        method, selected = max(
+            candidates,
+            key=lambda item: self._score_card_text(item[1]),
+        )
+        return method, self._mark_uncertain_partial_card_tail(selected)
+
     async def _extract_text_card_mode(self, img: np.ndarray) -> str:
         """
         Card-specific OCR strategy:
         run multiple numeric-focused passes and pick the best validated output.
         """
-        # Tesseract often drops glyphs touching the image boundary. Add a
-        # conservative white border to help recover trailing digits at edges.
-        try:
-            h, w = img.shape[:2]
-            pad = min(32, max(8, int(round(0.02 * max(h, w)))))
-            img = ImageToolkit.prepare_roi(img, padding=pad)
-        except Exception as exc:
-            logger.debug("Card-mode border padding failed: %s", exc)
-
-        async def _collect_candidates(
-            work_img: np.ndarray, prefix: str
-        ) -> list[tuple[str, str]]:
-            candidates: list[tuple[str, str]] = []
-            focus_img: Optional[np.ndarray] = None
-            try:
-                focus_img = await asyncio.to_thread(
-                    self._prepare_digit_focus_image, work_img
-                )
-            except Exception as e:
-                logger.debug("Card-mode focus preprocessing failed: %s", e)
-
-            async def _add_candidate(label: str, candidate_text: str) -> None:
-                if not candidate_text:
-                    return
-                full_label = f"{prefix}-{label}"
-                candidates.append((full_label, candidate_text))
-
-                trimmed_variant = self._trim_spurious_trailing_zero_variant(
-                    candidate_text
-                )
-                if trimmed_variant and trimmed_variant != candidate_text:
-                    candidates.append((f"{full_label}-trim", trimmed_variant))
-
-                if focus_img is None:
-                    return
-                try:
-                    boxed_candidate = await asyncio.to_thread(
-                        self._char_box_digit_rescue,
-                        focus_img,
-                        candidate_text,
-                        True,
-                    )
-                except Exception as exc:
-                    logger.debug(
-                        "Card OCR box rescue failed for %s: %s",
-                        full_label,
-                        exc,
-                    )
-                    return
-                if boxed_candidate and boxed_candidate != candidate_text:
-                    candidates.append((f"{full_label}-box", boxed_candidate))
-
-            base_text = await asyncio.to_thread(
-                pytesseract.image_to_string,
-                work_img,
-                config=self.ocr_config.flags,
-            )
-            base_text = self.sanitize_text(base_text)
-            if base_text:
-                base_text = await self._rescue_ambiguous_digits(work_img, base_text)
-                await _add_candidate("default", base_text)
-
-            for idx, config in enumerate(self._card_ocr_configs(), start=1):
-                try:
-                    candidate_text = await asyncio.to_thread(
-                        pytesseract.image_to_string,
-                        work_img,
-                        config=config,
-                    )
-                except (
-                    pytesseract.pytesseract.TesseractNotFoundError,
-                    pytesseract.pytesseract.TesseractError,
-                ):
-                    raise
-                except Exception as e:
-                    logger.debug("Card OCR pass %d failed (%s): %s", idx, prefix, e)
-                    continue
-
-                candidate_text = self.sanitize_text(candidate_text)
-                if not candidate_text:
-                    continue
-                candidate_text = await self._rescue_ambiguous_digits(
-                    work_img, candidate_text
-                )
-                if candidate_text:
-                    await _add_candidate(f"card-pass-{idx}", candidate_text)
-            return candidates
-
-        strategy_images: list[tuple[str, np.ndarray]] = [("raw", img)]
-        if len(img.shape) == 3:
-            cleaned = self._remove_skin_occlusion(img)
-            if not np.array_equal(cleaned, img):
-                strategy_images.append(("skin-cleaned", cleaned))
+        prepared_img = self._prepare_card_input_image(img)
+        strategy_images = self._card_strategy_images(prepared_img)
 
         all_candidates: list[tuple[str, str]] = []
         for prefix, strategy_img in strategy_images:
-            all_candidates.extend(await _collect_candidates(strategy_img, prefix))
+            all_candidates.extend(
+                await self._collect_card_candidates_for_strategy(strategy_img, prefix)
+            )
 
         if not all_candidates:
             return ""
 
-        method, selected = max(
-            all_candidates,
-            key=lambda item: self._score_card_text(item[1]),
-        )
-        selected = self._mark_uncertain_partial_card_tail(selected)
+        method, selected = self._select_best_card_candidate(all_candidates)
         logger.info(
             "Card OCR strategy selected %s (len=%d, score=%s)",
             method,
@@ -1680,8 +1731,10 @@ class IterativeOCREngine:
         if is_card_empty:
             strict_rules = (
                 "This is a payment card image with a colored stroke partially covering "
-                "the card number. Examine the pixel remnants and partial digit shapes "
-                "visible at the edges of and underneath the colored overlay. "
+                "the card number. Look extremely closely at the pixel remnants and "
+                "partial digit shapes visible at the edges of and underneath the "
+                "colored overlay, particularly at positions 9 and 12 (the start and "
+                "end of the third digit group). "
                 "Extract every digit or partial digit you can infer from visible "
                 "pixels. "
                 "For each digit position you cannot determine from visible pixels, "
@@ -1721,29 +1774,24 @@ class IterativeOCREngine:
         text = self.processor.sanitize_text(ai_result.get("text", ""))
         return self.processor.mark_uncertain_partial_card_tail(text)
 
-    async def _maybe_apply_quality_fallbacks(self, ctx: DocumentContext) -> None:
-        """
-        Apply quality fallbacks when iterative Tesseract output appears low quality.
-
-        This catches cases where Tesseract returns gibberish without raising errors.
-        """
+    def _quality_fallback_state(
+        self, ctx: DocumentContext
+    ) -> tuple[str, bool, bool, bool]:
+        """Compute fallback trigger state from current best OCR output."""
         best_text = (ctx.best_text or "").strip()
         low_confidence = ctx.best_confidence < self.config.confidence_threshold
         too_short = len(best_text) < 12
         ambiguous_digits = self.processor.needs_digit_rescue(best_text)
-        if not (low_confidence or too_short or ambiguous_digits):
-            return
+        return best_text, low_confidence, too_short, ambiguous_digits
 
-        logger.info(
-            "OCR fallback trigger (confidence=%.2f, len=%d, ambiguous_digits=%s); "
-            "attempting quality fallbacks",
-            ctx.best_confidence,
-            len(best_text),
-            ambiguous_digits,
-        )
+    async def _collect_quality_fallback_candidates(
+        self,
+        ctx: DocumentContext,
+        is_card_mode: bool,
+        too_short: bool,
+    ) -> list[tuple[str, str]]:
+        """Collect candidate texts from fallback providers."""
         candidates: list[tuple[str, str]] = []
-        is_card_mode = self.processor.is_card_doc_type()
-
         if not is_card_mode:
             textract_text = await self.processor.extract_text_textract(ctx.image_bytes)
             textract_text = self.processor.sanitize_text(textract_text)
@@ -1755,29 +1803,37 @@ class IterativeOCREngine:
         if direct_text:
             candidates.append(("direct-quality-fallback", direct_text))
 
-        needs_vision_fallback = not is_card_mode or (
-            is_card_mode and too_short and not direct_text
-        )
+        needs_vision_fallback = not is_card_mode or (too_short and not direct_text)
         if needs_vision_fallback:
             vision_text = await self._extract_text_multimodal_fallback(ctx)
             if vision_text:
                 candidates.append(("vision-llm-quality-fallback", vision_text))
+        return candidates
 
-        if not candidates:
-            return
+    def _select_best_quality_candidate(
+        self,
+        candidates: list[tuple[str, str]],
+    ) -> tuple[str, str, float]:
+        """Score and select highest-confidence fallback candidate."""
+        scored = [
+            (method, candidate_text, self.confidence_scorer.calculate(candidate_text))
+            for method, candidate_text in candidates
+        ]
+        return max(scored, key=lambda item: (item[2], len(item[1])))
 
-        scored = []
-        for method, candidate_text in candidates:
-            candidate_conf = self.confidence_scorer.calculate(candidate_text)
-            scored.append((method, candidate_text, candidate_conf))
-
-        method, selected_text, selected_conf = max(
-            scored, key=lambda item: (item[2], len(item[1]))
-        )
-        better_confidence = selected_conf > (ctx.best_confidence + 0.02)
+    def _quality_candidate_is_better(
+        self,
+        best_text: str,
+        best_confidence: float,
+        selected_text: str,
+        selected_conf: float,
+        ambiguous_digits: bool,
+    ) -> bool:
+        """Decide whether fallback candidate should replace current best output."""
+        better_confidence = selected_conf > (best_confidence + 0.02)
         better_coverage = (
             len(selected_text) > len(best_text) * 1.5
-            and selected_conf >= ctx.best_confidence
+            and selected_conf >= best_confidence
         )
         selected_digits = self.processor.digit_count(selected_text)
         base_digits = self.processor.digit_count(best_text)
@@ -1785,14 +1841,25 @@ class IterativeOCREngine:
         ambiguity_resolved = (
             ambiguous_digits and not self.processor.needs_digit_rescue(selected_text)
         )
-        if not (
+        return (
             better_confidence
             or better_coverage
             or digit_gain
             or ambiguity_resolved
-        ):
-            return
+        )
 
+    @staticmethod
+    def _fallback_preview_text(text: str) -> str:
+        return f"{text[:50]}..." if len(text) > 50 else text
+
+    def _apply_quality_fallback_selection(
+        self,
+        ctx: DocumentContext,
+        method: str,
+        selected_text: str,
+        selected_conf: float,
+    ) -> None:
+        """Apply selected fallback candidate to engine context."""
         ctx.best_text = selected_text
         ctx.best_confidence = selected_conf
         ctx.iteration_history.append(
@@ -1801,12 +1868,55 @@ class IterativeOCREngine:
                 "text_length": len(selected_text),
                 "confidence": selected_conf,
                 "method": method,
-                "preview_text": (
-                    f"{selected_text[:50]}..."
-                    if len(selected_text) > 50
-                    else selected_text
-                ),
+                "preview_text": self._fallback_preview_text(selected_text),
             }
+        )
+
+    async def _maybe_apply_quality_fallbacks(self, ctx: DocumentContext) -> None:
+        """
+        Apply quality fallbacks when iterative Tesseract output appears low quality.
+
+        This catches cases where Tesseract returns gibberish without raising errors.
+        """
+        best_text, low_confidence, too_short, ambiguous_digits = (
+            self._quality_fallback_state(ctx)
+        )
+        if not (low_confidence or too_short or ambiguous_digits):
+            return
+
+        logger.info(
+            "OCR fallback trigger (confidence=%.2f, len=%d, ambiguous_digits=%s); "
+            "attempting quality fallbacks",
+            ctx.best_confidence,
+            len(best_text),
+            ambiguous_digits,
+        )
+        is_card_mode = self.processor.is_card_doc_type()
+        candidates = await self._collect_quality_fallback_candidates(
+            ctx=ctx,
+            is_card_mode=is_card_mode,
+            too_short=too_short,
+        )
+        if not candidates:
+            return
+
+        method, selected_text, selected_conf = self._select_best_quality_candidate(
+            candidates
+        )
+        if not self._quality_candidate_is_better(
+            best_text=best_text,
+            best_confidence=ctx.best_confidence,
+            selected_text=selected_text,
+            selected_conf=selected_conf,
+            ambiguous_digits=ambiguous_digits,
+        ):
+            return
+
+        self._apply_quality_fallback_selection(
+            ctx=ctx,
+            method=method,
+            selected_text=selected_text,
+            selected_conf=selected_conf,
         )
         logger.info(
             "Quality fallback selected (%s, confidence=%.2f, len=%d)",
