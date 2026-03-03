@@ -198,6 +198,68 @@ class DocumentProcessor:
                 return textract_text
             return ""
 
+    async def extract_text_card_digits_only(self, image_bytes: bytes) -> str:
+        """
+        Card-focused fallback that extracts only digit sequences from source bytes.
+        Used when normal card OCR returns little/no text.
+        """
+        try:
+            img = await ImageToolkit.decode_image_async(image_bytes)
+            if img is None:
+                return ""
+
+            prepared = self._prepare_card_input_image(img)
+            if len(prepared.shape) == 3:
+                prepared = self._remove_colored_stroke(prepared)
+                prepared = self._remove_skin_occlusion(prepared)
+            focus_img = await asyncio.to_thread(self._prepare_digit_focus_image, prepared)
+        except Exception as e:
+            logger.warning("Digits-only card fallback preprocessing failed: %s", e)
+            return ""
+
+        best_compact = ""
+        best_score = (-1, float("-inf"), -1)
+        for psm in (7, 6, 11, 13):
+            config = (
+                f"--oem {self.ocr_config.oem} --psm {psm} -l eng "
+                "-c tessedit_char_whitelist=0123456789 "
+                "-c classify_bln_numeric_mode=1"
+            )
+            try:
+                candidate_raw = await asyncio.to_thread(
+                    pytesseract.image_to_string,
+                    focus_img,
+                    config=config,
+                )
+            except (
+                pytesseract.pytesseract.TesseractNotFoundError,
+                pytesseract.pytesseract.TesseractError,
+            ):
+                break
+            except Exception as e:
+                logger.debug("Digits-only card fallback pass failed (psm=%d): %s", psm, e)
+                continue
+
+            compact = re.sub(r"\D", "", candidate_raw or "")
+            compact_len = len(compact)
+            if compact_len < 12 or compact_len > 19:
+                continue
+
+            score = (
+                1 if compact_len >= 13 else 0,
+                -abs(16 - compact_len),
+                compact_len,
+            )
+            if score > best_score:
+                best_score = score
+                best_compact = compact
+
+        if not best_compact:
+            return ""
+        return " ".join(
+            best_compact[i : i + 4] for i in range(0, len(best_compact), 4)
+        ).strip()
+
     def sanitize_text(self, text: str) -> str:
         """Sanitize and validate extracted text to prevent corruption."""
         if not text or not isinstance(text, str):
@@ -1790,6 +1852,14 @@ class IterativeOCREngine:
     ) -> list[tuple[str, str]]:
         """Collect candidate texts from fallback providers."""
         candidates: list[tuple[str, str]] = []
+        if is_card_mode:
+            digit_text = await self.processor.extract_text_card_digits_only(
+                ctx.image_bytes
+            )
+            digit_text = self.processor.sanitize_text(digit_text)
+            if digit_text:
+                candidates.append(("digits-only-quality-fallback", digit_text))
+
         if not is_card_mode:
             textract_text = await self.processor.extract_text_textract(ctx.image_bytes)
             textract_text = self.processor.sanitize_text(textract_text)
@@ -2011,12 +2081,11 @@ class IterativeOCREngine:
             **analysis,
         }
 
-        # Override detected type with requested type if the user was explicit
-        # or if the detection was weak.
+        # Override detected type with requested type if the user was explicit.
+        # We use a strict check here: if the user said it's a card, it's a card.
         if requested_type and requested_type not in {"generic", "unknown"}:
             resp["document_type"] = requested_type
-            if "type_confidence" in resp:
-                resp["type_confidence"] = max(resp["type_confidence"], 0.50)
+            resp["type_confidence"] = 1.0  # Force maximum confidence for user intent
 
         if ctx.reconstruction_info:
             resp["reconstruction"] = ctx.reconstruction_info

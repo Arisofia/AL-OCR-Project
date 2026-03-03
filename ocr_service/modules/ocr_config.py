@@ -21,7 +21,7 @@ class EngineConfig(BaseModel):
     """General engine configuration."""
 
     max_iterations: int = 3
-    max_iterations_card: int = 1
+    max_iterations_card: int = 3
     max_image_size_mb: int = 10
     default_doc_type: str = "generic"
     enable_reconstruction: bool = False

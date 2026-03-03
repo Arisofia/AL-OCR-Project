@@ -152,7 +152,7 @@ function App() {
       formData.append('split', split)
       formData.append('doc_type', docType)
       formData.append('occlusion_type', occlusionType)
-      formData.append('use_reconstruction', String(useReconstruction))
+      formData.append('use_reconstruction', useReconstruction)
       formData.append('notes', notes)
 
       try {
