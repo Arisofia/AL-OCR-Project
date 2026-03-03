@@ -61,23 +61,51 @@ function App() {
   const handleUpload = async () => {
     if (!file) return
     setLoading(true)
-    const formData = new FormData()
-    formData.append('file', file)
+    const createPayload = () => {
+      const formData = new FormData()
+      formData.append('file', file)
+      return formData
+    }
 
-    try {
-      const response = await api.post('/ocr', formData, {
+    const requestOcr = (docTypeValue) =>
+      api.post('/ocr', createPayload(), {
         params: {
-          doc_type: ocrDocType
+          doc_type: docTypeValue
         },
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       })
+
+    try {
+      const response = await requestOcr(ocrDocType)
       setResult(response.data)
     } catch (error) {
-      console.error('OCR Error:', error)
-      const errorMsg = error.response?.data?.detail || 'Error processing document'
-      alert(`Status ${error.response?.status || 'Unknown'}: ${errorMsg}`)
+      let currentError = error
+      const shouldRetryWithGeneric =
+        ocrDocType === 'bank_card' &&
+        [502, 504].includes(currentError?.response?.status)
+
+      if (shouldRetryWithGeneric) {
+        try {
+          const fallbackResponse = await requestOcr('generic')
+          setResult(fallbackResponse.data)
+          alert('Bank Card mode timed out. Generic OCR fallback was used.')
+          return
+        } catch (fallbackError) {
+          currentError = fallbackError
+        }
+      }
+
+      console.error('OCR Error:', currentError)
+      const responseData = currentError.response?.data
+      const errorDetail =
+        typeof responseData === 'string'
+          ? responseData
+          : responseData?.detail
+      const errorMsg =
+        errorDetail || currentError.message || 'Error processing document'
+      alert(`Status ${currentError.response?.status || 'Unknown'}: ${errorMsg}`)
     } finally {
       setLoading(false)
     }

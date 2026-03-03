@@ -72,7 +72,10 @@ def get_ocr_engine(
     """Provides a configured IterativeOCREngine for document analysis."""
     config = EngineConfig(
         max_iterations=curr_settings.ocr_iterations,
+        max_iterations_card=curr_settings.ocr_card_iterations,
         enable_reconstruction=curr_settings.enable_reconstruction,
+        card_ocr_pass_limit=curr_settings.ocr_card_pass_limit,
+        card_ocr_timeout_seconds=curr_settings.ocr_card_timeout_seconds,
         enable_bin_lookup=curr_settings.enable_bin_lookup,
     )
     return IterativeOCREngine(config=config)

@@ -21,6 +21,7 @@ class EngineConfig(BaseModel):
     """General engine configuration."""
 
     max_iterations: int = 3
+    max_iterations_card: int = 1
     max_image_size_mb: int = 10
     default_doc_type: str = "generic"
     enable_reconstruction: bool = False
@@ -28,3 +29,5 @@ class EngineConfig(BaseModel):
     max_upscale_factor: float = 2.0
     max_long_side_px: int = 3000
     enable_bin_lookup: bool = False
+    card_ocr_pass_limit: int = 2
+    card_ocr_timeout_seconds: float = 8.0

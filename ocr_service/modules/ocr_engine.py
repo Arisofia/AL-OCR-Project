@@ -930,7 +930,7 @@ class DocumentProcessor:
 
     def _card_ocr_configs(self) -> list[str]:
         """Build Tesseract configs tuned for payment card documents."""
-        return [
+        configs = [
             (
                 f"--oem {self.ocr_config.oem} --psm 6 -l eng "
                 "-c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ/- "
@@ -947,6 +947,8 @@ class DocumentProcessor:
                 "-c classify_bln_numeric_mode=1"
             ),
         ]
+        limit = max(1, int(self.engine_config.card_ocr_pass_limit))
+        return configs[:limit]
 
     @staticmethod
     def _last_group_is_truncated(text: str) -> bool:
@@ -1173,7 +1175,25 @@ class DocumentProcessor:
                     img.shape,
                 )
                 if self._is_card_doc_type():
-                    text = await self._extract_text_card_mode(img)
+                    try:
+                        text = await asyncio.wait_for(
+                            self._extract_text_card_mode(img),
+                            timeout=max(
+                                1.0,
+                                self.engine_config.card_ocr_timeout_seconds,
+                            ),
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            "Card OCR timed out after %.1fs, using fast fallback pass",
+                            self.engine_config.card_ocr_timeout_seconds,
+                        )
+                        text = await asyncio.to_thread(
+                            pytesseract.image_to_string,
+                            img,
+                            config=self.ocr_config.flags,
+                        )
+                        text = self.sanitize_text(text)
                 else:
                     text = await asyncio.to_thread(
                         pytesseract.image_to_string,
@@ -1377,8 +1397,16 @@ class IterativeOCREngine:
                 self._analyze_layout(ctx),
             )
 
-            # Iteration Loop
-            for i in range(self.config.max_iterations):
+            # Iteration loop. Card mode has a tighter budget to reduce
+            # serverless timeout risk on low-CPU runtimes.
+            iterations = self.config.max_iterations
+            if self.processor._is_card_doc_type():
+                iterations = min(
+                    iterations,
+                    max(1, int(self.config.max_iterations_card)),
+                )
+
+            for i in range(iterations):
                 OCR_ITERATION_COUNT.inc()
                 await self._run_iteration(ctx, i)
 
@@ -1611,20 +1639,23 @@ class IterativeOCREngine:
             ambiguous_digits,
         )
         candidates: list[tuple[str, str]] = []
+        is_card_mode = self.processor._is_card_doc_type()
 
-        textract_text = await self.processor.extract_text_textract(ctx.image_bytes)
-        textract_text = self.processor.sanitize_text(textract_text)
-        if textract_text:
-            candidates.append(("textract-quality-fallback", textract_text))
+        if not is_card_mode:
+            textract_text = await self.processor.extract_text_textract(ctx.image_bytes)
+            textract_text = self.processor.sanitize_text(textract_text)
+            if textract_text:
+                candidates.append(("textract-quality-fallback", textract_text))
 
         direct_text = await self.processor.extract_text_direct(ctx.image_bytes)
         direct_text = self.processor.sanitize_text(direct_text)
         if direct_text:
             candidates.append(("direct-quality-fallback", direct_text))
 
-        vision_text = await self._extract_text_multimodal_fallback(ctx)
-        if vision_text:
-            candidates.append(("vision-llm-quality-fallback", vision_text))
+        if not is_card_mode:
+            vision_text = await self._extract_text_multimodal_fallback(ctx)
+            if vision_text:
+                candidates.append(("vision-llm-quality-fallback", vision_text))
 
         if not candidates:
             return

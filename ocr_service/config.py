@@ -48,6 +48,9 @@ class Settings(BaseSettings):
 
     enable_reconstruction: bool = False
     ocr_iterations: int = 3
+    ocr_card_iterations: int = 1
+    ocr_card_pass_limit: int = 2
+    ocr_card_timeout_seconds: float = 8.0
     enable_bin_lookup: bool = False
 
     # Redis Configuration
