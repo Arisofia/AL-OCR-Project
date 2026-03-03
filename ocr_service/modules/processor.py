@@ -29,6 +29,7 @@ from .pdf_converter import is_pdf, pdf_pages_to_images
 __all__ = ["OCRProcessor", "ProcessingConfig"]
 
 logger = logging.getLogger("ocr-service.processor")
+OCTET_STREAM = "application/octet-stream"
 
 
 @dataclass
@@ -49,6 +50,8 @@ class _NoopRedis:
 
     async def get(self, _key: str) -> None:
         """Get method for compatibility."""
+        await asyncio.sleep(0)
+        return None  # noqa: RET501,PLR1711
 
     async def set(
         self,
@@ -59,10 +62,12 @@ class _NoopRedis:
     ) -> bool:
         """Set method for compatibility."""
         _ = ex, _ex
+        await asyncio.sleep(0)
         return True
 
     async def delete(self, _key: str) -> int:
         """Delete method for compatibility."""
+        await asyncio.sleep(0)
         return 0
 
 
@@ -99,9 +104,7 @@ class OCRProcessor:
 
         inferred_type = file.content_type
         if not inferred_type and file.filename:
-            inferred_type = (
-                mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
-            )
+            inferred_type = mimetypes.guess_type(file.filename)[0] or OCTET_STREAM
 
         self._validate_file_type(inferred_type or "", file.filename, config.request_id)
         contents = await file.read()
@@ -109,12 +112,12 @@ class OCRProcessor:
         return await self.process_bytes(
             contents=contents,
             filename=file.filename or "unknown",
-            content_type=inferred_type or "application/octet-stream",
+            content_type=inferred_type or OCTET_STREAM,
             config=config,
             redis_client=redis_client,
         )
 
-    async def process_bytes(
+    async def process_bytes(  # pylint: disable=too-many-arguments
         self,
         contents: bytes,
         filename: str,
@@ -139,45 +142,16 @@ class OCRProcessor:
         )
 
         try:
-            # 1. Check cache
-            cached = await self._read_cached_result(redis_client, cache_key)
-            if cached:
-                OCR_IDEMPOTENCY_HIT_COUNT.inc()
-                if cached.get("status") == JobStatus.COMPLETED:
-                    return cast(dict[str, Any], cached)
-                if cached.get("status") == JobStatus.PROCESSING:
-                    raise OCRPipelineError(
-                        phase="idempotency",
-                        message="Request is already being processed",
-                        status_code=409,
-                        correlation_id=config.request_id,
-                        trace_id=get_current_trace_id(),
-                        filename=filename,
-                    )
-            else:
-                OCR_IDEMPOTENCY_MISS_COUNT.inc()
-
-            # 2. Mark as processing
-            await self._write_cached_result(
-                redis_client,
-                cache_key,
-                {"status": JobStatus.PROCESSING, "request_id": config.request_id},
-                120,
+            cached_result = await self._resolve_or_lock_idempotency(
+                redis_client=redis_client,
+                cache_key=cache_key,
+                request_id=config.request_id,
+                filename=filename,
             )
+            if cached_result is not None:
+                return cached_result
 
-            # 3. Execute OCR
-            use_recon = config.reconstruct or config.enable_reconstruction_config
-            if is_pdf(contents):
-                result = await self._process_pdf(
-                    contents, config.advanced, use_recon, config.doc_type
-                )
-            else:
-                result = await self._execute_ocr_strategy(
-                    contents,
-                    config.advanced,
-                    use_recon,
-                    config.doc_type,
-                )
+            result = await self._run_extraction(contents=contents, config=config)
 
             if "error" in result:
                 raise OCRPipelineError(
@@ -238,6 +212,60 @@ class OCRProcessor:
         ".pdf", ".tiff", ".tif", ".heic", ".heif", ".avif", ".webp", ".bmp",
     })
 
+    async def _resolve_or_lock_idempotency(
+        self,
+        redis_client: redis.Redis,
+        cache_key: str,
+        request_id: str,
+        filename: str,
+    ) -> Optional[dict[str, Any]]:
+        """Return cached result when complete, or lock request as processing."""
+        cached = await self._read_cached_result(redis_client, cache_key)
+        if cached:
+            OCR_IDEMPOTENCY_HIT_COUNT.inc()
+            if cached.get("status") == JobStatus.COMPLETED:
+                return cast(dict[str, Any], cached)
+            if cached.get("status") == JobStatus.PROCESSING:
+                raise OCRPipelineError(
+                    phase="idempotency",
+                    message="Request is already being processed",
+                    status_code=409,
+                    correlation_id=request_id,
+                    trace_id=get_current_trace_id(),
+                    filename=filename,
+                )
+        else:
+            OCR_IDEMPOTENCY_MISS_COUNT.inc()
+
+        await self._write_cached_result(
+            redis_client,
+            cache_key,
+            {"status": JobStatus.PROCESSING, "request_id": request_id},
+            120,
+        )
+        return None
+
+    async def _run_extraction(
+        self,
+        contents: bytes,
+        config: ProcessingConfig,
+    ) -> dict[str, Any]:
+        """Run OCR using PDF or image strategy depending on input contents."""
+        use_recon = config.reconstruct or config.enable_reconstruction_config
+        if is_pdf(contents):
+            return await self._process_pdf(
+                contents,
+                config.advanced,
+                use_recon,
+                config.doc_type,
+            )
+        return await self._execute_ocr_strategy(
+            contents,
+            config.advanced,
+            use_recon,
+            config.doc_type,
+        )
+
     def _validate_file_type(
         self,
         content_type: str,
@@ -249,8 +277,8 @@ class OCRProcessor:
             return
         if content_type == "application/pdf":
             return
-        if content_type == "application/octet-stream" and filename:
-            ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+        if content_type == OCTET_STREAM and filename:
+            ext = f".{filename.rsplit('.', 1)[-1].lower()}" if "." in filename else ""
             if ext in self._ACCEPTED_EXTENSIONS:
                 return
         raise OCRPipelineError(
@@ -266,7 +294,7 @@ class OCRProcessor:
             filename=filename,
         )
 
-    def _build_idempotency_key(
+    def _build_idempotency_key(  # pylint: disable=too-many-arguments
         self,
         idempotency_key: Optional[str],
         filename: str,
@@ -302,7 +330,7 @@ class OCRProcessor:
                 exc,
             )
             return None
-        except (json.JSONDecodeError, ValueError) as exc:
+        except ValueError as exc:
             OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(operation="get").inc()
             logger.exception("Redis read failed")
             raise OCRPipelineError(
@@ -442,7 +470,7 @@ class OCRProcessor:
                 use_reconstruction=use_recon,
             )
 
-    async def _persist_results(
+    async def _persist_results(  # pylint: disable=too-many-arguments
         self,
         contents: bytes,
         filename: str,
