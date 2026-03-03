@@ -8,6 +8,7 @@ black marker where embossed digit outlines may still be partially visible.
 
 import sys
 from pathlib import Path
+import re
 
 import cv2
 import numpy as np
@@ -42,7 +43,7 @@ def find_marker_bounds(img: np.ndarray) -> tuple:
     # Find contiguous dark region
     dark_cols = col_means < threshold
     # Find first and last dark column
-    dark_indices = np.where(dark_cols)[0]
+    dark_indices = np.nonzero(dark_cols)[0]
 
     if len(dark_indices) < 10:
         print("  No significant dark region found")
@@ -56,35 +57,40 @@ def find_marker_bounds(img: np.ndarray) -> tuple:
     return x_start, x_end, y_start, y_end
 
 
-def extract_boundary_zones(img: np.ndarray, marker_x_start: int, marker_x_end: int,
-                           y_start: int, y_end: int) -> dict:
+def extract_boundary_zones(  # pylint: disable=too-many-locals
+    img: np.ndarray,
+    marker_x_start: int,
+    marker_x_end: int,
+    y_start: int,
+    y_end: int,
+) -> dict:
     """Extract left and right boundary zones around the marker."""
-    h, w = img.shape[:2]
+    _height, width = img.shape[:2]
     margin = 80  # pixels of overlap with marker edges
 
     zones = {}
 
     # Left boundary: visible digits ending + start of marker
     left_x1 = max(0, marker_x_start - 120)
-    left_x2 = min(w, marker_x_start + margin)
+    left_x2 = min(width, marker_x_start + margin)
     zones["left_boundary"] = img[y_start:y_end, left_x1:left_x2]
     print(f"  Left boundary zone: x=[{left_x1}, {left_x2}]")
 
     # Right boundary: end of marker + visible digits starting
     right_x1 = max(0, marker_x_end - margin)
-    right_x2 = min(w, marker_x_end + 120)
+    right_x2 = min(width, marker_x_end + 120)
     zones["right_boundary"] = img[y_start:y_end, right_x1:right_x2]
     print(f"  Right boundary zone: x=[{right_x1}, {right_x2}]")
 
     # Left transition: just the first occluded digit zone
     lt_x1 = marker_x_start - 10
     lt_x2 = marker_x_start + 60
-    zones["left_transition"] = img[y_start:y_end, max(0, lt_x1):min(w, lt_x2)]
+    zones["left_transition"] = img[y_start:y_end, max(0, lt_x1):min(width, lt_x2)]
 
     # Right transition: just before the visible suffix resumes
     rt_x1 = marker_x_end - 60
     rt_x2 = marker_x_end + 10
-    zones["right_transition"] = img[y_start:y_end, max(0, rt_x1):min(w, rt_x2)]
+    zones["right_transition"] = img[y_start:y_end, max(0, rt_x1):min(width, rt_x2)]
 
     # Also extract each potential digit position within the marker
     marker_width = marker_x_end - marker_x_start
@@ -92,7 +98,7 @@ def extract_boundary_zones(img: np.ndarray, marker_x_start: int, marker_x_end: i
     for i in range(6):
         dx1 = int(marker_x_start + i * digit_width - 5)
         dx2 = int(marker_x_start + (i + 1) * digit_width + 5)
-        zones[f"digit_pos_{i+6}"] = img[y_start:y_end, max(0, dx1):min(w, dx2)]
+        zones[f"digit_pos_{i+6}"] = img[y_start:y_end, max(0, dx1):min(width, dx2)]
 
     return zones
 
@@ -115,7 +121,9 @@ def enhance_for_emboss(img: np.ndarray) -> np.ndarray:
     return big
 
 
-def enhance_emboss_variants(img: np.ndarray) -> list:
+def enhance_emboss_variants(  # pylint: disable=too-many-locals
+    img: np.ndarray,
+) -> list:
     """Generate multiple enhancement variants to maximize emboss visibility."""
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
     variants = []
@@ -140,7 +148,8 @@ def enhance_emboss_variants(img: np.ndarray) -> list:
     sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
     sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
     sobel_mag = np.sqrt(sobelx**2 + sobely**2)
-    sobel_norm = np.uint8(255 * sobel_mag / (sobel_mag.max() + 1e-6))
+    sobel_scaled = (255 * sobel_mag) / (sobel_mag.max() + 1e-6)
+    sobel_norm = np.clip(sobel_scaled, 0, 255).astype(np.uint8)
     h, w = sobel_norm.shape[:2]
     big_sobel = cv2.resize(sobel_norm, (w * 4, h * 4), interpolation=cv2.INTER_CUBIC)
     variants.append(("sobel-edge", big_sobel))
@@ -179,16 +188,15 @@ def ocr_zone(img: np.ndarray) -> list:
         try:
             text = pytesseract.image_to_string(img, config=config).strip()
             if text:
-                import re
                 digits = re.sub(r"\D", "", text)
                 results.append({"mode": mode, "text": text, "digits": digits})
-        except Exception:
-            pass
+        except (pytesseract.TesseractError, RuntimeError, TypeError, ValueError):
+            continue
 
     return results
 
 
-def main():
+def main():  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
     """Run boundary-zone digit extraction."""
     path = sys.argv[1] if len(sys.argv) > 1 else "/Users/jenineferderas/Desktop/card_image.jpg"
     img = load_image(path)
@@ -233,8 +241,11 @@ def main():
         if zone_results:
             all_evidence[zone_name] = zone_results
             # Show unique digit reads for this zone
-            unique_digits = set(r["digits"] for r in zone_results if r["digits"])
-            print(f"  {zone_name:20s}: {len(zone_results)} reads, unique digits: {sorted(unique_digits)[:15]}")
+            unique_digits = {row["digits"] for row in zone_results if row["digits"]}
+            print(
+                f"  {zone_name:20s}: {len(zone_results)} reads, "
+                f"unique digits: {sorted(unique_digits)[:15]}"
+            )
 
     print("\n" + "=" * 70)
     print("=== PER-POSITION DIGIT EVIDENCE ===")
