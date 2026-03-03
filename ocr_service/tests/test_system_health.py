@@ -19,6 +19,7 @@ async def test_health_degraded(monkeypatch):
 
     res = await health_check()
     assert res.status == "degraded"
+    assert res.components is not None
     assert res.components["redis"]["ok"] is False
 
 
@@ -37,5 +38,6 @@ async def test_health_redis_check_skipped(monkeypatch):
 
     res = await health_check()
     assert res.status == "ok"
+    assert res.components is not None
     assert res.components["redis"]["ok"] is True
     assert res.components["redis"]["skipped"] is True

@@ -1,3 +1,4 @@
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
@@ -35,8 +36,9 @@ def test_rate_limit_smoke_triggers_handler():
     settings.s3_bucket_name = "test-bucket"
 
     # Reset limiter storage to ensure a clean state for this test
-    if hasattr(limiter, "storage") and hasattr(limiter.storage, "clear"):
-        limiter.storage.clear()
+    limiter_storage = getattr(cast(Any, limiter), "storage", None)
+    if limiter_storage is not None and hasattr(limiter_storage, "clear"):
+        limiter_storage.clear()
 
     client = TestClient(app)
     headers = {str(settings.api_key_header_name): str(settings.ocr_api_key)}

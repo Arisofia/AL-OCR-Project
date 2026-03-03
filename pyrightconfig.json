@@ -5,8 +5,9 @@
   ],
   "exclude": [
     "**/.*",
-    ".venv",
+    "**/node_modules",
     "**/__pycache__",
+    ".venv",
     "ocr_service/tests",
     "frontend",
     "node_modules"

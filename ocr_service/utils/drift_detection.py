@@ -5,31 +5,37 @@ Uses evidently to compare production data against training reference.
 
 import logging
 import os
+from importlib import import_module
 from typing import Optional
 
 import pandas as pd
 
 from ocr_service.config import get_settings
 
-DATA_DRIFT_PRESET_CLS = None  # type: ignore[assignment]
-REPORT_CLS = None  # type: ignore[assignment]
-TEST_SUITE_CLS = None  # type: ignore[assignment]
-TEST_DRIFTED_COLUMNS_CLS = None  # type: ignore[assignment]
+DATA_DRIFT_PRESET_CLS = None
+REPORT_CLS = None
+TEST_SUITE_CLS = None
+TEST_DRIFTED_COLUMNS_CLS = None
 
 try:
-    from evidently.metric_preset import DataDriftPreset as _DataDriftPreset
-    from evidently.report import Report as _Report
-    from evidently.test_suite import TestSuite as _TestSuite
-    from evidently.tests import (
-        TestNumberOfDriftedColumns as _TestNumberOfDriftedColumns,
-    )
-
-    DATA_DRIFT_PRESET_CLS = _DataDriftPreset
-    REPORT_CLS = _Report
-    TEST_SUITE_CLS = _TestSuite
-    TEST_DRIFTED_COLUMNS_CLS = _TestNumberOfDriftedColumns
+    _metric_preset_mod = import_module("evidently.metric_preset")
+    _report_mod = import_module("evidently.report")
+    _test_suite_mod = import_module("evidently.test_suite")
+    _tests_mod = import_module("evidently.tests")
 except ImportError:
-    pass
+    _metric_preset_mod = None
+    _report_mod = None
+    _test_suite_mod = None
+    _tests_mod = None
+
+if _metric_preset_mod is not None:
+    DATA_DRIFT_PRESET_CLS = getattr(_metric_preset_mod, "DataDriftPreset", None)
+if _report_mod is not None:
+    REPORT_CLS = getattr(_report_mod, "Report", None)
+if _test_suite_mod is not None:
+    TEST_SUITE_CLS = getattr(_test_suite_mod, "TestSuite", None)
+if _tests_mod is not None:
+    TEST_DRIFTED_COLUMNS_CLS = getattr(_tests_mod, "TestNumberOfDriftedColumns", None)
 
 logger = logging.getLogger("ocr-service.drift")
 

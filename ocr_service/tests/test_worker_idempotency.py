@@ -1,5 +1,6 @@
 import base64
 import json
+from typing import Any, cast
 
 import fakeredis
 import pytest
@@ -21,7 +22,7 @@ class DummyEngine:
 async def redis_client():
     client = fakeredis.FakeAsyncRedis()
     yield client
-    await client.aclose()
+    await cast(Any, client).aclose()
 
 
 @pytest.fixture

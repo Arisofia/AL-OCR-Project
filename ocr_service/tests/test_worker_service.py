@@ -1,3 +1,4 @@
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -73,7 +74,9 @@ def test_process_s3_record_aws_error(worker, s3_record):
             "Error": {"Code": "AccessDenied", "Message": "No access"},
             "ResponseMetadata": {"RequestId": "AWS-RID-999"},
         }
-        mock_analyze.side_effect = ClientError(error_response, "AnalyzeDocument")
+        mock_analyze.side_effect = ClientError(
+            cast(Any, error_response), "AnalyzeDocument"
+        )
 
         with pytest.raises(ClientError):
             worker.process_s3_record(s3_record)

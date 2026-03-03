@@ -2,7 +2,7 @@
 
 import sys
 from types import ModuleType
-from typing import Optional
+from typing import Any, Optional, cast
 
 
 def _ensure_trace_module() -> ModuleType:
@@ -15,11 +15,11 @@ def _ensure_trace_module() -> ModuleType:
     trace_mod = getattr(opentelemetry_mod, "trace", None)
     if not isinstance(trace_mod, ModuleType):
         trace_mod = ModuleType("opentelemetry.trace")
-        opentelemetry_mod.trace = trace_mod
+        cast(Any, opentelemetry_mod).trace = trace_mod
         sys.modules["opentelemetry.trace"] = trace_mod
 
     if not hasattr(trace_mod, "get_current_span"):
-        trace_mod.get_current_span = lambda: None  # type: ignore[attr-defined]
+        cast(Any, trace_mod).get_current_span = lambda: None
 
     return trace_mod
 
@@ -28,15 +28,22 @@ try:
     from opentelemetry import trace as _trace
 except ImportError:
     _trace = _ensure_trace_module()
-trace = _trace
+trace: Any = _trace
 
 
 def get_current_trace_id() -> Optional[str]:
     """Return current trace ID as a hex string, or None if unavailable."""
-    span = trace.get_current_span()
+    get_current_span = getattr(trace, "get_current_span", None)
+    if not callable(get_current_span):
+        return None
+    span = get_current_span()
     if span is None:
         return None
-    ctx = span.get_span_context() if span is not None else None
-    if ctx is not None and getattr(ctx, "trace_id", None) is not None:
-        return format(ctx.trace_id, "x")
+    get_span_context = getattr(span, "get_span_context", None)
+    if not callable(get_span_context):
+        return None
+    ctx = get_span_context()
+    trace_id = getattr(ctx, "trace_id", None)
+    if isinstance(trace_id, int):
+        return format(trace_id, "x")
     return None

@@ -1,5 +1,7 @@
 """Tests for OCR response document-type behavior."""
 
+from typing import Any, cast
+
 from ocr_service.modules.document_intelligence import DocumentIntelligence
 from ocr_service.modules.ocr_engine import DocumentContext, IterativeOCREngine
 
@@ -19,8 +21,9 @@ class _FakeConfig:
 def test_build_response_prefers_requested_doc_type_when_text_is_empty(monkeypatch):
     """Explicit doc_type should be kept when classifier fallback is weak/empty."""
     engine = IterativeOCREngine.__new__(IterativeOCREngine)
-    engine.processor = _FakeProcessor()
-    engine.config = _FakeConfig()
+    engine_for_test = cast(Any, engine)
+    engine_for_test.processor = _FakeProcessor()
+    engine_for_test.config = _FakeConfig()
 
     monkeypatch.setattr(
         DocumentIntelligence,

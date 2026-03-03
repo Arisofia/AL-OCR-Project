@@ -43,7 +43,7 @@ async def test_verify_redis_connection_success():
 @pytest.mark.asyncio
 async def test_verify_redis_connection_failure(caplog):
     # Simulate a Redis connection error
-    class BrokenRedis(fakeredis.FakeAsyncRedis):
+    class BrokenRedis:
         async def ping(self):
             raise redis.exceptions.ConnectionError("Simulated connection error")
 
@@ -60,7 +60,7 @@ async def test_verify_redis_connection_failure(caplog):
 @pytest.mark.asyncio
 async def test_verify_redis_connection_timeout(caplog):
     # Simulate a Redis timeout
-    class SlowRedis(fakeredis.FakeAsyncRedis):
+    class SlowRedis:
         async def ping(self):
             await asyncio.sleep(2)  # Simulate a long delay
             return True

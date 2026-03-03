@@ -4,6 +4,7 @@
 # pylint: disable=missing-function-docstring,no-member,import-error,protected-access
 
 import logging
+import asyncio
 
 import cv2
 import numpy as np
@@ -81,7 +82,7 @@ async def test_decode_and_validate_handles_unexpected_preprocess_error(monkeypat
         image_bytes=b"valid-bytes", use_reconstruction=False, doc_type="generic"
     )
 
-    async def _decode_ok(_bytes):
+    async def _decode_ok(_bytes):  # noqa: RUF029
         return np.zeros((10, 10, 3), dtype=np.uint8)
 
     def _upscale_fail(*_args, **_kwargs):
@@ -99,9 +100,11 @@ async def test_process_image_uses_direct_fallback_when_decode_fails(monkeypatch)
     """Engine should use Pillow direct fallback if OpenCV decode path is unavailable."""
 
     async def _decode_fail(_self, _ctx):
+        await asyncio.sleep(0)
         return False
 
     async def _direct_text(_self, _image_bytes):
+        await asyncio.sleep(0)
         return "fallback OCR text"
 
     monkeypatch.setattr(DocumentProcessor, "decode_and_validate", _decode_fail)
@@ -904,7 +907,7 @@ async def test_extract_text_card_digits_only_uses_roi_candidates(monkeypatch):
         reconstructor=None,
     )
 
-    async def _decode(_image_bytes):
+    async def _decode(_image_bytes):  # noqa: RUF029
         return np.zeros((120, 320, 3), dtype=np.uint8)
 
     def _prepare_focus(_self, img):

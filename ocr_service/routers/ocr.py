@@ -130,7 +130,9 @@ def _build_remediation_hints(
     return hints
 
 
-def _compute_completeness_ratio(expected_count: int, missing_mandatory: list[str]) -> Optional[float]:
+def _compute_completeness_ratio(
+    expected_count: int, missing_mandatory: list[str]
+) -> Optional[float]:
     mandatory_present = max(0, expected_count - len(missing_mandatory))
     if not expected_count:
         return None
