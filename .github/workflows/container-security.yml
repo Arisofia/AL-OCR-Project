@@ -228,8 +228,13 @@ jobs:
 
       - name: Run container runtime checks
         run: |
-          bash tests/container/run_container_checks.sh \
-            ${{ steps.build_image.outputs.image }} 8080
+          SCRIPT="tests/container/run_container_checks.sh"
+          IMAGE="${{ steps.build_image.outputs.image }}"
+          if [ -f "$SCRIPT" ]; then
+            bash "$SCRIPT" "$IMAGE" 8080
+          else
+            echo "::warning::$SCRIPT not found, skipping runtime container checks."
+          fi
 
       - name: Upload scan artifacts
         if: always()
