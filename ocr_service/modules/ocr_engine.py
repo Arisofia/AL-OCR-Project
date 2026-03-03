@@ -2122,9 +2122,23 @@ class IterativeOCREngine:
     def _build_response(self, ctx: DocumentContext) -> dict[str, Any]:
         """Formats the final engine output."""
         requested_type = (ctx.doc_type or "").strip().lower()
+        requested_card_type = requested_type in {
+            "bank_card",
+            "card",
+            "credit_card",
+            "debit_card",
+        }
         # Final sanitization of the best text before response
         final_text = self.processor.sanitize_text(ctx.best_text)
         final_text = self.processor.mark_uncertain_partial_card_tail(final_text)
+        card_text_usable = (
+            self._is_usable_card_capture(final_text) if requested_card_type else True
+        )
+        response_confidence = ctx.best_confidence
+        if requested_card_type and not card_text_usable:
+            final_text = "No card detected / recapture required"
+            response_confidence = min(ctx.best_confidence, 0.20)
+
         analysis = DocumentIntelligence.analyze(
             final_text,
             layout_type=ctx.layout_type,
@@ -2132,13 +2146,13 @@ class IterativeOCREngine:
         )
         resp = {
             "text": final_text,
-            "confidence": ctx.best_confidence,
+            "confidence": response_confidence,
             "iterations": ctx.iteration_history,
-            "success": len(final_text) > 0,
+            "success": card_text_usable if requested_card_type else len(final_text) > 0,
             "pixel_coverage_ratio": self._estimate_pixel_coverage_ratio(
                 ctx.original_img
             ),
-            "readability_index": round(max(0.0, min(1.0, ctx.best_confidence)), 4),
+            "readability_index": round(max(0.0, min(1.0, response_confidence)), 4),
             "iteration_convergence": self._estimate_iteration_convergence(
                 ctx.iteration_history
             ),
@@ -2152,11 +2166,41 @@ class IterativeOCREngine:
         # We use a strict check here: if the user said it's a card, it's a card.
         if requested_type and requested_type not in {"generic", "unknown"}:
             resp["document_type"] = requested_type
-            resp["type_confidence"] = 1.0  # Force maximum confidence for user intent
+            if requested_card_type and not card_text_usable:
+                resp["type_confidence"] = 0.0
+                card_analysis = resp.get("card_analysis")
+                if not isinstance(card_analysis, dict):
+                    card_analysis = {}
+                card_analysis.update(
+                    {
+                        "detected": False,
+                        "requires_manual_review": True,
+                        "reason": "no_card_detected",
+                    }
+                )
+                resp["card_analysis"] = card_analysis
+            else:
+                resp["type_confidence"] = 1.0  # Force maximum confidence for user intent
 
         if ctx.reconstruction_info:
             resp["reconstruction"] = ctx.reconstruction_info
         return resp
+
+    def _is_usable_card_capture(self, text: str) -> bool:
+        """Heuristic gate to suppress gibberish outputs in explicit card mode."""
+        if not text:
+            return False
+
+        valid_count, _, _, _, max_len, digit_count, _ = self.processor.score_card_text(text)
+        noise_count = sum((not ch.isdigit()) and (not ch.isspace()) for ch in text)
+
+        if valid_count > 0 or max_len >= 13:
+            return True
+        if digit_count < 8:
+            return False
+        return (max_len >= 8 and noise_count <= 2) or (
+            digit_count >= 12 and noise_count <= 3
+        )
 
     def _schedule_learning(self, doc_type: str, model: str, layout: str, score: float):
         """Schedules background learning task."""

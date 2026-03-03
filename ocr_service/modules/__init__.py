@@ -2,7 +2,7 @@
 Entry point for ocr-service modules.
 """
 
-from typing import Any
+from typing import Any, cast
 
 from .advanced_recon import AdvancedPixelReconstructor
 from .ocr_engine import IterativeOCREngine
@@ -35,10 +35,11 @@ except ImportError:
 
         def apply_threshold(self, img: _np.ndarray) -> _np.ndarray:
             """Simple thresholding pass."""
-            if len(img.shape) == 3:
-                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            else:
-                gray = img  # type: ignore
+            gray = (
+                cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                if len(img.shape) == 3
+                else cast(_np.ndarray, img)
+            )
             _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY)
             return thresh
 

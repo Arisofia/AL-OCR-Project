@@ -83,6 +83,7 @@ async def test_decode_and_validate_handles_unexpected_preprocess_error(monkeypat
     )
 
     async def _decode_ok(_bytes):  # noqa: RUF029
+        await asyncio.sleep(0)
         return np.zeros((10, 10, 3), dtype=np.uint8)
 
     def _upscale_fail(*_args, **_kwargs):
@@ -131,6 +132,7 @@ async def test_extract_text_falls_back_to_textract_when_tesseract_missing(monkey
         raise engine_mod.pytesseract.pytesseract.TesseractNotFoundError()
 
     async def _fake_textract(_self, _image_bytes):
+        await asyncio.sleep(0)
         return "textract fallback text"
 
     monkeypatch.setattr(
@@ -159,6 +161,7 @@ async def test_extract_text_falls_back_to_textract_on_tesseract_runtime_error(
         raise engine_mod.pytesseract.pytesseract.TesseractError(1, "runtime failure")
 
     async def _fake_textract(_self, _image_bytes):
+        await asyncio.sleep(0)
         return "textract runtime fallback"
 
     monkeypatch.setattr(
@@ -180,13 +183,16 @@ async def test_process_image_applies_textract_quality_fallback(monkeypatch):
     calls = {"textract": 0, "direct": 0}
 
     async def _decode_ok(ctx):
+        await asyncio.sleep(0)
         ctx.current_img = np.zeros((32, 32, 3), dtype=np.uint8)
         return True
 
     async def _recon_noop(_ctx, _max_iterations):
+        await asyncio.sleep(0)
         return None
 
     async def _layout_noop(ctx):
+        await asyncio.sleep(0)
         ctx.layout_regions = []
         ctx.layout_type = "unknown"
 
@@ -194,17 +200,21 @@ async def test_process_image_applies_textract_quality_fallback(monkeypatch):
         return np.zeros((32, 32), dtype=np.uint8)
 
     async def _extract_low_quality(_img, _regions=None, _original_bytes=None):
+        await asyncio.sleep(0)
         return "IR {g W rm"
 
     async def _textract_good(_image_bytes):
+        await asyncio.sleep(0)
         calls["textract"] += 1
         return ("Factura total fecha nombre id " * 8).strip()
 
     async def _direct_empty(_image_bytes):
+        await asyncio.sleep(0)
         calls["direct"] += 1
         return ""
 
     async def _enhance_noop(img):
+        await asyncio.sleep(0)
         return img
 
     monkeypatch.setattr(engine.processor, "decode_and_validate", _decode_ok)
@@ -235,13 +245,16 @@ async def test_process_image_skips_textract_fallback_on_high_confidence(monkeypa
     calls = {"textract": 0}
 
     async def _decode_ok(ctx):
+        await asyncio.sleep(0)
         ctx.current_img = np.zeros((32, 32, 3), dtype=np.uint8)
         return True
 
     async def _recon_noop(_ctx, _max_iterations):
+        await asyncio.sleep(0)
         return None
 
     async def _layout_noop(ctx):
+        await asyncio.sleep(0)
         ctx.layout_regions = []
         ctx.layout_type = "unknown"
 
@@ -249,13 +262,16 @@ async def test_process_image_skips_textract_fallback_on_high_confidence(monkeypa
         return np.zeros((32, 32), dtype=np.uint8)
 
     async def _extract_high_quality(_img, _regions=None, _original_bytes=None):
+        await asyncio.sleep(0)
         return ("Factura total fecha nombre id " * 8).strip()
 
     async def _textract_unused(_image_bytes):
+        await asyncio.sleep(0)
         calls["textract"] += 1
         return "textract should not be used"
 
     async def _enhance_noop(img):
+        await asyncio.sleep(0)
         return img
 
     monkeypatch.setattr(engine.processor, "decode_and_validate", _decode_ok)
@@ -270,8 +286,8 @@ async def test_process_image_skips_textract_fallback_on_high_confidence(monkeypa
 
     assert calls["textract"] == 0
     assert "Factura total" in result.get("text", "")
-    assert not any(
-        i.get("method") == "textract-quality-fallback"
+    assert all(
+        i.get("method") != "textract-quality-fallback"
         for i in result.get("iterations", [])
     )
 
@@ -284,13 +300,16 @@ async def test_process_image_applies_direct_quality_fallback(monkeypatch):
     calls = {"textract": 0, "direct": 0}
 
     async def _decode_ok(ctx):
+        await asyncio.sleep(0)
         ctx.current_img = np.zeros((32, 32, 3), dtype=np.uint8)
         return True
 
     async def _recon_noop(_ctx, _max_iterations):
+        await asyncio.sleep(0)
         return None
 
     async def _layout_noop(ctx):
+        await asyncio.sleep(0)
         ctx.layout_regions = []
         ctx.layout_type = "unknown"
 
@@ -298,17 +317,21 @@ async def test_process_image_applies_direct_quality_fallback(monkeypatch):
         return np.zeros((32, 32), dtype=np.uint8)
 
     async def _extract_low_quality(_img, _regions=None, _original_bytes=None):
+        await asyncio.sleep(0)
         return "IR {g W rm"
 
     async def _textract_weak(_image_bytes):
+        await asyncio.sleep(0)
         calls["textract"] += 1
         return "IR {g W rm"
 
     async def _direct_good(_image_bytes):
+        await asyncio.sleep(0)
         calls["direct"] += 1
         return ("Factura total fecha nombre id " * 8).strip()
 
     async def _enhance_noop(img):
+        await asyncio.sleep(0)
         return img
 
     monkeypatch.setattr(engine.processor, "decode_and_validate", _decode_ok)
@@ -341,13 +364,16 @@ async def test_process_image_triggers_textract_fallback_on_ambiguous_digits(
     calls = {"textract": 0, "direct": 0}
 
     async def _decode_ok(ctx):
+        await asyncio.sleep(0)
         ctx.current_img = np.zeros((32, 32, 3), dtype=np.uint8)
         return True
 
     async def _recon_noop(_ctx, _max_iterations):
+        await asyncio.sleep(0)
         return None
 
     async def _layout_noop(ctx):
+        await asyncio.sleep(0)
         ctx.layout_regions = []
         ctx.layout_type = "unknown"
 
@@ -355,17 +381,21 @@ async def test_process_image_triggers_textract_fallback_on_ambiguous_digits(
         return np.zeros((32, 32), dtype=np.uint8)
 
     async def _extract_ambiguous(_img, _regions=None, _original_bytes=None):
+        await asyncio.sleep(0)
         return "4048 3700 04M!"
 
     async def _textract_good(_image_bytes):
+        await asyncio.sleep(0)
         calls["textract"] += 1
         return "4048 3700 0453"
 
     async def _direct_empty(_image_bytes):
+        await asyncio.sleep(0)
         calls["direct"] += 1
         return ""
 
     async def _enhance_noop(img):
+        await asyncio.sleep(0)
         return img
 
     monkeypatch.setattr(engine.processor, "decode_and_validate", _decode_ok)
@@ -403,13 +433,16 @@ async def test_process_image_applies_vision_llm_quality_fallback(monkeypatch):
     calls = {"textract": 0, "direct": 0, "vision": 0}
 
     async def _decode_ok(ctx):
+        await asyncio.sleep(0)
         ctx.current_img = np.zeros((32, 32, 3), dtype=np.uint8)
         return True
 
     async def _recon_noop(_ctx, _max_iterations):
+        await asyncio.sleep(0)
         return None
 
     async def _layout_noop(ctx):
+        await asyncio.sleep(0)
         ctx.layout_regions = []
         ctx.layout_type = "unknown"
 
@@ -417,13 +450,16 @@ async def test_process_image_applies_vision_llm_quality_fallback(monkeypatch):
         return np.zeros((32, 32), dtype=np.uint8)
 
     async def _extract_low_quality(_img, _regions=None, _original_bytes=None):
+        await asyncio.sleep(0)
         return "IR {g W rm"
 
     async def _textract_empty(_image_bytes):
+        await asyncio.sleep(0)
         calls["textract"] += 1
         return ""
 
     async def _direct_empty(_image_bytes):
+        await asyncio.sleep(0)
         calls["direct"] += 1
         return ""
 
@@ -435,6 +471,7 @@ async def test_process_image_applies_vision_llm_quality_fallback(monkeypatch):
         context=None,
         fallback=True,
     ):
+        await asyncio.sleep(0)
         _ = provider
         _ = fallback
         calls["vision"] += 1
@@ -442,6 +479,7 @@ async def test_process_image_applies_vision_llm_quality_fallback(monkeypatch):
         return {"text": ("Factura total fecha nombre id " * 8).strip()}
 
     async def _enhance_noop(img):
+        await asyncio.sleep(0)
         return img
 
     monkeypatch.setattr(engine.processor, "decode_and_validate", _decode_ok)
@@ -509,7 +547,8 @@ def test_preprocess_frame_uses_clean_for_ocr():
     )
 
     # Create a noisy image
-    img = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
+    rng = np.random.default_rng(42)
+    img = rng.integers(0, 255, (100, 100, 3), dtype=np.uint8)
 
     # First iteration (0) should use clean_for_ocr
     thresh = processor.preprocess_frame(img, iteration=0, use_recon=False)
@@ -529,7 +568,8 @@ def test_preprocess_frame_later_iterations_apply_pixel_rescue():
         reconstructor=None,
     )
 
-    img = np.random.randint(0, 255, (80, 120, 3), dtype=np.uint8)
+    rng = np.random.default_rng(42)
+    img = rng.integers(0, 255, (80, 120, 3), dtype=np.uint8)
     rescued = processor.preprocess_frame(img, iteration=2, use_recon=False)
 
     assert rescued.shape[0] > img.shape[0]
@@ -570,6 +610,7 @@ async def test_extract_text_uses_card_strategy_when_doc_type_is_bank_card(
     calls = []
 
     async def _passthrough_rescue(_self, _img, text):
+        await asyncio.sleep(0)
         return text
 
     def _fake_ocr(_img, config):
@@ -605,6 +646,7 @@ async def test_extract_text_card_mode_prefers_box_rescue_partial_over_noise(
     processor.set_active_doc_type("bank_card")
 
     async def _passthrough_rescue(_self, _img, text):
+        await asyncio.sleep(0)
         return text
 
     def _fake_ocr(_img, config):
@@ -654,6 +696,7 @@ async def test_extract_text_card_mode_trims_spurious_trailing_zero(monkeypatch):
     processor.set_active_doc_type("bank_card")
 
     async def _passthrough_rescue(_self, _img, text):
+        await asyncio.sleep(0)
         return text
 
     def _fake_ocr(_img, config):
@@ -704,6 +747,7 @@ async def test_extract_text_card_mode_prefers_raw_when_skin_cleanup_loses_signal
     processor.set_active_doc_type("bank_card")
 
     async def _passthrough_rescue(_self, _img, text):
+        await asyncio.sleep(0)
         return text
 
     def _fake_prepare(_self, img):
@@ -766,6 +810,27 @@ def test_build_response_marks_uncertain_partial_card_tail():
     assert response["card_analysis"]["requires_manual_review"] is True
 
 
+def test_build_response_rejects_unreadable_card_gibberish():
+    engine = engine_mod.IterativeOCREngine()
+    ctx = engine_mod.DocumentContext(
+        image_bytes=b"img-bytes",
+        use_reconstruction=False,
+        doc_type="bank_card",
+        best_text="4 L 7 - - -- 1 - - 5 4 SL 3 --F - I -3 - E 4 7",
+        best_confidence=0.55,
+    )
+    ctx.layout_type = "unknown"
+
+    response = engine._build_response(ctx)
+
+    assert response["text"] == "No card detected / recapture required"
+    assert response["success"] is False
+    assert response["document_type"] == "bank_card"
+    assert response["type_confidence"] == pytest.approx(0.0, abs=1e-9)
+    assert response["card_analysis"]["detected"] is False
+    assert response["card_analysis"]["reason"] == "no_card_detected"
+
+
 def test_build_response_exposes_quality_metrics():
     engine = engine_mod.IterativeOCREngine()
     ctx = engine_mod.DocumentContext(
@@ -800,13 +865,16 @@ async def test_process_image_activates_card_doc_type(monkeypatch):
     )
 
     async def _decode_ok(ctx):
+        await asyncio.sleep(0)
         ctx.current_img = np.zeros((32, 32, 3), dtype=np.uint8)
         return True
 
     async def _recon_noop(_ctx, _max_iterations):
+        await asyncio.sleep(0)
         return None
 
     async def _layout_noop(ctx):
+        await asyncio.sleep(0)
         ctx.layout_regions = []
         ctx.layout_type = "unknown"
 
@@ -814,12 +882,15 @@ async def test_process_image_activates_card_doc_type(monkeypatch):
         return np.zeros((32, 32), dtype=np.uint8)
 
     async def _extract_card_text(_img, _regions=None, _original_bytes=None):
+        await asyncio.sleep(0)
         return "4111 1111 1111 1111"
 
     async def _fallback_noop(_ctx):
+        await asyncio.sleep(0)
         return None
 
     async def _enhance_noop(img):
+        await asyncio.sleep(0)
         return img
 
     monkeypatch.setattr(engine.processor, "decode_and_validate", _decode_ok)
@@ -845,13 +916,16 @@ async def test_process_image_card_quality_fallback_uses_digits_only(monkeypatch)
     calls = {"digits_only": 0}
 
     async def _decode_ok(ctx):
+        await asyncio.sleep(0)
         ctx.current_img = np.zeros((32, 32, 3), dtype=np.uint8)
         return True
 
     async def _recon_noop(_ctx, _max_iterations):
+        await asyncio.sleep(0)
         return None
 
     async def _layout_noop(ctx):
+        await asyncio.sleep(0)
         ctx.layout_regions = []
         ctx.layout_type = "unknown"
 
@@ -859,19 +933,24 @@ async def test_process_image_card_quality_fallback_uses_digits_only(monkeypatch)
         return np.zeros((32, 32), dtype=np.uint8)
 
     async def _extract_empty(_img, _regions=None, _original_bytes=None):
+        await asyncio.sleep(0)
         return ""
 
     async def _direct_empty(_image_bytes):
+        await asyncio.sleep(0)
         return ""
 
     async def _digits_only(_image_bytes):
+        await asyncio.sleep(0)
         calls["digits_only"] += 1
         return "4111 1111 1111 1111"
 
     async def _vision_empty(_ctx):
+        await asyncio.sleep(0)
         return ""
 
     async def _enhance_noop(img):
+        await asyncio.sleep(0)
         return img
 
     monkeypatch.setattr(engine.processor, "decode_and_validate", _decode_ok)
@@ -908,6 +987,7 @@ async def test_extract_text_card_digits_only_uses_roi_candidates(monkeypatch):
     )
 
     async def _decode(_image_bytes):  # noqa: RUF029
+        await asyncio.sleep(0)
         return np.zeros((120, 320, 3), dtype=np.uint8)
 
     def _prepare_focus(_self, img):
@@ -915,9 +995,7 @@ async def test_extract_text_card_digits_only_uses_roi_candidates(monkeypatch):
 
     def _fake_ocr(img, config):
         _ = config
-        if img.shape[0] < 120:
-            return "4111111111111111"
-        return "1234"
+        return "4111111111111111" if img.shape[0] < 120 else "1234"
 
     monkeypatch.setattr(engine_mod.ImageToolkit, "decode_image_async", _decode)
     monkeypatch.setattr(
@@ -941,13 +1019,16 @@ async def test_process_image_card_fallback_prefers_card_digits_over_noisy_text(
     )
 
     async def _decode_ok(ctx):
+        await asyncio.sleep(0)
         ctx.current_img = np.zeros((32, 32, 3), dtype=np.uint8)
         return True
 
     async def _recon_noop(_ctx, _max_iterations):
+        await asyncio.sleep(0)
         return None
 
     async def _layout_noop(ctx):
+        await asyncio.sleep(0)
         ctx.layout_regions = []
         ctx.layout_type = "unknown"
 
@@ -955,21 +1036,26 @@ async def test_process_image_card_fallback_prefers_card_digits_over_noisy_text(
         return np.zeros((32, 32), dtype=np.uint8)
 
     async def _extract_empty(_img, _regions=None, _original_bytes=None):
+        await asyncio.sleep(0)
         return ""
 
     async def _direct_noisy(_image_bytes):
+        await asyncio.sleep(0)
         return "invoice total amount due"
 
     async def _digits_only(_image_bytes):
+        await asyncio.sleep(0)
         return "4111 1111 1111 1111"
 
     async def _vision_empty(_ctx):
+        await asyncio.sleep(0)
         return ""
 
     def _confidence(text):
         return 0.95 if "invoice" in text else 0.50
 
     async def _enhance_noop(img):
+        await asyncio.sleep(0)
         return img
 
     monkeypatch.setattr(engine.processor, "decode_and_validate", _decode_ok)
@@ -1031,9 +1117,11 @@ async def test_extract_text_textract_applies_digit_rescue(monkeypatch):
     )
 
     async def _fake_sync_textract(_self, _image_bytes):
+        await asyncio.sleep(0)
         return "4048 3700 04M!"
 
     async def _fake_rescue(_self, _image_bytes, _text):
+        await asyncio.sleep(0)
         return "4048 3700 0453"
 
     monkeypatch.setattr(

@@ -82,7 +82,7 @@ class BaseVisionProvider(VisionProvider, ABC):
             await self._client.aclose()
             self._client = None
 
-    async def _get_client(self) -> httpx.AsyncClient:
+    def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
             self._client = httpx.AsyncClient()
             self._own_client = True
@@ -94,22 +94,31 @@ class BaseVisionProvider(VisionProvider, ABC):
         headers: dict[str, str],
         json_payload: dict[str, Any],
         method: str = "POST",
-        timeout: float = 60.0,
     ) -> Union[dict[str, Any], list[Any]]:
         """
         Internal helper to perform HTTP requests with exponential backoff.
         """
-        client = await self._get_client()
+        client = self._get_client()
         attempt = 0
+        request_timeout = 60.0
         while attempt < self.max_retries:
             try:
-                response = await client.request(
-                    method,
-                    url,
-                    headers=headers,
-                    json=json_payload,
-                    timeout=timeout,
-                )
+                async with asyncio.timeout(request_timeout):
+                    response = await client.request(
+                        method,
+                        url,
+                        headers=headers,
+                        json=json_payload,
+                    )
+            except TimeoutError as e:
+                logger.error("Timeout on attempt %s: %s", attempt + 1, e)
+                if attempt == self.max_retries - 1:
+                    raise ProviderRuntimeError(
+                        f"Timeout after {self.max_retries} attempts"
+                    ) from e
+                attempt += 1
+                await asyncio.sleep(2**attempt)
+                continue
             except httpx.HTTPError as e:
                 logger.error("HTTP error on attempt %s: %s", attempt + 1, e)
                 if attempt == self.max_retries - 1:
