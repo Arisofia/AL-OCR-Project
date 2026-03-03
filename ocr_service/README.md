@@ -50,6 +50,14 @@ Notes:
   - `deterministic`: disables vision-LLM quality fallback; favors reproducible classic OCR paths.
   - `hybrid` (default): keeps traditional OCR with quality fallbacks, including vision-LLM when needed.
   - `layout_aware`: prioritizes early region-based extraction and forces reconstruction for layout-heavy documents.
+  - The engine now applies free/local profile routing automatically by `doc_type`:
+    - `bank_statement`, `statement`, `loan_application`, `kyc_form` → `layout_aware`
+    - `invoice`, `receipt` → `hybrid`
+  - Optional override map via `OCR_DOC_TYPE_STRATEGY_OVERRIDES` (JSON), for example:
+
+    ```bash
+    export OCR_DOC_TYPE_STRATEGY_OVERRIDES='{"receipt":"deterministic","bank_statement":"layout_aware"}'
+    ```
 - For production, secure CI credentials and use a locked-down IAM role and stricter Terraform policies (avoid wildcards in ARNs).
 
 ---

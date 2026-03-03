@@ -29,3 +29,18 @@ def test_allowed_origins_specific_production():
         allowed_origins=["https://example.com"],
     )
     assert settings.allowed_origins == ["https://example.com"]
+
+
+def test_doc_type_strategy_overrides_are_normalized():
+    """Doc-type override keys/values should normalize before validation."""
+    settings = Settings.model_validate(
+        {
+            "ocr_api_key": "test",
+            "ocr_doc_type_strategy_overrides": {
+                "Receipt": "Deterministic"
+            },
+        }
+    )
+    assert settings.ocr_doc_type_strategy_overrides == {
+        "receipt": "deterministic"
+    }

@@ -1,8 +1,6 @@
-"""
-Configuration models for OCR engines.
-"""
+"""Configuration models for OCR engines."""
 
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -37,6 +35,20 @@ class EngineConfig(BaseModel):
     ocr_strategy_profile: Literal[
         "deterministic", "layout_aware", "hybrid"
     ] = "hybrid"
+    doc_type_strategy_overrides: dict[
+        str, Literal["deterministic", "layout_aware", "hybrid"]
+    ] = Field(default_factory=dict)
+
+    _default_doc_type_strategy_map: dict[
+        str, Literal["deterministic", "layout_aware", "hybrid"]
+    ] = {
+        "bank_statement": "layout_aware",
+        "statement": "layout_aware",
+        "loan_application": "layout_aware",
+        "kyc_form": "layout_aware",
+        "invoice": "hybrid",
+        "receipt": "hybrid",
+    }
 
     @field_validator("ocr_strategy_profile", mode="before")
     @classmethod
@@ -45,21 +57,38 @@ class EngineConfig(BaseModel):
         return (value or "hybrid").strip().lower()
 
     @property
-    def normalized_strategy_profile(self) -> str:
+    def normalized_strategy_profile(
+        self,
+    ) -> Literal["deterministic", "layout_aware", "hybrid"]:
         """Return a normalized OCR strategy profile with a safe default."""
         profile = (self.ocr_strategy_profile or "hybrid").strip().lower()
-        if profile in {"deterministic", "layout_aware", "hybrid"}:
-            return profile
+        if profile == "deterministic":
+            return "deterministic"
+        elif profile == "layout_aware":
+            return "layout_aware"
         return "hybrid"
 
-    def allows_vision_quality_fallback(self) -> bool:
+    def strategy_profile_for_doc_type(
+        self, doc_type: Optional[str]
+    ) -> Literal["deterministic", "layout_aware", "hybrid"]:
+        """Resolve effective strategy profile for a given document type."""
+        key = (doc_type or "").strip().lower()
+        if key and key in self.doc_type_strategy_overrides:
+            return self.doc_type_strategy_overrides[key]
+        if key and key in self._default_doc_type_strategy_map:
+            return self._default_doc_type_strategy_map[key]
+        return self.normalized_strategy_profile
+
+    def allows_vision_quality_fallback(self, doc_type: Optional[str] = None) -> bool:
         """Return True when non-deterministic fallback routes are allowed."""
-        return self.normalized_strategy_profile != "deterministic"
+        return self.strategy_profile_for_doc_type(doc_type) != "deterministic"
 
-    def prefers_layout_regions(self) -> bool:
+    def prefers_layout_regions(self, doc_type: Optional[str] = None) -> bool:
         """Return True when layout-aware OCR region extraction is preferred."""
-        return self.normalized_strategy_profile == "layout_aware"
+        return self.strategy_profile_for_doc_type(doc_type) == "layout_aware"
 
-    def effective_use_reconstruction(self, requested: bool) -> bool:
+    def effective_use_reconstruction(
+        self, requested: bool, doc_type: Optional[str] = None
+    ) -> bool:
         """Resolve whether reconstruction should run for the current strategy."""
-        return self.prefers_layout_regions() or requested
+        return self.prefers_layout_regions(doc_type) or requested

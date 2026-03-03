@@ -37,6 +37,7 @@ class RedisWorker:
             max_iterations=self.settings.ocr_iterations,
             enable_reconstruction=self.settings.enable_reconstruction,
             ocr_strategy_profile=self.settings.ocr_strategy_profile,
+            doc_type_strategy_overrides=self.settings.ocr_doc_type_strategy_overrides,
             enable_bin_lookup=self.settings.enable_bin_lookup,
         )
         self.engine = IterativeOCREngine(config=engine_config)
@@ -175,6 +176,7 @@ class RedisWorker:
         return await self.engine.process_image(
             image_bytes,
             self.settings.enable_reconstruction,
+            doc_type=(job_data.get("doc_type") or None),
         )
 
     async def _handle_job_failure(

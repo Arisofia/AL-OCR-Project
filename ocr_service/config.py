@@ -6,7 +6,7 @@ supporting environment variable overrides and LRU caching for performance.
 """
 
 from functools import lru_cache
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     ocr_strategy_profile: Literal[
         "deterministic", "layout_aware", "hybrid"
     ] = "hybrid"
+    ocr_doc_type_strategy_overrides: dict[
+        str, Literal["deterministic", "layout_aware", "hybrid"]
+    ] = Field(default_factory=dict)
     enable_bin_lookup: bool = False
 
     # Redis Configuration
@@ -110,6 +113,23 @@ class Settings(BaseSettings):
     def normalize_ocr_strategy_profile(cls, value: str) -> str:
         """Normalize OCR strategy profile input before Literal validation."""
         return (value or "hybrid").strip().lower()
+
+    @field_validator("ocr_doc_type_strategy_overrides", mode="before")
+    @classmethod
+    def normalize_doc_type_strategy_overrides(
+        cls, value: Any
+    ) -> dict[str, str]:
+        """Normalize document-type strategy override keys and values."""
+        if value in (None, ""):
+            return {}
+        if not isinstance(value, dict):
+            return value
+        return {
+            (str(key) or "").strip().lower(): (str(strategy) or "hybrid")
+            .strip()
+            .lower()
+            for key, strategy in value.items()
+        }
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -1553,14 +1553,16 @@ class IterativeOCREngine:
             ):
                 return {"error": validation_error}
 
+            effective_doc_type = doc_type or self.config.default_doc_type
             effective_reconstruction = self.config.effective_use_reconstruction(
-                use_reconstruction
+                use_reconstruction,
+                effective_doc_type,
             )
 
             ctx = DocumentContext(
                 image_bytes=image_bytes,
                 use_reconstruction=effective_reconstruction,
-                doc_type=doc_type or self.config.default_doc_type,
+                doc_type=effective_doc_type,
             )
             self.processor.set_active_doc_type(ctx.doc_type)
 
@@ -1754,7 +1756,10 @@ class IterativeOCREngine:
             )
 
             use_regions = (
-                (i == 1 or (i == 0 and self.config.prefers_layout_regions()))
+                (
+                    i == 1
+                    or (i == 0 and self.config.prefers_layout_regions(ctx.doc_type))
+                )
                 and ctx.best_confidence < self.config.confidence_threshold
                 and len(ctx.layout_regions) > 1
             )
@@ -1908,7 +1913,7 @@ class IterativeOCREngine:
         )
         if (
             needs_vision_fallback
-            and self.config.allows_vision_quality_fallback()
+            and self.config.allows_vision_quality_fallback(ctx.doc_type)
         ):
             vision_text = await self._extract_text_multimodal_fallback(ctx)
             if vision_text:

@@ -79,6 +79,7 @@ def get_ocr_engine(
         card_ocr_pass_limit=curr_settings.ocr_card_pass_limit,
         card_ocr_timeout_seconds=curr_settings.ocr_card_timeout_seconds,
         ocr_strategy_profile=curr_settings.ocr_strategy_profile,
+        doc_type_strategy_overrides=curr_settings.ocr_doc_type_strategy_overrides,
         enable_bin_lookup=curr_settings.enable_bin_lookup,
     )
     return IterativeOCREngine(config=config)

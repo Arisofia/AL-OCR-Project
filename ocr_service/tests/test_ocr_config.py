@@ -42,3 +42,20 @@ def test_engine_config_rejects_invalid_card_timeout():
     """Card OCR timeout must be positive and within allowed range."""
     with pytest.raises(ValidationError):
         EngineConfig(card_ocr_timeout_seconds=0)
+
+
+def test_engine_config_uses_layout_aware_for_bank_statement_by_default():
+    """Bank statements should default to layout-aware strategy for better fidelity."""
+    config = EngineConfig(ocr_strategy_profile="deterministic")
+    assert config.strategy_profile_for_doc_type("bank_statement") == "layout_aware"
+    assert config.effective_use_reconstruction(False, "bank_statement") is True
+
+
+def test_engine_config_respects_doc_type_strategy_override():
+    """Explicit document-type override should take precedence over defaults."""
+    config = EngineConfig(
+        ocr_strategy_profile="layout_aware",
+        doc_type_strategy_overrides={"receipt": "deterministic"},
+    )
+    assert config.strategy_profile_for_doc_type("receipt") == "deterministic"
+    assert config.allows_vision_quality_fallback("receipt") is False
