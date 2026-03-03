@@ -14,6 +14,7 @@ class TesseractConfig(BaseModel):
 
     @property
     def flags(self) -> str:
+        """Return CLI flags for Tesseract based on configured OCR options."""
         return f"--oem {self.oem} --psm {self.psm} -l {self.lang}"
 
 
@@ -35,18 +36,20 @@ class EngineConfig(BaseModel):
 
     @property
     def normalized_strategy_profile(self) -> str:
+        """Return a normalized OCR strategy profile with a safe default."""
         profile = (self.ocr_strategy_profile or "hybrid").strip().lower()
         if profile in {"deterministic", "layout_aware", "hybrid"}:
             return profile
         return "hybrid"
 
     def allows_vision_quality_fallback(self) -> bool:
+        """Return True when non-deterministic fallback routes are allowed."""
         return self.normalized_strategy_profile != "deterministic"
 
     def prefers_layout_regions(self) -> bool:
+        """Return True when layout-aware OCR region extraction is preferred."""
         return self.normalized_strategy_profile == "layout_aware"
 
     def effective_use_reconstruction(self, requested: bool) -> bool:
-        if self.prefers_layout_regions():
-            return True
-        return requested
+        """Resolve whether reconstruction should run for the current strategy."""
+        return self.prefers_layout_regions() or requested

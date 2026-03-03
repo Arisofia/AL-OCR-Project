@@ -117,9 +117,9 @@ try:
     # Only import the API to avoid side effects.
     # The SDK should be configured in the application entry point
     # (e.g., main.py).
-    tracer = trace.get_tracer(__name__)
+    TRACER = trace.get_tracer(__name__)
 except ImportError:
-    tracer = None
+    TRACER = None
 
 
 @lru_cache
@@ -127,7 +127,7 @@ def get_settings() -> Settings:
     """
     Returns a cached instance of the application settings.
     """
-    if tracer:
-        with tracer.start_as_current_span("load_settings"):
+    if TRACER:
+        with TRACER.start_as_current_span("load_settings"):
             return Settings()  # type: ignore[call-arg]
     return Settings()  # type: ignore[call-arg]
