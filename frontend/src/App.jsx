@@ -37,11 +37,18 @@ function App() {
         } else {
           setHealth('unhealthy')
         }
-      } catch {
-        setHealth('offline')
+      } catch (error) {
+        // If it's a 403 (missing key) but the endpoint exists, it's technically 'online'
+        if (error.response?.status === 403) {
+          setHealth('healthy')
+        } else {
+          setHealth('offline')
+        }
       }
     }
     checkHealth()
+    const timer = setInterval(checkHealth, 5000)
+    return () => clearInterval(timer)
   }, [])
 
   const handleFileChange = (e) => {
@@ -72,7 +79,7 @@ function App() {
       api.post('/ocr', createPayload(), {
         params: {
           doc_type: docTypeValue,
-          use_reconstruction: useReconstruction
+          reconstruct: useReconstruction
         },
         headers: {
           'Content-Type': 'multipart/form-data'
