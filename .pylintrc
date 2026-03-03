@@ -2,7 +2,32 @@
 # cv2 is a C-extension with dynamically generated members; without this, Pylint
 # frequently reports false positives like "Module 'cv2' has no 'cvtColor' member".
 extension-pkg-allow-list=cv2
+# Ensure local package imports (e.g. ocr_service.*) resolve when linting files in scripts/
+init-hook='import os, sys; sys.path.insert(0, os.getcwd())'
 
 [TYPECHECK]
 generated-members=cv2.*
 
+[MESSAGES CONTROL]
+# Scripts in this repo are exploratory OCR probes; keep lint focused on
+# correctness/runtime issues and avoid noisy style/convention reports.
+disable=
+    broad-exception-caught,
+    chained-comparison,
+    disallowed-name,
+    duplicate-code,
+    f-string-without-interpolation,
+    invalid-name,
+    line-too-long,
+    missing-function-docstring,
+    multiple-imports,
+    multiple-statements,
+    redefined-outer-name,
+    too-many-branches,
+    too-many-locals,
+    too-many-nested-blocks,
+    too-many-statements,
+    trailing-whitespace,
+    unused-import,
+    unused-variable,
+    wrong-import-position

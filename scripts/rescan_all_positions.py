@@ -21,6 +21,7 @@ OCR_CONFIGS: Final[tuple[str, ...]] = (
 )
 THRESHOLDS: Final[tuple[int, ...]] = (120, 160)
 OCR_EXCEPTIONS = (pytesseract.TesseractError, RuntimeError, TypeError, ValueError)
+GAP_FACTORS: Final[tuple[float, ...]] = (0.0, 0.5, 1.0)
 
 
 def load_roi(image_path: str = DEFAULT_IMAGE_PATH) -> tuple[np.ndarray, np.ndarray, int]:
@@ -93,29 +94,39 @@ def ocr_single_digit(image: np.ndarray) -> list[str]:
     return reads
 
 
-def collect_votes(position: int, width: int, channels: dict[str, np.ndarray]) -> Counter[str]:
-    """Collect OCR votes for one hidden card position."""
-    y0, y1 = OCR_Y_RANGE
+def _iter_search_windows(position: int, width: int):
+    """Yield horizontal search windows for one position."""
     offset_from_zero = 12 - position
-    votes: Counter[str] = Counter()
-
     for x_zero in OX_CANDIDATES:
-        for gap_factor in (0.0, 0.5, 1.0):
+        for gap_factor in GAP_FACTORS:
             gap = PITCH * gap_factor
             center_x = x_zero - gap - PITCH * (offset_from_zero - 0.5)
             half_width = PITCH * 0.6
             x0 = max(0, int(center_x - half_width))
             x1 = min(width, int(center_x + half_width))
-            if x1 - x0 < 10:
-                continue
+            if x1 - x0 >= 10:
+                yield x0, x1
 
-            for channel_image in channels.values():
-                zone = channel_image[y0:y1, x0:x1]
-                if zone.size == 0:
-                    continue
-                for variant in enhance(zone):
-                    for digit in ocr_single_digit(variant):
-                        votes[digit] += 1
+
+def _collect_zone_votes(
+    votes: Counter[str], channels: dict[str, np.ndarray], x0: int, x1: int
+) -> None:
+    """Accumulate OCR votes for one horizontal zone across channels."""
+    y0, y1 = OCR_Y_RANGE
+    for channel_image in channels.values():
+        zone = channel_image[y0:y1, x0:x1]
+        if zone.size == 0:
+            continue
+        for variant in enhance(zone):
+            for digit in ocr_single_digit(variant):
+                votes[digit] += 1
+
+
+def collect_votes(position: int, width: int, channels: dict[str, np.ndarray]) -> Counter[str]:
+    """Collect OCR votes for one hidden card position."""
+    votes: Counter[str] = Counter()
+    for x0, x1 in _iter_search_windows(position, width):
+        _collect_zone_votes(votes, channels, x0, x1)
     return votes
 
 

@@ -14,9 +14,9 @@ OCR_WL = "-c tessedit_char_whitelist=0123456789"
 OCR_EXCEPTIONS = (pytesseract.TesseractError, RuntimeError, TypeError, ValueError)
 
 
-def ocr_zone_fast(gray_zone, scale=6):
+def ocr_zone_fast(gray_zone: np.ndarray, scale: int = 6) -> Counter:
     """OCR a single-digit zone — lean variant."""
-    votes = Counter()
+    votes: Counter = Counter()
     h, w = gray_zone.shape[:2]
 
     # 4 key enhancements only
@@ -45,19 +45,23 @@ def ocr_zone_fast(gray_zone, scale=6):
 
     for var_img in variants:
         for cfg in configs:
-            for t in thresholds:
-                src = var_img if t == 0 else cv2.threshold(var_img, t, 255, cv2.THRESH_BINARY)[1]
+            for thresh in thresholds:
+                src = (
+                    var_img
+                    if thresh == 0
+                    else cv2.threshold(var_img, thresh, 255, cv2.THRESH_BINARY)[1]
+                )
                 try:
                     txt = pytesseract.image_to_string(src, config=cfg).strip()
                     d = re.sub(r"\D", "", txt)
                     if d:
                         votes[d[0]] += 1
                 except OCR_EXCEPTIONS:
-                    pass
+                    continue
     return votes
 
 
-def main():
+def main() -> None:
     img = cv2.imread(IMG)
     if img is None:
         sys.exit(f"Cannot load {IMG}")

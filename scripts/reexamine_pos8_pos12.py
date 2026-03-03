@@ -20,6 +20,7 @@ Strategy:
 import re
 import sys
 from collections import Counter
+from typing import TypedDict
 
 import cv2
 import numpy as np
@@ -29,6 +30,14 @@ IMG = sys.argv[1] if len(sys.argv) > 1 else "/Users/jenineferderas/Desktop/card_
 
 OCR_WL = "-c tessedit_char_whitelist=0123456789"
 OCR_EXCEPTIONS = (pytesseract.TesseractError, RuntimeError, TypeError, ValueError)
+
+
+class DigitBox(TypedDict):
+    ch: str
+    x1: int
+    y1: int
+    x2: int
+    y2: int
 
 
 def ocr_zone(gray_zone, scale=8):
@@ -181,7 +190,7 @@ def main():
 
     # ── Also use char-box approach to locate '0665' precisely ──
     print("\n=== Char-box location of suffix '0665' ===")
-    best_digit_boxes = []
+    best_digit_boxes: list[DigitBox] = []
     best_idx_0665 = -1
     best_label = "N/A"
     best_digits_len = -1
@@ -195,7 +204,7 @@ def main():
                 data = pytesseract.image_to_boxes(src, config=cfg)
             except OCR_EXCEPTIONS:
                 continue
-            boxes = []
+            boxes: list[DigitBox] = []
             for line in data.strip().split("\n"):
                 parts = line.split()
                 if len(parts) >= 5:
