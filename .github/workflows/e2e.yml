@@ -145,7 +145,7 @@ jobs:
         run: |
           nohup uvicorn main:app --host 0.0.0.0 --port 8000 \
             > ../backend.log 2>&1 &
-          npx wait-on -t 60000 http://localhost:8000/health
+          npx wait-on -t 60000 http-get://localhost:8000/health
 
       - name: Start frontend (serve build when not deploying externally)
         working-directory: ./frontend
@@ -153,7 +153,7 @@ jobs:
           if [ -z "$DEPLOY_URL" ]; then
             SERVER_CMD="npx -y http-server dist -p 5173 --silent"
             nohup $SERVER_CMD > ../frontend.log 2>&1 &
-            npx wait-on -t 60000 http://localhost:5173
+            npx wait-on -t 60000 http-get://localhost:5173
           else
             echo "External preview available: $DEPLOY_URL"
           fi
