@@ -64,6 +64,7 @@ async def test_document_processor_applies_upscaling():
 
     success = await processor.decode_and_validate(ctx)
     assert success
+    assert ctx.current_img is not None
     assert ctx.current_img.shape[0] > 200  # Should be upscaled
 
 
@@ -378,8 +379,10 @@ async def test_process_image_triggers_textract_fallback_on_ambiguous_digits(
     assert calls["textract"] == 1
     assert calls["direct"] == 1
     # Keep the digits extracted by Textract; do not predict/complete missing PAN digits.
-    assert result.get("text").startswith("4048 3700 0453")
-    assert len(result.get("text").replace(" ", "")) == 12
+    text = result.get("text")
+    assert isinstance(text, str)
+    assert text.startswith("4048 3700 0453")
+    assert len(text.replace(" ", "")) == 12
     assert result.get("document_type") == "bank_card"
     assert result.get("card_analysis", {}).get("detected") is True
     assert result.get("card_analysis", {}).get("requires_manual_review") is True
@@ -540,7 +543,7 @@ def test_remove_skin_occlusion_whitens_detected_skin_regions():
     )
 
     img = np.zeros((30, 30, 3), dtype=np.uint8)
-    skin_hsv = np.uint8([[[10, 150, 220]]])
+    skin_hsv = np.array([[[10, 150, 220]]], dtype=np.uint8)
     skin_bgr = cv2.cvtColor(skin_hsv, cv2.COLOR_HSV2BGR)[0, 0]
     img[8:22, 8:22] = skin_bgr
 
