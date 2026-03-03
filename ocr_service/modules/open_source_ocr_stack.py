@@ -17,7 +17,6 @@ from ocr_service.modules.ocr_engine import IterativeOCREngine
 DocumentStatus = Literal["OK", "PARTIAL", "FAILED"]
 QualityClass = Literal["GOOD", "PARTIAL", "UNUSABLE"]
 DATE_PATTERN = r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b"
-DATE_PATTERN = r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b"
 TXN_DATE_PATTERN = r"\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?"
 
 
@@ -189,9 +188,7 @@ class FintechQualityEvaluator:
     def _classify_score(score: float) -> QualityClass:
         if score >= 0.75:
             return "GOOD"
-        if score >= 0.45:
-            return "PARTIAL"
-        return "UNUSABLE"
+        return "UNUSABLE" if score < 0.45 else "PARTIAL"
 
     @staticmethod
     def _alnum_ratio(text: str) -> float:
@@ -349,12 +346,11 @@ class FintechNormalizer:
 
     @staticmethod
     def _first_match(text: str, pattern: str) -> Optional[str]:
-        match = re.search(pattern, text or "")
-        if not match:
-            return None
-        if match.groups():
-            return (match[1] or "").strip() or None
-        return (match[0] or "").strip() or None
+        if match := re.search(pattern, text or ""):
+            if match.groups():
+                return (match[1] or "").strip() or None
+            return (match[0] or "").strip() or None
+        return None
 
 
 class OpenSourceOCRRouter:
@@ -376,11 +372,11 @@ class OpenSourceOCRRouter:
 
     async def process_document(self, input_doc: DocumentInput) -> DocumentResult:
         """Process one document through adaptive three-layer OCR routing."""
-        payload = self._resolve_bytes(input_doc)
-        fallback_chain: list[str] = []
+        fallback_chain: list[str] = ["layer1:iterative_tesseract"]
 
+        payload = self._resolve_bytes(input_doc)
         l1 = await self._run_layer1(payload, input_doc)
-        fallback_chain.append(l1.engine_used)
+        fallback_chain[0] = l1.engine_used
         q1 = self.evaluator.evaluate(
             l1.text,
             input_doc.document_type,
