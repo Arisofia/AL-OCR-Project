@@ -65,7 +65,7 @@ def extract_boundary_zones(  # pylint: disable=too-many-locals
     y_end: int,
 ) -> dict:
     """Extract left and right boundary zones around the marker."""
-    _height, width = img.shape[:2]
+    _, width = img.shape[:2]
     margin = 80  # pixels of overlap with marker edges
 
     zones = {}
@@ -150,7 +150,7 @@ def enhance_emboss_variants(  # pylint: disable=too-many-locals
     sobel_mag = np.sqrt(sobelx**2 + sobely**2)
     sobel_scaled = (255 * sobel_mag) / (sobel_mag.max() + 1e-6)
     sobel_norm = np.clip(sobel_scaled, 0, 255).astype(np.uint8)
-    h, w = sobel_norm.shape[:2]
+    h, w = sobel_norm.shape
     big_sobel = cv2.resize(sobel_norm, (w * 4, h * 4), interpolation=cv2.INTER_CUBIC)
     variants.append(("sobel-edge", big_sobel))
 
@@ -277,12 +277,15 @@ def main():  # pylint: disable=too-many-locals,too-many-branches,too-many-statem
 
     # Also analyze boundary zones
     print("\n=== BOUNDARY ZONE EVIDENCE ===\n")
-    for zone_name in ["left_boundary", "right_boundary", "left_transition", "right_transition"]:
+    for zone_name in [
+        "left_boundary",
+        "right_boundary",
+        "left_transition",
+        "right_transition",
+    ]:
         if zone_name not in all_evidence:
             continue
-        unique = set()
-        for r in all_evidence[zone_name]:
-            unique.add(r["digits"])
+        unique = {row["digits"] for row in all_evidence[zone_name]}
         print(f"  {zone_name}: {sorted(unique)[:10]}")
 
 
