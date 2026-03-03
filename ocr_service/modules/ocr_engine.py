@@ -1719,6 +1719,28 @@ class IterativeOCREngine:
             layout_type=ctx.layout_type,
             include_bin_info=self.config.enable_bin_lookup,
         )
+        requested_type = (ctx.doc_type or "").strip().lower()
+        if requested_type and requested_type not in {"generic", "unknown"}:
+            detected_type = str(analysis.get("document_type", "")).strip().lower()
+            try:
+                detected_confidence = float(analysis.get("type_confidence", 0.0))
+            except (TypeError, ValueError):
+                detected_confidence = 0.0
+
+            weak_detected_type = detected_type in {
+                "",
+                "unknown",
+                "generic_document",
+                "statement",
+                "form",
+            }
+            if not final_text.strip() or (
+                weak_detected_type and detected_confidence <= 0.65
+            ):
+                # Respect explicit user intent when auto-classification is weak.
+                analysis["document_type"] = requested_type
+                analysis["type_confidence"] = round(max(detected_confidence, 0.50), 2)
+
         resp = {
             "text": final_text,
             "confidence": ctx.best_confidence,
