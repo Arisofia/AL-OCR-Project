@@ -1652,7 +1652,10 @@ class IterativeOCREngine:
         if direct_text:
             candidates.append(("direct-quality-fallback", direct_text))
 
-        if not is_card_mode:
+        needs_vision_fallback = not is_card_mode or (
+            is_card_mode and too_short and not direct_text
+        )
+        if needs_vision_fallback:
             vision_text = await self._extract_text_multimodal_fallback(ctx)
             if vision_text:
                 candidates.append(("vision-llm-quality-fallback", vision_text))

@@ -111,6 +111,7 @@ async def perform_document_ocr(
     file: UploadFile = File(...),
     reconstruct: bool = False,
     advanced: bool = False,
+    doc_type: str = "generic",
     _api_key: str = Depends(get_api_key),
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
     request_id: str = Depends(get_request_id),
@@ -159,7 +160,7 @@ async def perform_document_ocr(
         config = ProcessingConfig(
             reconstruct=reconstruct,
             advanced=advanced,
-            doc_type="generic",
+            doc_type=doc_type,
             enable_reconstruction_config=curr_settings.enable_reconstruction,
             request_id=request_id,
             idempotency_key=idempotency_key,
@@ -185,6 +186,15 @@ async def perform_document_ocr(
                 type_confidence = float(raw_type_confidence)
             except (TypeError, ValueError):
                 type_confidence = default_type_confidence
+
+        _low_confidence_threshold = 0.65
+        if (
+            doc_type != "generic"
+            and type_confidence < _low_confidence_threshold
+            and document_type in {"generic_document", "statement", "form"}
+        ):
+            document_type = doc_type
+            type_confidence = _low_confidence_threshold
 
         # Extract structured fields
         raw_fields, warnings = _doc_extractor.extract(plain_text, document_type)
