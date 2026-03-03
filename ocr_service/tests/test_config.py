@@ -1,3 +1,5 @@
+"""Configuration validation tests for OCR service settings."""
+
 import pytest
 from pydantic import ValidationError
 
