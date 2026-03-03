@@ -1073,77 +1073,100 @@ class DocumentProcessor:
         except Exception as exc:
             logger.debug("Card-mode border padding failed: %s", exc)
 
-        candidates: list[tuple[str, str]] = []
-        focus_img: Optional[np.ndarray] = None
-        try:
-            focus_img = await asyncio.to_thread(self._prepare_digit_focus_image, img)
-        except Exception as e:
-            logger.debug("Card-mode focus preprocessing failed: %s", e)
-
-        async def _add_candidate(label: str, candidate_text: str) -> None:
-            if not candidate_text:
-                return
-            candidates.append((label, candidate_text))
-
-            trimmed_variant = self._trim_spurious_trailing_zero_variant(
-                candidate_text
-            )
-            if trimmed_variant and trimmed_variant != candidate_text:
-                candidates.append((f"{label}-trim", trimmed_variant))
-
-            if focus_img is None:
-                return
+        async def _collect_candidates(
+            work_img: np.ndarray, prefix: str
+        ) -> list[tuple[str, str]]:
+            candidates: list[tuple[str, str]] = []
+            focus_img: Optional[np.ndarray] = None
             try:
-                boxed_candidate = await asyncio.to_thread(
-                    self._char_box_digit_rescue,
-                    focus_img,
-                    candidate_text,
-                    True,
+                focus_img = await asyncio.to_thread(
+                    self._prepare_digit_focus_image, work_img
                 )
-            except Exception as exc:
-                logger.debug("Card OCR box rescue failed for %s: %s", label, exc)
-                return
-            if boxed_candidate and boxed_candidate != candidate_text:
-                candidates.append((f"{label}-box", boxed_candidate))
-
-        base_text = await asyncio.to_thread(
-            pytesseract.image_to_string,
-            img,
-            config=self.ocr_config.flags,
-        )
-        base_text = self.sanitize_text(base_text)
-        if base_text:
-            base_text = await self._rescue_ambiguous_digits(img, base_text)
-            await _add_candidate("default", base_text)
-
-        for idx, config in enumerate(self._card_ocr_configs(), start=1):
-            try:
-                candidate_text = await asyncio.to_thread(
-                    pytesseract.image_to_string,
-                    img,
-                    config=config,
-                )
-            except (
-                pytesseract.pytesseract.TesseractNotFoundError,
-                pytesseract.pytesseract.TesseractError,
-            ):
-                raise
             except Exception as e:
-                logger.debug("Card OCR pass %d failed: %s", idx, e)
-                continue
+                logger.debug("Card-mode focus preprocessing failed: %s", e)
 
-            candidate_text = self.sanitize_text(candidate_text)
-            if not candidate_text:
-                continue
-            candidate_text = await self._rescue_ambiguous_digits(img, candidate_text)
-            if candidate_text:
-                await _add_candidate(f"card-pass-{idx}", candidate_text)
+            async def _add_candidate(label: str, candidate_text: str) -> None:
+                if not candidate_text:
+                    return
+                full_label = f"{prefix}-{label}"
+                candidates.append((full_label, candidate_text))
 
-        if not candidates:
+                trimmed_variant = self._trim_spurious_trailing_zero_variant(
+                    candidate_text
+                )
+                if trimmed_variant and trimmed_variant != candidate_text:
+                    candidates.append((f"{full_label}-trim", trimmed_variant))
+
+                if focus_img is None:
+                    return
+                try:
+                    boxed_candidate = await asyncio.to_thread(
+                        self._char_box_digit_rescue,
+                        focus_img,
+                        candidate_text,
+                        True,
+                    )
+                except Exception as exc:
+                    logger.debug(
+                        "Card OCR box rescue failed for %s: %s",
+                        full_label,
+                        exc,
+                    )
+                    return
+                if boxed_candidate and boxed_candidate != candidate_text:
+                    candidates.append((f"{full_label}-box", boxed_candidate))
+
+            base_text = await asyncio.to_thread(
+                pytesseract.image_to_string,
+                work_img,
+                config=self.ocr_config.flags,
+            )
+            base_text = self.sanitize_text(base_text)
+            if base_text:
+                base_text = await self._rescue_ambiguous_digits(work_img, base_text)
+                await _add_candidate("default", base_text)
+
+            for idx, config in enumerate(self._card_ocr_configs(), start=1):
+                try:
+                    candidate_text = await asyncio.to_thread(
+                        pytesseract.image_to_string,
+                        work_img,
+                        config=config,
+                    )
+                except (
+                    pytesseract.pytesseract.TesseractNotFoundError,
+                    pytesseract.pytesseract.TesseractError,
+                ):
+                    raise
+                except Exception as e:
+                    logger.debug("Card OCR pass %d failed (%s): %s", idx, prefix, e)
+                    continue
+
+                candidate_text = self.sanitize_text(candidate_text)
+                if not candidate_text:
+                    continue
+                candidate_text = await self._rescue_ambiguous_digits(
+                    work_img, candidate_text
+                )
+                if candidate_text:
+                    await _add_candidate(f"card-pass-{idx}", candidate_text)
+            return candidates
+
+        strategy_images: list[tuple[str, np.ndarray]] = [("raw", img)]
+        if len(img.shape) == 3:
+            cleaned = self._remove_skin_occlusion(img)
+            if not np.array_equal(cleaned, img):
+                strategy_images.append(("skin-cleaned", cleaned))
+
+        all_candidates: list[tuple[str, str]] = []
+        for prefix, strategy_img in strategy_images:
+            all_candidates.extend(await _collect_candidates(strategy_img, prefix))
+
+        if not all_candidates:
             return ""
 
         method, selected = max(
-            candidates,
+            all_candidates,
             key=lambda item: self._score_card_text(item[1]),
         )
         selected = self._mark_uncertain_partial_card_tail(selected)
@@ -1531,9 +1554,12 @@ class IterativeOCREngine:
 
             self.processor.set_active_doc_type(ctx.doc_type)
 
-            thresh = self.processor.preprocess_frame(
-                ctx.current_img, i, ctx.use_reconstruction
-            )
+            if self.processor._is_card_doc_type():
+                ocr_input = ctx.current_img
+            else:
+                ocr_input = self.processor.preprocess_frame(
+                    ctx.current_img, i, ctx.use_reconstruction
+                )
 
             use_regions = (
                 i == 1
@@ -1541,7 +1567,9 @@ class IterativeOCREngine:
                 and len(ctx.layout_regions) > 1
             )
             text = await self.processor.extract_text(
-                thresh, ctx.layout_regions if use_regions else None, ctx.image_bytes
+                ocr_input,
+                ctx.layout_regions if use_regions else None,
+                ctx.image_bytes,
             )
 
             confidence = self.confidence_scorer.calculate(text)
@@ -1712,6 +1740,65 @@ class IterativeOCREngine:
             len(selected_text),
         )
 
+    @staticmethod
+    def _estimate_pixel_coverage_ratio(img: Optional[np.ndarray]) -> Optional[float]:
+        """Estimate foreground pixel coverage ratio in the source document image."""
+        if img is None:
+            return None
+        try:
+            gray = (
+                cast(
+                    np.ndarray,
+                    cv2.cvtColor(  # pylint: disable=no-member
+                        img, cv2.COLOR_BGR2GRAY  # pylint: disable=no-member
+                    ),
+                )
+                if len(img.shape) == 3
+                else img
+            )
+            _, binary = cv2.threshold(  # pylint: disable=no-member
+                gray,
+                0,
+                255,
+                cv2.THRESH_BINARY + cv2.THRESH_OTSU,  # pylint: disable=no-member
+            )
+            total = float(binary.size or 1)
+            foreground = float(np.count_nonzero(binary == 0))
+            return round(max(0.0, min(1.0, foreground / total)), 4)
+        except Exception:
+            logger.debug("Failed to estimate pixel coverage ratio", exc_info=True)
+            return None
+
+    @staticmethod
+    def _estimate_iteration_convergence(
+        iteration_history: list[dict[str, Any]],
+    ) -> Optional[float]:
+        """Estimate convergence as confidence delta between first and last OCR pass."""
+        confidences: list[float] = []
+        for row in iteration_history:
+            try:
+                confidences.append(float(row.get("confidence", 0.0)))
+            except (TypeError, ValueError):
+                continue
+        if len(confidences) < 2:
+            return None
+        delta = confidences[-1] - confidences[0]
+        return round(delta, 4)
+
+    @staticmethod
+    def _detect_pixel_rescue_applied(
+        iteration_history: list[dict[str, Any]],
+    ) -> bool:
+        """Detect whether any non-default fallback/rescue path was used."""
+        for row in iteration_history:
+            method = str(row.get("method", "")).lower()
+            if any(
+                token in method
+                for token in ("fallback", "rescue", "box", "textract", "card-pass")
+            ):
+                return True
+        return False
+
     def _build_response(self, ctx: DocumentContext) -> dict[str, Any]:
         """Formats the final engine output."""
         # Final sanitization of the best text before response
@@ -1749,6 +1836,16 @@ class IterativeOCREngine:
             "confidence": ctx.best_confidence,
             "iterations": ctx.iteration_history,
             "success": len(final_text) > 0,
+            "pixel_coverage_ratio": self._estimate_pixel_coverage_ratio(
+                ctx.original_img
+            ),
+            "readability_index": round(max(0.0, min(1.0, ctx.best_confidence)), 4),
+            "iteration_convergence": self._estimate_iteration_convergence(
+                ctx.iteration_history
+            ),
+            "pixel_rescue_applied": self._detect_pixel_rescue_applied(
+                ctx.iteration_history
+            ),
             **analysis,
         }
         if ctx.reconstruction_info:

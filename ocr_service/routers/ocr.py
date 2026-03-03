@@ -247,8 +247,24 @@ async def perform_document_ocr(
         else:
             completeness = None
 
+        def _coerce_optional_float(value: object) -> Optional[float]:
+            if value is None:
+                return None
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
         analytics = DocumentAnalytics(
+            pixel_coverage_ratio=_coerce_optional_float(
+                result.get("pixel_coverage_ratio")
+            ),
+            readability_index=_coerce_optional_float(result.get("readability_index")),
             decision_readiness=decision_readiness,
+            iteration_convergence=_coerce_optional_float(
+                result.get("iteration_convergence")
+            ),
+            pixel_rescue_applied=bool(result.get("pixel_rescue_applied", False)),
             quality_band=band,
             requires_manual_review=requires_review,
             remediation_hints=remediation_hints,

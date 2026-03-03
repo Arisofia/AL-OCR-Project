@@ -685,6 +685,64 @@ async def test_extract_text_card_mode_trims_spurious_trailing_zero(monkeypatch):
     assert result == "4048 3700 045"
 
 
+@pytest.mark.asyncio
+async def test_extract_text_card_mode_prefers_raw_when_skin_cleanup_loses_signal(
+    monkeypatch,
+):
+    processor = DocumentProcessor(
+        enhancer=engine_mod.ImageEnhancer(),
+        ocr_config=engine_mod.TesseractConfig(),
+        engine_config=engine_mod.EngineConfig(),
+        reconstructor=None,
+    )
+    processor.set_active_doc_type("bank_card")
+
+    async def _passthrough_rescue(_self, _img, text):
+        return text
+
+    def _fake_prepare(_self, img):
+        _ = img
+        return np.zeros((160, 480), dtype=np.uint8)
+
+    def _same_box_rescue(_self, _focus_img, base_text, allow_digit_drop=False):
+        _ = allow_digit_drop
+        return base_text
+
+    def _blank_skin_cleanup(_self, src):
+        return np.full_like(src, 255)
+
+    def _fake_ocr(src, config):
+        _ = config
+        return "" if float(np.mean(src)) > 250.0 else "4111 1111 1111 1111"
+
+    monkeypatch.setattr(
+        DocumentProcessor,
+        "_rescue_ambiguous_digits",
+        _passthrough_rescue,
+    )
+    monkeypatch.setattr(engine_mod.pytesseract, "image_to_string", _fake_ocr)
+    monkeypatch.setattr(
+        DocumentProcessor,
+        "_prepare_digit_focus_image",
+        _fake_prepare,
+    )
+    monkeypatch.setattr(
+        DocumentProcessor,
+        "_char_box_digit_rescue",
+        _same_box_rescue,
+    )
+    monkeypatch.setattr(
+        DocumentProcessor,
+        "_remove_skin_occlusion",
+        _blank_skin_cleanup,
+    )
+
+    img = np.zeros((80, 240, 3), dtype=np.uint8)
+    result = await processor.extract_text(img)
+
+    assert result == "4111 1111 1111 1111"
+
+
 def test_build_response_marks_uncertain_partial_card_tail():
     engine = engine_mod.IterativeOCREngine()
     ctx = engine_mod.DocumentContext(
@@ -700,6 +758,33 @@ def test_build_response_marks_uncertain_partial_card_tail():
     assert response["text"] == "4048 3700 045?"
     assert response["document_type"] == "bank_card"
     assert response["card_analysis"]["requires_manual_review"] is True
+
+
+def test_build_response_exposes_quality_metrics():
+    engine = engine_mod.IterativeOCREngine()
+    ctx = engine_mod.DocumentContext(
+        image_bytes=b"img-bytes",
+        use_reconstruction=False,
+        best_text="4111 1111 1111 1111",
+        best_confidence=0.73,
+        iteration_history=[
+            {"iteration": 1, "confidence": 0.21, "method": "full-page"},
+            {
+                "iteration": 2,
+                "confidence": 0.73,
+                "method": "vision-llm-quality-fallback",
+            },
+        ],
+    )
+    ctx.layout_type = "unknown"
+    ctx.original_img = np.zeros((30, 90, 3), dtype=np.uint8)
+
+    response = engine._build_response(ctx)
+
+    assert response.get("pixel_coverage_ratio") is not None
+    assert response.get("readability_index") == pytest.approx(0.73, abs=1e-4)
+    assert response.get("iteration_convergence") == pytest.approx(0.52, abs=1e-4)
+    assert response.get("pixel_rescue_applied") is True
 
 
 @pytest.mark.asyncio

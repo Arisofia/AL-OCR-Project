@@ -226,3 +226,33 @@ def test_document_endpoint_expiry_format_note_in_warnings():
         )
     finally:
         app.dependency_overrides.pop(get_ocr_processor, None)
+
+
+def test_document_endpoint_passes_engine_quality_metrics_to_analytics():
+    enriched_result = {
+        **_PASSPORT_RESULT,
+        "pixel_coverage_ratio": 0.1234,
+        "readability_index": 0.4567,
+        "iteration_convergence": 0.22,
+        "pixel_rescue_applied": True,
+    }
+    app.dependency_overrides[get_ocr_processor] = lambda: _make_mock_processor(
+        enriched_result
+    )
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/ocr/documents",
+            files=_fake_upload(),
+            headers=_auth_headers(),
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+
+        analytics = data.get("analytics") or {}
+        assert analytics.get("pixel_coverage_ratio") == 0.1234
+        assert analytics.get("readability_index") == 0.4567
+        assert analytics.get("iteration_convergence") == 0.22
+        assert analytics.get("pixel_rescue_applied") is True
+    finally:
+        app.dependency_overrides.pop(get_ocr_processor, None)
