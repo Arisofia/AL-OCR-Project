@@ -10,6 +10,8 @@ const DatasetUploadCard = ({
   split,
   docType,
   occlusionType,
+  useReconstruction,
+  onReconstructionChange,
   notes,
   onDatasetKeyChange,
   onDatasetChange,
@@ -110,6 +112,18 @@ const DatasetUploadCard = ({
           </label>
         </div>
 
+        <div style={{ marginBottom: '1rem' }}>
+          <label className="field checkbox-field" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={useReconstruction}
+              onChange={(e) => onReconstructionChange(e.target.checked)}
+              style={{ width: '1rem', height: '1rem' }}
+            />
+            <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>High Fidelity Reconstruction</span>
+          </label>
+        </div>
+
         <div className="dropzone">
           <input type="file" onChange={onFilesChange} accept="image/*" multiple />
           <div className="dropzone-content">
@@ -164,6 +178,8 @@ DatasetUploadCard.propTypes = {
   split: PropTypes.string,
   docType: PropTypes.string,
   occlusionType: PropTypes.string,
+  useReconstruction: PropTypes.bool,
+  onReconstructionChange: PropTypes.func.isRequired,
   notes: PropTypes.string,
   onDatasetKeyChange: PropTypes.func.isRequired,
   onDatasetChange: PropTypes.func.isRequired,
@@ -184,6 +200,7 @@ DatasetUploadCard.defaultProps = {
   split: 'inbox',
   docType: 'bank_card',
   occlusionType: 'unknown',
+  useReconstruction: false,
   notes: '',
 }
 

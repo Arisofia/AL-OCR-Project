@@ -8,6 +8,8 @@ const UploadCard = ({
   loading,
   health,
   docType,
+  useReconstruction,
+  onReconstructionChange,
   onDocTypeChange,
   onFileChange,
   onUpload
@@ -76,6 +78,16 @@ const UploadCard = ({
           <p className="hint" style={{ margin: 0 }}>
             For cards, select <code>Bank Card</code> to enable card-optimized OCR (padding + digit rescue).
           </p>
+
+          <label className="field checkbox-field" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '0.5rem' }}>
+            <input
+              type="checkbox"
+              checked={useReconstruction}
+              onChange={(e) => onReconstructionChange(e.target.checked)}
+              style={{ width: '1rem', height: '1rem' }}
+            />
+            <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>High Fidelity Reconstruction</span>
+          </label>
         </div>
 
         <button
@@ -106,6 +118,8 @@ UploadCard.propTypes = {
   loading: PropTypes.bool,
   health: PropTypes.string,
   docType: PropTypes.string,
+  useReconstruction: PropTypes.bool,
+  onReconstructionChange: PropTypes.func.isRequired,
   onDocTypeChange: PropTypes.func.isRequired,
   onFileChange: PropTypes.func.isRequired,
   onUpload: PropTypes.func.isRequired,
@@ -117,6 +131,7 @@ UploadCard.defaultProps = {
   loading: false,
   health: 'unknown',
   docType: 'generic',
+  useReconstruction: false,
 }
 
 export default UploadCard

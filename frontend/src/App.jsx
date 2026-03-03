@@ -15,6 +15,7 @@ function App() {
   const [preview, setPreview] = useState(null)
   const [health, setHealth] = useState('checking')
   const [ocrDocType, setOcrDocType] = useState('generic')
+  const [useReconstruction, setUseReconstruction] = useState(false)
 
   const [datasetKey, setDatasetKey] = useState('')
   const [datasetFiles, setDatasetFiles] = useState([])
@@ -70,7 +71,8 @@ function App() {
     const requestOcr = (docTypeValue) =>
       api.post('/ocr', createPayload(), {
         params: {
-          doc_type: docTypeValue
+          doc_type: docTypeValue,
+          use_reconstruction: useReconstruction
         },
         headers: {
           'Content-Type': 'multipart/form-data'
@@ -143,6 +145,7 @@ function App() {
       formData.append('split', split)
       formData.append('doc_type', docType)
       formData.append('occlusion_type', occlusionType)
+      formData.append('use_reconstruction', String(useReconstruction))
       formData.append('notes', notes)
 
       try {
@@ -188,6 +191,8 @@ function App() {
             loading={loading}
             health={health}
             docType={ocrDocType}
+            useReconstruction={useReconstruction}
+            onReconstructionChange={setUseReconstruction}
             onDocTypeChange={setOcrDocType}
             onFileChange={handleFileChange}
             onUpload={handleUpload}
@@ -208,6 +213,8 @@ function App() {
             split={split}
             docType={docType}
             occlusionType={occlusionType}
+            useReconstruction={useReconstruction}
+            onReconstructionChange={setUseReconstruction}
             notes={notes}
             onDatasetKeyChange={setDatasetKey}
             onDatasetChange={setDataset}
