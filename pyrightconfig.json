@@ -8,6 +8,7 @@
     "**/node_modules",
     "**/__pycache__",
     ".venv",
+    "**/site-packages/**",
     "ocr_service/tests",
     "frontend",
     "node_modules"
