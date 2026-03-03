@@ -80,13 +80,21 @@ class PixelReconstructor:
         """
         Attempts to identify black redaction boxes and inpaint them.
         """
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+        gray = (
+            cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            if len(image.shape) == 3
+            else image
+        )
 
         # Black boxes have very low intensity
         _, mask = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY_INV)
 
         # Filter for rectangular shapes (redactions are usually blocks)
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(
+            mask,
+            cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_SIMPLE,
+        )
         final_mask = np.zeros_like(mask)
         for cnt in contours:
             x_coord, y_coord, width, height = cv2.boundingRect(cnt)

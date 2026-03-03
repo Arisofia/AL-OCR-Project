@@ -29,7 +29,9 @@ def main():
     args = parser.parse_args()
 
     pipeline = IterativeOCR(
-        iterations=args.iterations, save_iterations=args.save, output_dir=args.output_dir
+        iterations=args.iterations,
+        save_iterations=args.save,
+        output_dir=args.output_dir,
     )
 
     try:
