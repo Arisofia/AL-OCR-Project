@@ -529,7 +529,10 @@ class DocumentProcessor:
         return (digit, 40.0) if len(digit) == 1 else ("", -1.0)
 
     @staticmethod
-    def _read_best_digit_from_data(roi: np.ndarray, char_config: str) -> tuple[str, float]:
+    def _read_best_digit_from_data(
+        roi: np.ndarray,
+        char_config: str,
+    ) -> tuple[str, float]:
         data = pytesseract.image_to_data(
             roi,
             config=char_config,
@@ -592,39 +595,17 @@ class DocumentProcessor:
 
         recovered: list[str] = []
         for line in boxes.splitlines():
-            parts = line.split()
-            if len(parts) < 5:
+            parsed = self._parse_box_line(line)
+            if parsed is None:
                 continue
-
-            glyph = parts[0]
-            try:
-                x1, y1, x2, y2 = map(int, parts[1:5])
-            except ValueError:
-                continue
+            glyph, x1, y1, x2, y2 = parsed
 
             roi = self._extract_box_roi(focus_img, x1, y1, x2, y2)
             if roi is None:
                 continue
 
-            if glyph.isdigit():
-                if glyph == "0":
-                    confirmed = self._read_single_digit(roi)
-                    if confirmed == "0":
-                        recovered.append("0")
-                    elif confirmed:
-                        recovered.append(confirmed)
-                    # If not confirmed, treat as gap/noise and skip.
-                    continue
-                recovered.append(glyph)
-                continue
-
-            if digit := self._read_single_digit(roi):
+            if digit := self._recover_digit_from_glyph(glyph, roi):
                 recovered.append(digit)
-                continue
-
-            # Ignore OCR separator noise rather than preserving it as output noise.
-            if glyph in {"|", "!", "I", "l", ".", ",", ":", ";", "-", "_"}:
-                continue
 
         if not recovered:
             return ""
@@ -641,6 +622,29 @@ class DocumentProcessor:
         if len(compact) < 8:
             return ""
         return self._format_digits_like_base(compact, base_text)
+
+    @staticmethod
+    def _parse_box_line(line: str) -> Optional[tuple[str, int, int, int, int]]:
+        parts = line.split()
+        if len(parts) < 5:
+            return None
+        glyph = parts[0]
+        try:
+            x1, y1, x2, y2 = map(int, parts[1:5])
+        except ValueError:
+            return None
+        return glyph, x1, y1, x2, y2
+
+    def _recover_digit_from_glyph(self, glyph: str, roi: np.ndarray) -> str:
+        if glyph.isdigit():
+            if glyph != "0":
+                return glyph
+            confirmed = self._read_single_digit(roi)
+            return confirmed or ""
+
+        if digit := self._read_single_digit(roi):
+            return digit
+        return ""
 
     async def _rescue_ambiguous_digits(
         self, img: np.ndarray, base_text: str
@@ -777,36 +781,11 @@ class DocumentProcessor:
 
     async def _extract_text_textract_sync(self, image_bytes: bytes) -> str:
         """Synchronous Textract for smaller documents."""
-        def _detect_lines() -> tuple[str, int, int]:
-            client = boto3.client("textract")
-            response = client.detect_document_text(Document={"Bytes": image_bytes})
-            blocks = response.get("Blocks", [])
-            lines = []
-            line_blocks = 0
-            for block in blocks:
-                if block.get("BlockType") == "LINE" and block.get("Text"):
-                    line_blocks += 1
-                    text = block.get("Text", "")
-                    if text and isinstance(text, str):
-                        # Sanitize and validate the text
-                        try:
-                            # Ensure output remains safe for downstream consumers.
-                            sanitized = self.sanitize_text(text.strip())
-                            if sanitized:
-                                lines.append(sanitized)
-                                logger.debug("Textract LINE block: '%s'", sanitized)
-                        except (UnicodeDecodeError, UnicodeEncodeError) as e:
-                            logger.warning("Skipping corrupted text block: %s", e)
-                            continue
-
-            result = "\n".join(lines).strip()
-            # Final validation of the complete result
-            result = self.sanitize_text(result)
-            logger.info("Textract final result length: %d", len(result))
-            return result, len(blocks), line_blocks
-
         try:
-            text, total_blocks, line_blocks = await asyncio.to_thread(_detect_lines)
+            text, total_blocks, line_blocks = await asyncio.to_thread(
+                self._detect_textract_lines,
+                image_bytes,
+            )
             logger.info(
                 "Sync Textract OCR completed - extracted %d chars from "
                 "%d LINE blocks (total=%d)",
@@ -839,6 +818,39 @@ class DocumentProcessor:
                 phase="sync_fallback_textract", error_type=type(e).__name__
             ).inc()
             return ""
+
+    def _detect_textract_lines(self, image_bytes: bytes) -> tuple[str, int, int]:
+        client = boto3.client("textract")
+        response = client.detect_document_text(Document={"Bytes": image_bytes})
+        blocks = response.get("Blocks", [])
+        lines: list[str] = []
+        line_blocks = 0
+        for block in blocks:
+            sanitized = self._extract_sanitized_line_from_block(block)
+            if sanitized is None:
+                continue
+            line_blocks += 1
+            lines.append(sanitized)
+            logger.debug("Textract LINE block: '%s'", sanitized)
+
+        result = self.sanitize_text("\n".join(lines).strip())
+        logger.info("Textract final result length: %d", len(result))
+        return result, len(blocks), line_blocks
+
+    def _extract_sanitized_line_from_block(self, block: Any) -> Optional[str]:
+        if block.get("BlockType") != "LINE" or not block.get("Text"):
+            return None
+
+        text = block.get("Text", "")
+        if not isinstance(text, str):
+            return None
+
+        try:
+            sanitized = self.sanitize_text(text.strip())
+        except (UnicodeDecodeError, UnicodeEncodeError) as e:
+            logger.warning("Skipping corrupted text block: %s", e)
+            return None
+        return sanitized or None
 
     async def _extract_text_textract_async(self, image_bytes: bytes) -> str:
         """Byte-input fallback: async Textract requires S3 DocumentLocation."""
