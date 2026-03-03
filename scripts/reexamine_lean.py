@@ -3,6 +3,7 @@
 
 import re
 import sys
+from itertools import product
 from collections import Counter
 
 import cv2
@@ -14,20 +15,17 @@ OCR_WL = "-c tessedit_char_whitelist=0123456789"
 OCR_EXCEPTIONS = (pytesseract.TesseractError, RuntimeError, TypeError, ValueError)
 
 
-def ocr_zone_fast(gray_zone: np.ndarray, scale: int = 6) -> Counter:
-    """OCR a single-digit zone — lean variant."""
-    votes: Counter = Counter()
+def _build_variants(gray_zone: np.ndarray, scale: int) -> list[np.ndarray]:
+    """Build a small set of enhancement variants for one digit zone."""
     h, w = gray_zone.shape[:2]
+    variants: list[np.ndarray] = []
 
-    # 4 key enhancements only
-    variants = []
     for clip in [8, 32]:
         c = cv2.createCLAHE(clipLimit=float(clip), tileGridSize=(3, 3))
         enh = c.apply(gray_zone)
         up_inv = cv2.resize(cv2.bitwise_not(enh), (w * scale, h * scale), interpolation=cv2.INTER_CUBIC)
         up_raw = cv2.resize(enh, (w * scale, h * scale), interpolation=cv2.INTER_CUBIC)
-        variants.append(up_inv)
-        variants.append(up_raw)
+        variants.extend([up_inv, up_raw])
 
     kern = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
     th = cv2.morphologyEx(gray_zone, cv2.MORPH_TOPHAT, kern)
@@ -37,6 +35,22 @@ def ocr_zone_fast(gray_zone: np.ndarray, scale: int = 6) -> Counter:
     gam = cv2.LUT(gray_zone, lut)
     variants.append(cv2.resize(cv2.bitwise_not(gam), (w * scale, h * scale), interpolation=cv2.INTER_CUBIC))
 
+    return variants
+
+
+def _ocr_first_digit(src: np.ndarray, cfg: str) -> str | None:
+    """Run OCR and return the first detected digit, if any."""
+    try:
+        txt = pytesseract.image_to_string(src, config=cfg).strip()
+    except OCR_EXCEPTIONS:
+        return None
+    return d[0] if (d := re.sub(r"\D", "", txt)) else None
+
+
+def ocr_zone_fast(gray_zone: np.ndarray, scale: int = 6) -> Counter:
+    """OCR a single-digit zone — lean variant."""
+    votes: Counter = Counter()
+    variants = _build_variants(gray_zone, scale)
     configs = [
         f"--oem 3 --psm 10 {OCR_WL}",
         f"--oem 3 --psm 13 {OCR_WL}",
@@ -44,20 +58,10 @@ def ocr_zone_fast(gray_zone: np.ndarray, scale: int = 6) -> Counter:
     thresholds = [0, 120, 160]
 
     for var_img in variants:
-        for cfg in configs:
-            for thresh in thresholds:
-                src = (
-                    var_img
-                    if thresh == 0
-                    else cv2.threshold(var_img, thresh, 255, cv2.THRESH_BINARY)[1]
-                )
-                try:
-                    txt = pytesseract.image_to_string(src, config=cfg).strip()
-                    d = re.sub(r"\D", "", txt)
-                    if d:
-                        votes[d[0]] += 1
-                except OCR_EXCEPTIONS:
-                    continue
+        for cfg, thresh in product(configs, thresholds):
+            src = var_img if thresh == 0 else cv2.threshold(var_img, thresh, 255, cv2.THRESH_BINARY)[1]
+            if digit := _ocr_first_digit(src, cfg):
+                votes[digit] += 1
     return votes
 
 
