@@ -2,13 +2,17 @@ import { FileText, Loader2 } from 'lucide-react'
 import { motion as Motion, AnimatePresence } from 'framer-motion'
 import PropTypes from 'prop-types'
 
+const MotionDiv = Motion.div
+
 const ResultCard = ({ result, loading }) => {
   const cardAnalysis = result?.card_analysis
+  const reconstruction = result?.reconstruction
+  const reconstructionIterations = reconstruction?.meta?.iterations?.length || 0
 
   const renderContent = () => {
     if (loading) {
       return (
-        <Motion.div
+        <MotionDiv
           key="loading"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -17,13 +21,13 @@ const ResultCard = ({ result, loading }) => {
         >
           <Loader2 className="animate-spin" size={48} color="#e2e8f0" />
           <p>Our AI is reading your document...</p>
-        </Motion.div>
+        </MotionDiv>
       )
     }
 
     if (result) {
       return (
-        <Motion.div
+        <MotionDiv
           key="result"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -55,6 +59,18 @@ const ResultCard = ({ result, loading }) => {
                 Card candidates: <strong>{cardAnalysis.candidate_count}</strong> · Luhn valid:{' '}
                 <strong>{cardAnalysis.luhn_valid_count}</strong>
                 {cardAnalysis.requires_manual_review ? ' · Manual review' : ''}
+              </span>
+            )}
+            {reconstruction && (
+              <span style={{
+                fontSize: '0.75rem',
+                padding: '2px 8px',
+                background: '#ecfdf5',
+                border: '1px solid #bbf7d0',
+                borderRadius: '9999px',
+                color: '#166534'
+              }}>
+                Reconstruction: <strong>on</strong> · steps: <strong>{reconstructionIterations}</strong>
               </span>
             )}
           </div>
@@ -94,13 +110,18 @@ const ResultCard = ({ result, loading }) => {
               ))}
             </div>
           )}
+          {reconstruction?.preview_text && (
+            <div style={{ marginBottom: '0.75rem', fontSize: '0.8rem', color: '#334155' }}>
+              <strong>Reconstruction preview:</strong> {reconstruction.preview_text}
+            </div>
+          )}
           <pre className="ocr-text">{result.text}</pre>
-        </Motion.div>
+        </MotionDiv>
       )
     }
 
     return (
-      <Motion.div
+      <MotionDiv
         key="empty"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -108,7 +129,7 @@ const ResultCard = ({ result, loading }) => {
       >
         <FileText size={48} color="#e2e8f0" />
         <p>Upload a document to see extracted text</p>
-      </Motion.div>
+      </MotionDiv>
     )
   }
 
@@ -119,7 +140,8 @@ const ResultCard = ({ result, loading }) => {
           <h2>Extracted Information</h2>
           {result && (
             <div className="stats">
-              <span>{result.iterations?.length} iterations</span>
+              <span>{result.iterations?.length || 0} OCR iterations</span>
+              {reconstruction && <span>{reconstructionIterations} reconstruction steps</span>}
               <span>{result.processing_time}s</span>
             </div>
           )}
@@ -158,6 +180,12 @@ ResultCard.propTypes = {
     processing_time: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     document_type: PropTypes.string,
     text: PropTypes.string,
+    reconstruction: PropTypes.shape({
+      preview_text: PropTypes.string,
+      meta: PropTypes.shape({
+        iterations: PropTypes.arrayOf(PropTypes.object),
+      }),
+    }),
   }),
   loading: PropTypes.bool,
 }

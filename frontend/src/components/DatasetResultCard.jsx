@@ -2,6 +2,8 @@ import { FileText, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { motion as Motion, AnimatePresence } from 'framer-motion'
 import PropTypes from 'prop-types'
 
+const MotionDiv = Motion.div
+
 const DatasetResultCard = ({ uploads, uploading }) => {
   const rows = uploads || []
 
@@ -18,7 +20,7 @@ const DatasetResultCard = ({ uploads, uploading }) => {
   const renderContent = () => {
     if (uploading && rows.length === 0) {
       return (
-        <Motion.div
+        <MotionDiv
           key="loading"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -27,13 +29,13 @@ const DatasetResultCard = ({ uploads, uploading }) => {
         >
           <Loader2 className="animate-spin" size={48} color="#e2e8f0" />
           <p>Uploading files...</p>
-        </Motion.div>
+        </MotionDiv>
       )
     }
 
     if (rows.length > 0) {
       return (
-        <Motion.div
+        <MotionDiv
           key="rows"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -56,12 +58,12 @@ const DatasetResultCard = ({ uploads, uploading }) => {
               </div>
             </div>
           ))}
-        </Motion.div>
+        </MotionDiv>
       )
     }
 
     return (
-      <Motion.div
+      <MotionDiv
         key="empty"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -69,7 +71,7 @@ const DatasetResultCard = ({ uploads, uploading }) => {
       >
         <FileText size={48} color="#e2e8f0" />
         <p>No dataset uploads yet</p>
-      </Motion.div>
+      </MotionDiv>
     )
   }
 

@@ -168,10 +168,14 @@ _VAT_PATTERNS = [
 ]
 
 _ISSUE_DATE_PATTERNS = [
-    r"(?:ISSUE\s+DATE|DATE\s+OF\s+ISSUE|ISSUED|EMISSION\s+DATE"
-    r"|FECHA\s+DE\s+EMISI[OÓ]N)[:\s]+(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})",
-    r"(?:DATE\s+ISSUED|FECHA\s+DE\s+EXPEDICI[OÓ]N)"
-    r"[:\s]+(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})",
+    (
+        r"(?:ISSUE\s+DATE|DATE\s+OF\s+ISSUE|ISSUED|EMISSION\s+DATE"
+        + r"|FECHA\s+DE\s+EMISI[OÓ]N)[:\s]+(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})"
+    ),
+    (
+        r"(?:DATE\s+ISSUED|FECHA\s+DE\s+EXPEDICI[OÓ]N)"
+        + r"[:\s]+(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})"
+    ),
 ]
 
 _PLACE_OF_BIRTH_PATTERNS = [
@@ -401,7 +405,7 @@ def _luhn_valid(number: str) -> bool:
 
 
 def _validate_pan(
-    value: str, raw: str
+    _value: str, raw: str
 ) -> tuple[Optional[str], Optional[str]]:
     """
     Validate a card PAN (Primary Account Number).

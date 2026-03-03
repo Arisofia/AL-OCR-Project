@@ -181,7 +181,7 @@ class DocumentProcessor:
                 phase="direct_fallback_tesseract", error_type=type(e).__name__
             ).inc()
             textract_text = await self.extract_text_textract(image_bytes)
-            return textract_text if textract_text else ""
+            return textract_text or ""
         except UnidentifiedImageError as e:
             logger.error("Direct fallback could not open image bytes: %s", e)
             OCR_ERROR_COUNT.labels(
@@ -194,9 +194,7 @@ class DocumentProcessor:
                 phase="direct_fallback_ocr", error_type=type(e).__name__
             ).inc()
             textract_text = await self.extract_text_textract(image_bytes)
-            if textract_text:
-                return textract_text
-            return ""
+            return textract_text or ""
 
     async def extract_text_card_digits_only(self, image_bytes: bytes) -> str:
         """
@@ -212,47 +210,65 @@ class DocumentProcessor:
             if len(prepared.shape) == 3:
                 prepared = self._remove_colored_stroke(prepared)
                 prepared = self._remove_skin_occlusion(prepared)
-            focus_img = await asyncio.to_thread(self._prepare_digit_focus_image, prepared)
+            focus_img = await asyncio.to_thread(
+                self._prepare_digit_focus_image,
+                prepared,
+            )
         except Exception as e:
             logger.warning("Digits-only card fallback preprocessing failed: %s", e)
             return ""
 
+        focus_views: list[np.ndarray] = [focus_img]
+        if len(focus_img.shape) >= 2:
+            height = int(focus_img.shape[0])
+            for start, end in ((0.25, 0.70), (0.32, 0.78), (0.40, 0.88)):
+                y1 = max(0, min(height - 1, int(height * start)))
+                y2 = max(y1 + 1, min(height, int(height * end)))
+                roi = focus_img[y1:y2, :]
+                if roi.size > 0 and roi.shape[0] >= 20:
+                    focus_views.append(roi)
+
         best_compact = ""
         best_score = (-1, float("-inf"), -1)
-        for psm in (7, 6, 11, 13):
-            config = (
-                f"--oem {self.ocr_config.oem} --psm {psm} -l eng "
-                "-c tessedit_char_whitelist=0123456789 "
-                "-c classify_bln_numeric_mode=1"
-            )
-            try:
-                candidate_raw = await asyncio.to_thread(
-                    pytesseract.image_to_string,
-                    focus_img,
-                    config=config,
+        for view in focus_views:
+            for psm in (7, 6, 11, 13):
+                config = (
+                    f"--oem {self.ocr_config.oem} --psm {psm} -l eng "
+                    "-c tessedit_char_whitelist=0123456789 "
+                    "-c classify_bln_numeric_mode=1"
                 )
-            except (
-                pytesseract.pytesseract.TesseractNotFoundError,
-                pytesseract.pytesseract.TesseractError,
-            ):
-                break
-            except Exception as e:
-                logger.debug("Digits-only card fallback pass failed (psm=%d): %s", psm, e)
-                continue
+                try:
+                    candidate_raw = await asyncio.to_thread(
+                        pytesseract.image_to_string,
+                        view,
+                        config=config,
+                    )
+                except (
+                    pytesseract.pytesseract.TesseractNotFoundError,
+                    pytesseract.pytesseract.TesseractError,
+                ):
+                    break
+                except Exception as e:
+                    logger.debug(
+                        "Digits-only card fallback pass failed (psm=%d): %s",
+                        psm,
+                        e,
+                    )
+                    continue
 
-            compact = re.sub(r"\D", "", candidate_raw or "")
-            compact_len = len(compact)
-            if compact_len < 12 or compact_len > 19:
-                continue
+                compact = re.sub(r"\D", "", candidate_raw or "")
+                compact_len = len(compact)
+                if compact_len < 12 or compact_len > 19:
+                    continue
 
-            score = (
-                1 if compact_len >= 13 else 0,
-                -abs(16 - compact_len),
-                compact_len,
-            )
-            if score > best_score:
-                best_score = score
-                best_compact = compact
+                score = (
+                    1 if compact_len >= 13 else 0,
+                    -abs(16 - compact_len),
+                    compact_len,
+                )
+                if score > best_score:
+                    best_score = score
+                    best_compact = compact
 
         if not best_compact:
             return ""

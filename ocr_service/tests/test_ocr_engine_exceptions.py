@@ -832,6 +832,101 @@ async def test_process_image_activates_card_doc_type(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_process_image_card_quality_fallback_uses_digits_only(monkeypatch):
+    engine = engine_mod.IterativeOCREngine(
+        config=engine_mod.EngineConfig(max_iterations=1, confidence_threshold=0.9)
+    )
+    calls = {"digits_only": 0}
+
+    async def _decode_ok(ctx):
+        ctx.current_img = np.zeros((32, 32, 3), dtype=np.uint8)
+        return True
+
+    async def _recon_noop(_ctx, _max_iterations):
+        return None
+
+    async def _layout_noop(ctx):
+        ctx.layout_regions = []
+        ctx.layout_type = "unknown"
+
+    def _preprocess(_img, _iteration, _use_recon):
+        return np.zeros((32, 32), dtype=np.uint8)
+
+    async def _extract_empty(_img, _regions=None, _original_bytes=None):
+        return ""
+
+    async def _direct_empty(_image_bytes):
+        return ""
+
+    async def _digits_only(_image_bytes):
+        calls["digits_only"] += 1
+        return "4111 1111 1111 1111"
+
+    async def _vision_empty(_ctx):
+        return ""
+
+    async def _enhance_noop(img):
+        return img
+
+    monkeypatch.setattr(engine.processor, "decode_and_validate", _decode_ok)
+    monkeypatch.setattr(engine.processor, "run_reconstruction", _recon_noop)
+    monkeypatch.setattr(engine, "_analyze_layout", _layout_noop)
+    monkeypatch.setattr(engine.processor, "preprocess_frame", _preprocess)
+    monkeypatch.setattr(engine.processor, "extract_text", _extract_empty)
+    monkeypatch.setattr(engine.processor, "extract_text_direct", _direct_empty)
+    monkeypatch.setattr(
+        engine.processor,
+        "extract_text_card_digits_only",
+        _digits_only,
+    )
+    monkeypatch.setattr(engine, "_extract_text_multimodal_fallback", _vision_empty)
+    monkeypatch.setattr(engine_mod.ImageToolkit, "enhance_iteration", _enhance_noop)
+
+    result = await engine.process_image(b"img-bytes", doc_type="bank_card")
+
+    assert calls["digits_only"] == 1
+    assert result.get("text") == "4111 1111 1111 1111"
+    assert any(
+        i.get("method") == "digits-only-quality-fallback"
+        for i in result.get("iterations", [])
+    )
+
+
+@pytest.mark.asyncio
+async def test_extract_text_card_digits_only_uses_roi_candidates(monkeypatch):
+    processor = DocumentProcessor(
+        enhancer=engine_mod.ImageEnhancer(),
+        ocr_config=engine_mod.TesseractConfig(),
+        engine_config=engine_mod.EngineConfig(),
+        reconstructor=None,
+    )
+
+    async def _decode(_image_bytes):
+        return np.zeros((120, 320, 3), dtype=np.uint8)
+
+    def _prepare_focus(_self, img):
+        return np.zeros((img.shape[0], img.shape[1]), dtype=np.uint8)
+
+    def _fake_ocr(img, config):
+        _ = config
+        if img.shape[0] < 120:
+            return "4111111111111111"
+        return "1234"
+
+    monkeypatch.setattr(engine_mod.ImageToolkit, "decode_image_async", _decode)
+    monkeypatch.setattr(
+        DocumentProcessor,
+        "_prepare_digit_focus_image",
+        _prepare_focus,
+    )
+    monkeypatch.setattr(engine_mod.pytesseract, "image_to_string", _fake_ocr)
+
+    result = await processor.extract_text_card_digits_only(b"img-bytes")
+
+    assert result == "4111 1111 1111 1111"
+
+
+@pytest.mark.asyncio
 async def test_extract_text_applies_digit_rescue_on_ambiguous_output(monkeypatch):
     processor = DocumentProcessor(
         enhancer=engine_mod.ImageEnhancer(),
