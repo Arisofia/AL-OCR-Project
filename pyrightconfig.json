@@ -13,6 +13,10 @@
     "frontend",
     "node_modules"
   ],
+  "ignore": [
+    ".venv",
+    "**/site-packages/**"
+  ],
   "venvPath": ".",
   "venv": ".venv",
   "typeCheckingMode": "basic"
