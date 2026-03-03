@@ -125,7 +125,7 @@ def ocr_digit(img):
     return results
 
 
-def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-nested-blocks
+def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-nested-blocks  # NOSONAR
     """Run focused deep-zoom OCR for PAN positions 10 and 11."""
     path = sys.argv[1] if len(sys.argv) > 1 else "/Users/jenineferderas/Desktop/card_image.jpg"
     img = load(path)

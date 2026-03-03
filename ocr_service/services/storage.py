@@ -6,7 +6,7 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import boto3  # type: ignore
 from botocore.config import Config  # type: ignore
@@ -64,8 +64,9 @@ class StorageService:
         # Disable botocore automatic retries when we use a local manual retry loop
         config = Config(retries={"max_attempts": 1, "mode": "standard"})
         try:
+            client_factory = cast(Any, boto3.client)
             self.s3_client = (
-                boto3.client(
+                client_factory(
                     "s3",
                     config=config,
                     region_name=self.region,
@@ -124,7 +125,8 @@ class StorageService:
             logger.debug(
                 "S3 client not initialized, creating a temporary one for presigning"
             )
-            client = boto3.client("s3", region_name=self.region)
+            client_factory = cast(Any, boto3.client)
+            client = client_factory("s3", region_name=self.region)
             bucket = bucket or "unknown-bucket"
 
         try:

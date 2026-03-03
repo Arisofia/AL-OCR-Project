@@ -46,10 +46,14 @@ class TextractService:
 
         # Optimize botocore configuration for deterministic retry management
         config = Config(retries={"max_attempts": 1, "mode": "standard"})
-        self.client: TextractClient = boto3.client(
-            "textract",
-            config=config,
-            region_name=getattr(settings, "aws_region", "us-east-1"),
+        client_factory = cast(Any, boto3.client)
+        self.client = cast(
+            TextractClient,
+            client_factory(
+                "textract",
+                config=config,
+                region_name=getattr(settings, "aws_region", "us-east-1"),
+            ),
         )
 
     def start_detection(self, bucket: str, key: str) -> Optional[str]:

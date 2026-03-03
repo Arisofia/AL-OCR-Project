@@ -14,18 +14,17 @@ From card_column_analysis.py:
   - Position 7 center ≈ 708  (barely visible, brightness 23)
   - Position 6 center ≈ 647  (partially visible, brightness 30)
 """
-import sys, re
+import re
 from collections import Counter
-import cv2, numpy as np, pytesseract
+import cv2
+import numpy as np
+import pytesseract
 
-img = cv2.imread("/Users/jenineferderas/Desktop/card_image.jpg")
-h, w = img.shape[:2]
-y0, y1 = int(h * 0.25), int(h * 0.55)
-roi = img[y0:y1]
-gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-print(f"Image: {w}x{h}, ROI y=[{y0},{y1}]")
+IMAGE_PATH = "/Users/jenineferderas/Desktop/card_image.jpg"
+TESS_NUMERIC_ONLY = "-c tessedit_char_whitelist=0123456789"
+CFG_SINGLE_DIGIT = f"--oem 3 --psm 13 {TESS_NUMERIC_ONLY}"
+CFG_GROUP = f"--oem 3 --psm 7 {TESS_NUMERIC_ONLY}"
 
-PITCH = 75  # pixel width per digit (from visible suffix analysis)
 # Digit centers derived from column analysis
 CENTERS = {
     6: 647,
@@ -35,199 +34,180 @@ CENTERS = {
     10: 983,
     11: 1058,
 }
+PITCH = 75  # pixel width per digit (from visible suffix analysis)
 
-def enhance(g, scale=5):
-    h0, w0 = g.shape
-    up = lambda i: cv2.resize(i, (w0*scale, h0*scale), interpolation=cv2.INTER_CUBIC)
+
+def enhance(img_gray, scale=5):
+    """Generate multiple enhanced variants of an image zone."""
+    h0, w0 = img_gray.shape
+
+    def upscaled_res(image):
+        return cv2.resize(image, (w0 * scale, h0 * scale), interpolation=cv2.INTER_CUBIC)
+
     out = []
     for clip in [4, 8, 16, 32, 64]:
-        c = cv2.createCLAHE(clipLimit=float(clip), tileGridSize=(3,3))
-        out.append(up(cv2.bitwise_not(c.apply(g))))
-        out.append(up(c.apply(g)))
-    k = np.ones((3,3), np.uint8)
-    out.append(up(cv2.morphologyEx(g, cv2.MORPH_GRADIENT, k)))
-    out.append(up(cv2.bitwise_not(cv2.equalizeHist(g))))
+        clahe_obj = cv2.createCLAHE(clipLimit=float(clip), tileGridSize=(3, 3))
+        applied = clahe_obj.apply(img_gray)
+        out.extend([upscaled_res(cv2.bitwise_not(applied)), upscaled_res(applied)])
+
+    k = np.ones((3, 3), np.uint8)
+    out.extend(
+        [
+            upscaled_res(cv2.morphologyEx(img_gray, cv2.MORPH_GRADIENT, k)),
+            upscaled_res(cv2.bitwise_not(cv2.equalizeHist(img_gray))),
+        ]
+    )
+
     for gamma in [0.3, 0.5]:
-        lut = np.array([((i/255.0)**gamma)*255 for i in range(256)]).astype(np.uint8)
-        out.append(up(cv2.bitwise_not(cv2.LUT(g, lut))))
+        lut = np.array(
+            [((i / 255.0) ** gamma) * 255 for i in range(256)]
+        ).astype(np.uint8)
+        out.append(upscaled_res(cv2.bitwise_not(cv2.LUT(img_gray, lut))))
+
     # Top-hat
     for ks in [7, 11]:
         kern = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (ks, ks))
-        out.append(up(cv2.morphologyEx(g, cv2.MORPH_TOPHAT, kern)))
+        out.append(upscaled_res(cv2.morphologyEx(img_gray, cv2.MORPH_TOPHAT, kern)))
     return out
 
-cfgs = [
-    "--oem 3 --psm 10 -c tessedit_char_whitelist=0123456789",
-    "--oem 3 --psm 13 -c tessedit_char_whitelist=0123456789",
-    "--oem 3 --psm 8 -c tessedit_char_whitelist=0123456789",
-]
 
-def ocr1(img_var):
+def ocr_single(img_var):  # NOSONAR
+    """Run multiple single-digit OCR attempts on an image variant."""
     results = []
-    for cfg in cfgs:
+    ocr_configs = [
+        f"--oem 3 --psm 10 {TESS_NUMERIC_ONLY}",
+        CFG_SINGLE_DIGIT,
+        f"--oem 3 --psm 8 {TESS_NUMERIC_ONLY}",
+    ]
+    for config in ocr_configs:
         try:
-            t = pytesseract.image_to_string(img_var, config=cfg).strip()
-            d = re.sub(r"\D", "", t)
-            if d: results.append(d[0])
-        except: pass
-        for th in [100, 130, 160]:
-            _, bw = cv2.threshold(img_var, th, 255, cv2.THRESH_BINARY)
+            if text := pytesseract.image_to_string(img_var, config=config).strip():
+                if digits := re.sub(r"\D", "", text):
+                    results.append(digits[0])
+        except Exception:  # pylint: disable=broad-except
+            pass
+        for th_val in [100, 130, 160]:
+            _, bw_img = cv2.threshold(img_var, th_val, 255, cv2.THRESH_BINARY)
             try:
-                t = pytesseract.image_to_string(bw, config=cfg).strip()
-                d = re.sub(r"\D", "", t)
-                if d: results.append(d[0])
-            except: pass
+                if t_bw := pytesseract.image_to_string(bw_img, config=config).strip():
+                    if d_bw := re.sub(r"\D", "", t_bw):
+                        results.append(d_bw[0])
+            except Exception:  # pylint: disable=broad-except
+                pass
     return results
 
-channels = {"gray": gray, "blue": roi[:,:,0], "green": roi[:,:,1], "red": roi[:,:,2]}
 
-print("\n=== Per-position scan (corrected coordinates) ===\n")
-for pos in range(6, 12):
-    cx = CENTERS[pos]
+def scan_position(pos, img_w, channels):
+    """Perform multi-channel, multi-offset scan for a single digit position."""
+    cx_val = CENTERS[pos]
     votes = Counter()
-    
-    # Scan with small offsets around center
     for dx in [-10, -5, 0, 5, 10]:
-        actual_cx = cx + dx
-        hw = PITCH * 0.5
-        zx0 = max(0, int(actual_cx - hw))
-        zx1 = min(w, int(actual_cx + hw))
-        
-        for ch_name, ch_img in channels.items():
+        actual_cx = cx_val + dx
+        half_w = PITCH * 0.5
+        zx0 = max(0, int(actual_cx - half_w))
+        zx1 = min(img_w, int(actual_cx + half_w))
+
+        for ch_img in channels.values():
             zone = ch_img[:, zx0:zx1]
-            if zone.size == 0: continue
-            variants = enhance(zone)
-            for v in variants:
-                for d in ocr1(v):
-                    votes[d] += 1
+            if zone.size == 0:
+                continue
+            for variant in enhance(zone):
+                for digit in ocr_single(variant):
+                    votes[digit] += 1
+    return votes
 
-    total = sum(votes.values())
-    if total:
-        ranked = votes.most_common(6)
-        top_str = ", ".join(f"'{d}'={n/total*100:.0f}%" for d, n in ranked[:5])
-        marker_note = ""
-        if 815 <= cx <= 1031:
-            marker_note = " [under marker]"
-        elif cx < 815 and cx > 700:
-            marker_note = " [barely visible]"
-        elif 1032 <= cx <= 1084:
-            marker_note = " [edge visible]"
-        print(f"  POS {pos} (cx={cx}){marker_note}: {top_str}  (n={total})")
-    else:
-        print(f"  POS {pos} (cx={cx}): no reads")
 
-# ── Pair reads for positions 10+11 ──
-print("\n=== PAIR: Positions 10+11 together ===")
-pair_votes = Counter()
-for dx in [-15, -5, 5, 15]:
-    pair_cx = (CENTERS[10] + CENTERS[11]) / 2 + dx
-    hw = PITCH * 1.1
-    zx0 = max(0, int(pair_cx - hw))
-    zx1 = min(w, int(pair_cx + hw))
-    
-    for ch_name, ch_img in channels.items():
-        zone = ch_img[:, zx0:zx1]
-        if zone.size == 0: continue
-        variants = enhance(zone)
-        for v in variants:
-            for cfg in [
-                "--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789",
-                "--oem 3 --psm 13 -c tessedit_char_whitelist=0123456789",
-            ]:
-                try:
-                    t = pytesseract.image_to_string(v, config=cfg).strip()
-                    d = re.sub(r"\D", "", t)
-                    if len(d) == 2: pair_votes[d] += 1
-                except: pass
-                for th in [120, 160]:
-                    _, bw = cv2.threshold(v, th, 255, cv2.THRESH_BINARY)
+def main():  # NOSONAR
+    """Main execution entry point."""
+    orig_img = cv2.imread(IMAGE_PATH)
+    if orig_img is None:
+        raise FileNotFoundError(f"Could not read image at {IMAGE_PATH}")
+
+    img_h, img_w = orig_img.shape[:2]
+    y0_roi, y1_roi = int(img_h * 0.25), int(img_h * 0.55)
+    roi_img = orig_img[y0_roi:y1_roi]
+    gray_roi = cv2.cvtColor(roi_img, cv2.COLOR_BGR2GRAY)
+    print(f"Image: {img_w}x{img_h}, ROI y=[{y0_roi},{y1_roi}]")
+
+    img_channels = {
+        "gray": gray_roi,
+        "blue": roi_img[:, :, 0],
+        "green": roi_img[:, :, 1],
+        "red": roi_img[:, :, 2],
+    }
+
+    print("\n=== Per-position scan (corrected coordinates) ===\n")
+    for pos_idx in range(6, 12):
+        cx_target = CENTERS[pos_idx]
+        pos_votes = scan_position(pos_idx, img_w, img_channels)
+        total_votes = sum(pos_votes.values())
+
+        if total_votes:
+            ranked = pos_votes.most_common(6)
+            top_res = ", ".join(f"'{d}'={n/total_votes*100:.0f}%" for d, n in ranked[:5])
+            note = ""
+            if 815 <= cx_target <= 1031:
+                note = " [under marker]"
+            elif 700 < cx_target < 815:
+                note = " [barely visible]"
+            elif 1032 <= cx_target <= 1084:
+                note = " [edge visible]"
+            print(f"  POS {pos_idx} (cx={cx_target}){note}: {top_res}  (n={total_votes})")
+        else:
+            print(f"  POS {pos_idx} (cx={cx_target}): no reads")
+
+    # ── Pair reads for positions 10+11 ──
+    print("\n=== PAIR: Positions 10+11 together ===")
+    pair_v = Counter()
+    for dx in [-15, -5, 5, 15]:
+        p_cx = (CENTERS[10] + CENTERS[11]) / 2 + dx
+        p_hw = PITCH * 1.1
+        zx0, zx1 = max(0, int(p_cx - p_hw)), min(img_w, int(p_cx + p_hw))
+        for ch_img in img_channels.values():
+            p_zone = ch_img[:, zx0:zx1]
+            if p_zone.size == 0:
+                continue
+            for var in enhance(p_zone):
+                for p_cfg in [CFG_GROUP, CFG_SINGLE_DIGIT]:
                     try:
-                        t = pytesseract.image_to_string(bw, config=cfg).strip()
-                        d = re.sub(r"\D", "", t)
-                        if len(d) == 2: pair_votes[d] += 1
-                    except: pass
+                        if txt := pytesseract.image_to_string(var, config=p_cfg).strip():
+                            if p_digits := re.sub(r"\D", "", txt):
+                                if len(p_digits) == 2:
+                                    pair_v[p_digits] += 1
+                    except Exception:  # pylint: disable=broad-except
+                        pass
+                    for th_v in [120, 160]:
+                        _, p_bw = cv2.threshold(var, th_v, 255, cv2.THRESH_BINARY)
+                        try:
+                            if t_p_bw := pytesseract.image_to_string(p_bw, config=p_cfg).strip():
+                                if d_p_bw := re.sub(r"\D", "", t_p_bw):
+                                    if len(d_p_bw) == 2:
+                                        pair_v[d_p_bw] += 1
+                        except Exception:  # pylint: disable=broad-except
+                            pass
 
-total = sum(pair_votes.values())
-if total:
-    for p, n in pair_votes.most_common(10):
-        print(f"  '{p}': {n:4d} ({n/total*100:5.1f}%)")
+    total_pair = sum(pair_v.values())
+    if total_pair:
+        for pair_seq, n_votes in pair_v.most_common(10):
+            print(f"  '{pair_seq}': {n_votes:4d} ({n_votes/total_pair*100:5.1f}%)")
 
-# ── Group 3 as a whole (positions 8-11) ──
-print("\n=== GROUP 3: Positions 8-11 together ===")
-g3_votes = Counter()
-g3_cx = (CENTERS[8] + CENTERS[11]) / 2
-hw = (CENTERS[11] - CENTERS[8]) / 2 + PITCH * 0.6
-zx0 = max(0, int(g3_cx - hw))
-zx1 = min(w, int(g3_cx + hw))
-for ch_name, ch_img in channels.items():
-    zone = ch_img[:, zx0:zx1]
-    if zone.size == 0: continue
-    variants = enhance(zone, scale=4)
-    for v in variants:
-        for cfg in [
-            "--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789",
-            "--oem 3 --psm 13 -c tessedit_char_whitelist=0123456789",
-        ]:
-            try:
-                t = pytesseract.image_to_string(v, config=cfg).strip()
-                d = re.sub(r"\D", "", t)
-                if len(d) >= 3: g3_votes[d] += 1
-            except: pass
-            for th in [100, 130, 160]:
-                _, bw = cv2.threshold(v, th, 255, cv2.THRESH_BINARY)
-                try:
-                    t = pytesseract.image_to_string(bw, config=cfg).strip()
-                    d = re.sub(r"\D", "", t)
-                    if len(d) >= 3: g3_votes[d] += 1
-                except: pass
+    # ── Save Debug Images ──
+    print("\n=== Debug images ===")
+    dbg_hw = int(PITCH * 0.6)
+    c11, c10 = CENTERS[11], CENTERS[10]
+    z11 = gray_roi[:, max(0, c11 - dbg_hw) : min(img_w, c11 + dbg_hw)]
+    z10 = gray_roi[:, max(0, c10 - dbg_hw) : min(img_w, c10 + dbg_hw)]
+    cv2.imwrite("/tmp/pos11_correct_raw.png", z11)
+    cv2.imwrite("/tmp/pos10_correct_raw.png", z10)
+    clahe_dbg = cv2.createCLAHE(clipLimit=32.0, tileGridSize=(3, 3))
+    for name, zone in [("pos11", z11), ("pos10", z10)]:
+        e_img = cv2.bitwise_not(clahe_dbg.apply(zone))
+        b_img = cv2.resize(
+            e_img, (e_img.shape[1] * 8, e_img.shape[0] * 8), interpolation=cv2.INTER_CUBIC
+        )
+        cv2.imwrite(f"/tmp/{name}_correct_enh.png", b_img)
+    print("  Debug images saved to /tmp/")
 
-total = sum(g3_votes.values())
-if total:
-    for seq, n in g3_votes.most_common(15):
-        print(f"  '{seq}': {n:4d} ({n/total*100:5.1f}%)")
 
-# ── Transition: pos 10-11 → 0665 ──
-print("\n=== TRANSITION: last 2 hidden → 0665 ===")
-tvotes = Counter()
-zx0 = max(0, CENTERS[10] - int(PITCH * 0.5))
-zx1 = 1420  # end of "5" in 0665
-for ch_name, ch_img in channels.items():
-    zone = ch_img[:, zx0:zx1]
-    if zone.size == 0: continue
-    variants = enhance(zone, scale=3)
-    for v in variants:
-        for cfg in [
-            "--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789",
-            "--oem 3 --psm 13 -c tessedit_char_whitelist=0123456789",
-        ]:
-            try:
-                t = pytesseract.image_to_string(v, config=cfg).strip()
-                d = re.sub(r"\D", "", t)
-                if len(d) >= 4: tvotes[d] += 1
-            except: pass
-
-total = sum(tvotes.values())
-if total:
-    for seq, n in tvotes.most_common(15):
-        tag = " ◄◄" if seq.endswith("0665") else (" ◄" if seq.endswith("665") else "")
-        print(f"  '{seq}': {n:4d} ({n/total*100:5.1f}%){tag}")
-
-# Save pos 11 debug image
-print("\n=== Debug images ===")
-cx11 = CENTERS[11]
-hw = int(PITCH * 0.6)
-zone11 = gray[:, max(0, cx11-hw):min(w, cx11+hw)]
-cv2.imwrite("/tmp/pos11_correct_raw.png", zone11)
-clahe = cv2.createCLAHE(clipLimit=32.0, tileGridSize=(3,3))
-enh = cv2.bitwise_not(clahe.apply(zone11))
-big = cv2.resize(enh, (enh.shape[1]*8, enh.shape[0]*8), interpolation=cv2.INTER_CUBIC)
-cv2.imwrite("/tmp/pos11_correct_enh.png", big)
-print("  /tmp/pos11_correct_raw.png, /tmp/pos11_correct_enh.png")
-
-cx10 = CENTERS[10]
-zone10 = gray[:, max(0, cx10-hw):min(w, cx10+hw)]
-cv2.imwrite("/tmp/pos10_correct_raw.png", zone10)
-enh10 = cv2.bitwise_not(clahe.apply(zone10))
-big10 = cv2.resize(enh10, (enh10.shape[1]*8, enh10.shape[0]*8), interpolation=cv2.INTER_CUBIC)
-cv2.imwrite("/tmp/pos10_correct_enh.png", big10)
-print("  /tmp/pos10_correct_raw.png, /tmp/pos10_correct_enh.png")
+if __name__ == "__main__":
+    main()

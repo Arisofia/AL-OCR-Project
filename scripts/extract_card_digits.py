@@ -77,8 +77,7 @@ def extract_card_number_region(img: np.ndarray) -> np.ndarray:
     x_end = int(width * 0.98)
     roi = img[y_start:y_end, x_start:x_end]
     print(
-        "  Card number ROI: "
-        f"({x_start},{y_start})-({x_end},{y_end}) = "
+        f"  Card number ROI: ({x_start},{y_start})-({x_end},{y_end}) = "
         f"{roi.shape[1]}x{roi.shape[0]}"
     )
     return roi
@@ -97,7 +96,7 @@ def remove_dark_occlusion(img: np.ndarray) -> np.ndarray:
     marker_mask = np.zeros_like(dark_mask)
     for cnt in contours:
         area = cv2.contourArea(cnt)
-        _x, _y, width, height = cv2.boundingRect(cnt)
+        _, _, width, height = cv2.boundingRect(cnt)
         if area > 500 and width > 30 and height > 20:
             contour = np.asarray(cnt, dtype=np.int32)
             cv2.drawContours(marker_mask, [contour], -1, (255, 255, 255), -1)
@@ -151,17 +150,17 @@ def aggressive_digit_extraction(img: np.ndarray) -> list[dict[str, Any]]:
 
     for mode_name, config in configs:
         try:
-            text = pytesseract.image_to_string(img, config=config).strip()
-            digits = re.sub(r"\D", "", text)
-            if digits or text:
-                results.append(
-                    {
-                        "mode": mode_name,
-                        "text": text,
-                        "digits": digits,
-                        "digit_count": len(digits),
-                    }
-                )
+            if text := pytesseract.image_to_string(img, config=config).strip():
+                digits = re.sub(r"\D", "", text)
+                if digits or text:
+                    results.append(
+                        {
+                            "mode": mode_name,
+                            "text": text,
+                            "digits": digits,
+                            "digit_count": len(digits),
+                        }
+                    )
         except (pytesseract.TesseractError, RuntimeError, TypeError, ValueError) as exc:
             results.append({"mode": mode_name, "error": str(exc)})
 
@@ -288,32 +287,34 @@ def dedupe_results(all_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return unique_results
 
 
+def _print_candidate_row(row: dict[str, Any]) -> None:
+    """Helper to format and print a single candidate row."""
+    digits = str(row["digits"])
+    groups = " ".join(digits[i : i + 4] for i in range(0, len(digits), 4))
+    luhn_ok = luhn_valid(digits)
+    markers: list[str] = []
+
+    if luhn_ok:
+        markers.append("LUHN-OK")
+    if "4388" in digits[:8]:
+        markers.append("HAS-PREFIX")
+    if "0665" in digits[-8:]:
+        markers.append("HAS-SUFFIX")
+
+    marker_str = f"  [{', '.join(markers)}]" if markers else ""
+    print(
+        f"  {int(row['digit_count']):2d}d | {groups:24s} | "
+        f"{str(row['source']):18s} | {str(row['threshold']):15s} | "
+        f"{str(row['mode']):20s}{marker_str}"
+    )
+
+
 def print_results(unique_results: list[dict[str, Any]]) -> None:
     """Print OCR candidates, highlights, and Luhn/pattern markers."""
-    print(f"\nUnique digit sequences found: {len(unique_results)}")
-    print()
+    print(f"\nUnique digit sequences found: {len(unique_results)}\n")
 
     for row in unique_results[:40]:
-        digits = str(row["digits"])
-        groups = " ".join(digits[i : i + 4] for i in range(0, len(digits), 4))
-        luhn = "LUHN-OK" if luhn_valid(digits) else ""
-        has_prefix = "4388" in digits[:8]
-        has_suffix = "0665" in digits[-8:]
-        markers: list[str] = []
-
-        if luhn:
-            markers.append(luhn)
-        if has_prefix:
-            markers.append("HAS-PREFIX")
-        if has_suffix:
-            markers.append("HAS-SUFFIX")
-
-        marker_str = f"  [{', '.join(markers)}]" if markers else ""
-        print(
-            f"  {int(row['digit_count']):2d}d | {groups:24s} | "
-            f"{str(row['source']):18s} | {str(row['threshold']):15s} | "
-            f"{str(row['mode']):20s}{marker_str}"
-        )
+        _print_candidate_row(row)
 
     best = [
         row

@@ -820,7 +820,8 @@ class DocumentProcessor:
             return ""
 
     def _detect_textract_lines(self, image_bytes: bytes) -> tuple[str, int, int]:
-        client = boto3.client("textract")
+        client_factory = cast(Any, boto3.client)
+        client = client_factory("textract")
         response = client.detect_document_text(Document={"Bytes": image_bytes})
         blocks = response.get("Blocks", [])
         lines: list[str] = []

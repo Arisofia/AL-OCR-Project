@@ -196,7 +196,7 @@ def ocr_zone(img: np.ndarray) -> list:
     return results
 
 
-def main():  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+def main():  # pylint: disable=too-many-locals,too-many-branches,too-many-statements  # NOSONAR
     """Run boundary-zone digit extraction."""
     path = sys.argv[1] if len(sys.argv) > 1 else "/Users/jenineferderas/Desktop/card_image.jpg"
     img = load_image(path)

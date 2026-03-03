@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pylint: disable=too-many-nested-blocks
 """
 Deep zoom analysis of positions 10-11 (last two hidden digits before 0665).
 
@@ -7,7 +8,6 @@ and saves debug images for visual inspection.
 """
 
 import sys
-from pathlib import Path
 import re
 from collections import Counter
 
@@ -18,6 +18,7 @@ import pytesseract
 # ── Image loading ──────────────────────────────────────────────────────────
 
 def load(path: str) -> np.ndarray:
+    """Load image from disk and abort if path cannot be opened."""
     img = cv2.imread(path)
     if img is None:
         sys.exit(f"ERROR: cannot load {path}")
@@ -28,7 +29,7 @@ def load(path: str) -> np.ndarray:
 
 def find_marker(img: np.ndarray):
     """Locate the dark marker strip covering the hidden digits."""
-    h, w = img.shape[:2]
+    h, _ = img.shape[:2]
     y0, y1 = int(h * 0.25), int(h * 0.65)
     gray = cv2.cvtColor(img[y0:y1], cv2.COLOR_BGR2GRAY)
     col_mean = np.mean(gray, axis=0)
@@ -41,7 +42,7 @@ def find_marker(img: np.ndarray):
 
 # ── Enhancement battery ──────────────────────────────────────────────────
 
-def make_variants(gray: np.ndarray, scale: int = 5) -> list:
+def make_variants(gray: np.ndarray, scale: int = 5) -> list:  # pylint: disable=too-many-locals
     """Return [(name, upscaled_gray), ...] with many enhancements."""
     h, w = gray.shape[:2]
     out = []
@@ -114,9 +115,10 @@ OCR_CONFIGS = [
 ]
 
 THRESHOLDS = [80, 100, 120, 140, 160, 180]
+OCR_EXCEPTIONS = (pytesseract.TesseractError, RuntimeError, TypeError, ValueError)
 
 
-def ocr_all(img_gray_upscaled: np.ndarray) -> list:
+def ocr_all(img_gray_upscaled: np.ndarray) -> list[tuple[str, str]]:  # NOSONAR
     """Run OCR configs + thresholds on a single variant image."""
     results = []
     for mode, cfg in OCR_CONFIGS:
@@ -125,7 +127,7 @@ def ocr_all(img_gray_upscaled: np.ndarray) -> list:
             d = re.sub(r"\D", "", txt)
             if d:
                 results.append((mode, d))
-        except Exception:
+        except OCR_EXCEPTIONS:
             pass
         for t in THRESHOLDS:
             _, bw = cv2.threshold(img_gray_upscaled, t, 255, cv2.THRESH_BINARY)
@@ -134,7 +136,7 @@ def ocr_all(img_gray_upscaled: np.ndarray) -> list:
                 d = re.sub(r"\D", "", txt)
                 if d:
                     results.append((f"{mode}/t{t}", d))
-            except Exception:
+            except OCR_EXCEPTIONS:
                 pass
             # Also try inverted
             try:
@@ -142,7 +144,7 @@ def ocr_all(img_gray_upscaled: np.ndarray) -> list:
                 d = re.sub(r"\D", "", txt)
                 if d:
                     results.append((f"{mode}/t{t}inv", d))
-            except Exception:
+            except OCR_EXCEPTIONS:
                 pass
     return results
 
@@ -169,7 +171,8 @@ def vote_all_chars(all_reads: list) -> Counter:
 
 # ── Main ─────────────────────────────────────────────────────────────────
 
-def main():
+def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-nested-blocks  # NOSONAR
+    """Run deep zoom analysis for PAN positions 10 and 11."""
     path = sys.argv[1] if len(sys.argv) > 1 else "/Users/jenineferderas/Desktop/card_image.jpg"
     img = load(path)
     h, w = img.shape[:2]
@@ -195,7 +198,8 @@ def main():
 
     # Estimate single digit width from known visible text
     # "4388 54" = 6 digits + space(s) before marker ≈ mx0 pixels
-    # "0665" = 4 digits after marker ≈ (w - mx1) pixels → each digit ≈ (w-mx1)/4.. but there are margins
+    # "0665" = 4 digits after marker ≈ (w - mx1) pixels
+    # each digit ≈ (w - mx1) / 4, but there are margins
     # Better: marker_w / 6 digits
     digit_est = marker_w / 6.0
     print(f"Estimated digit width: {digit_est:.1f}px (marker_w={marker_w}/6)")
@@ -228,14 +232,14 @@ def main():
             zx0 = max(0, int(cx - pad))
             zx1 = min(w, int(cx + pad))
 
-            for ch_name, ch_img in channels.items():
+            for ch_img in channels.values():
                 zone = ch_img[my0:my1, zx0:zx1] if ch_img.ndim == 2 else ch_img[:, zx0:zx1]
                 if zone.size == 0:
                     continue
                 variants = make_variants(zone, scale=5)
-                for var_name, var_img in variants:
+                for _, var_img in variants:
                     reads = ocr_all(var_img)
-                    for mode, digits in reads:
+                    for _, digits in reads:
                         if len(digits) >= 1:
                             grand_votes[digits[0]] += 1
 
@@ -254,14 +258,14 @@ def main():
             zx0 = max(0, int(cx_right - pad))
             zx1 = min(w, int(cx_right + pad))
 
-            for ch_name, ch_img in channels.items():
+            for ch_img in channels.values():
                 zone = ch_img[my0:my1, zx0:zx1] if ch_img.ndim == 2 else ch_img[:, zx0:zx1]
                 if zone.size == 0:
                     continue
                 variants = make_variants(zone, scale=5)
-                for var_name, var_img in variants:
+                for _, var_img in variants:
                     reads = ocr_all(var_img)
-                    for mode, digits in reads:
+                    for _, digits in reads:
                         if len(digits) >= 1:
                             grand_votes[digits[0]] += 1
 
@@ -273,14 +277,14 @@ def main():
                 zx0 = max(0, int(cx_pair - pad))
                 zx1 = min(w, int(cx_pair + pad))
 
-                for ch_name, ch_img in channels.items():
+                for ch_img in channels.values():
                     zone = ch_img[my0:my1, zx0:zx1] if ch_img.ndim == 2 else ch_img[:, zx0:zx1]
                     if zone.size == 0:
                         continue
                     variants = make_variants(zone, scale=5)
-                    for var_name, var_img in variants:
+                    for _, var_img in variants:
                         reads = ocr_all(var_img)
-                        for mode, digits in reads:
+                        for _, digits in reads:
                             if len(digits) == 2:
                                 # First digit → pos10, second → pos11
                                 grand_votes[digits[0]] += 1
@@ -291,11 +295,11 @@ def main():
             total = sum(grand_votes.values())
             ranked = grand_votes.most_common(8)
             print(f"\n  Total OCR reads: {total}")
-            print(f"  Votes:")
+            print("  Votes:")
             for d, n in ranked:
                 pct = n / total * 100
-                bar = "█" * int(pct / 2)
-                print(f"    '{d}' : {n:5d} ({pct:5.1f}%)  {bar}")
+                bar_graph = "█" * int(pct / 2)
+                print(f"    '{d}' : {n:5d} ({pct:5.1f}%)  {bar_graph}")
         else:
             print("  NO READS")
 
@@ -310,14 +314,14 @@ def main():
         zx0 = max(0, int(mx1 - 2 * digit_est + shift_px - 10))
         zx1 = min(w, int(mx1 + shift_px + 10))
 
-        for ch_name, ch_img in channels.items():
+        for ch_img in channels.values():
             zone = ch_img[my0:my1, zx0:zx1] if ch_img.ndim == 2 else ch_img[:, zx0:zx1]
             if zone.size == 0:
                 continue
             variants = make_variants(zone, scale=5)
-            for var_name, var_img in variants:
+            for _, var_img in variants:
                 reads = ocr_all(var_img)
-                for mode, digits in reads:
+                for _, digits in reads:
                     if len(digits) == 2:
                         pair_votes[digits] += 1
                     elif len(digits) == 1:
@@ -327,7 +331,7 @@ def main():
         total = sum(pair_votes.values())
         ranked = pair_votes.most_common(15)
         print(f"\n  Total pair reads: {total}")
-        print(f"  Top pairs:")
+        print("  Top pairs:")
         for pair, n in ranked:
             pct = n / total * 100
             print(f"    '{pair}' : {n:5d} ({pct:5.1f}%)")
@@ -343,14 +347,14 @@ def main():
         zx0 = max(0, int(mx1 - 3 * digit_est + shift_px))
         zx1 = min(w, int(mx1 + 1.5 * digit_est + shift_px))
 
-        for ch_name, ch_img in channels.items():
+        for ch_img in channels.values():
             zone = ch_img[my0:my1, zx0:zx1] if ch_img.ndim == 2 else ch_img[:, zx0:zx1]
             if zone.size == 0:
                 continue
             variants = make_variants(zone, scale=4)
-            for var_name, var_img in variants:
+            for _, var_img in variants:
                 reads = ocr_all(var_img)
-                for mode, digits in reads:
+                for _, digits in reads:
                     if len(digits) >= 3:
                         trans_votes[digits] += 1
 
@@ -358,7 +362,7 @@ def main():
         total = sum(trans_votes.values())
         ranked = trans_votes.most_common(20)
         print(f"\n  Total transition reads: {total}")
-        print(f"  Top sequences (expect '??0665' or '???0665'):")
+        print("  Top sequences (expect '??0665' or '???0665'):")
         for seq, n in ranked:
             pct = n / total * 100
             # Highlight if ends with 0665
@@ -372,7 +376,6 @@ def main():
     print(f"{'═'*60}")
 
     for target_pos in [10, 11]:
-        idx = target_pos - 6
         # From right edge
         if target_pos == 11:
             cx = mx1 - digit_est * 0.5
@@ -390,16 +393,27 @@ def main():
         # Save best enhancement
         clahe = cv2.createCLAHE(clipLimit=32.0, tileGridSize=(3, 3))
         enhanced = cv2.bitwise_not(clahe.apply(gray_zone))
-        big = cv2.resize(enhanced, (enhanced.shape[1]*8, enhanced.shape[0]*8), interpolation=cv2.INTER_CUBIC)
+        big = cv2.resize(
+            enhanced,
+            (enhanced.shape[1] * 8, enhanced.shape[0] * 8),
+            interpolation=cv2.INTER_CUBIC,
+        )
         cv2.imwrite(f"/tmp/pos{target_pos}_clahe32_8x.png", big)
 
         # Morph gradient
         kernel = np.ones((3, 3), np.uint8)
         mg = cv2.morphologyEx(gray_zone, cv2.MORPH_GRADIENT, kernel)
-        big_mg = cv2.resize(mg, (mg.shape[1]*8, mg.shape[0]*8), interpolation=cv2.INTER_CUBIC)
+        big_mg = cv2.resize(
+            mg,
+            (mg.shape[1] * 8, mg.shape[0] * 8),
+            interpolation=cv2.INTER_CUBIC,
+        )
         cv2.imwrite(f"/tmp/pos{target_pos}_morphgrad_8x.png", big_mg)
 
-        print(f"  pos{target_pos}_raw.png, pos{target_pos}_clahe32_8x.png, pos{target_pos}_morphgrad_8x.png")
+        print(
+            f"  pos{target_pos}_raw.png, pos{target_pos}_clahe32_8x.png, "
+            f"pos{target_pos}_morphgrad_8x.png"
+        )
 
     # Also save the pair zone
     zx0 = max(0, int(mx1 - 2 * digit_est - 10))
@@ -409,7 +423,11 @@ def main():
     gray_pair = cv2.cvtColor(pair_zone, cv2.COLOR_BGR2GRAY)
     clahe = cv2.createCLAHE(clipLimit=32.0, tileGridSize=(3, 3))
     ep = cv2.bitwise_not(clahe.apply(gray_pair))
-    big_pair = cv2.resize(ep, (ep.shape[1]*6, ep.shape[0]*6), interpolation=cv2.INTER_CUBIC)
+    big_pair = cv2.resize(
+        ep,
+        (ep.shape[1] * 6, ep.shape[0] * 6),
+        interpolation=cv2.INTER_CUBIC,
+    )
     cv2.imwrite("/tmp/pos10_11_pair_clahe32_6x.png", big_pair)
     print("  pos10_11_pair_raw.png, pos10_11_pair_clahe32_6x.png")
 

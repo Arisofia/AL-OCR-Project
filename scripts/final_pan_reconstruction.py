@@ -84,7 +84,7 @@ def main():
         print(f">>> BEST MATCH: {g}")
         print(f"    Occluded digits recovered: {best_mid}")
         print(f"    Pixel confidence: {best_score:.8e}")
-        print(f"    Luhn: VALID")
+        print("    Luhn: VALID")
         print(f"{'=' * 60}")
 
         print("\nTop-5 most probable PANs:")
