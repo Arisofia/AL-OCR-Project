@@ -11,13 +11,13 @@ import pytesseract
 
 IMG = sys.argv[1] if len(sys.argv) > 1 else "/Users/jenineferderas/Desktop/card_image.jpg"
 OCR_WL = "-c tessedit_char_whitelist=0123456789"
+OCR_EXCEPTIONS = (pytesseract.TesseractError, RuntimeError, TypeError, ValueError)
 
 
 def ocr_zone_fast(gray_zone, scale=6):
     """OCR a single-digit zone — lean variant."""
     votes = Counter()
     h, w = gray_zone.shape[:2]
-    big = cv2.resize(gray_zone, (w * scale, h * scale), interpolation=cv2.INTER_CUBIC)
 
     # 4 key enhancements only
     variants = []
@@ -52,7 +52,7 @@ def ocr_zone_fast(gray_zone, scale=6):
                     d = re.sub(r"\D", "", txt)
                     if d:
                         votes[d[0]] += 1
-                except Exception:
+                except OCR_EXCEPTIONS:
                     pass
     return votes
 
@@ -74,15 +74,15 @@ def main():
     clahe = cv2.createCLAHE(clipLimit=16.0, tileGridSize=(4, 4))
     enh = clahe.apply(gray)
 
-    suffix_x = None
-    pitch = None
+    suffix_x: float = -1.0
+    pitch: float = 75.0
     digit_y0_r, digit_y1_r = int(rh * 0.15), int(rh * 0.85)
 
     for psm in [6, 7, 11]:
         for src in [cv2.bitwise_not(enh), enh]:
             try:
                 data = pytesseract.image_to_boxes(src, config=f"--oem 3 --psm {psm}")
-            except Exception:
+            except OCR_EXCEPTIONS:
                 continue
             boxes = []
             for line in data.strip().split("\n"):
@@ -101,10 +101,10 @@ def main():
                 digit_y1_r = min(rh, b0["y2"] + int((b0["y2"] - b0["y1"]) * 0.3))
                 print(f"Found '0665' via psm{psm}: x={suffix_x}, pitch={pitch:.1f}")
                 break
-        if suffix_x is not None:
+        if suffix_x >= 0:
             break
 
-    if suffix_x is None:
+    if suffix_x < 0:
         # Fallback from column analysis
         kern = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
         tophat = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, kern)

@@ -28,6 +28,7 @@ import pytesseract
 IMG = sys.argv[1] if len(sys.argv) > 1 else "/Users/jenineferderas/Desktop/card_image.jpg"
 
 OCR_WL = "-c tessedit_char_whitelist=0123456789"
+OCR_EXCEPTIONS = (pytesseract.TesseractError, RuntimeError, TypeError, ValueError)
 
 
 def ocr_zone(gray_zone, scale=8):
@@ -103,7 +104,7 @@ def ocr_zone(gray_zone, scale=8):
                     d = re.sub(r"\D", "", txt)
                     if d:
                         votes[d[0]] += 1
-                except Exception:
+                except OCR_EXCEPTIONS:
                     pass
 
     return votes
@@ -141,6 +142,7 @@ def find_digit_centers(profile, min_bright=20, min_gap=15):
 
 
 def main():
+    """Run deep OCR re-examination for PAN positions 8 and 12."""
     img = cv2.imread(IMG)
     if img is None:
         sys.exit(f"Cannot load {IMG}")
@@ -179,7 +181,10 @@ def main():
 
     # ── Also use char-box approach to locate '0665' precisely ──
     print("\n=== Char-box location of suffix '0665' ===")
-    best_digit_boxes = None
+    best_digit_boxes = []
+    best_idx_0665 = -1
+    best_label = "N/A"
+    best_digits_len = -1
     for psm in [6, 7, 11]:
         for src, label in [
             (cv2.bitwise_not(enh), f"clahe-inv/psm{psm}"),
@@ -188,7 +193,7 @@ def main():
             cfg = f"--oem 3 --psm {psm}"
             try:
                 data = pytesseract.image_to_boxes(src, config=cfg)
-            except Exception:
+            except OCR_EXCEPTIONS:
                 continue
             boxes = []
             for line in data.strip().split("\n"):
@@ -211,17 +216,16 @@ def main():
                 print(f"  Found '0665' with {label}: digits='{dtext}'")
                 idx = dtext.rfind("0665")
                 # Print details of '0665' boxes
-                for i, off in enumerate(range(idx, idx + 4)):
+                for off in range(idx, idx + 4):
                     b = digit_boxes[off]
                     print(f"    '{b['ch']}' at x=[{b['x1']},{b['x2']}] y=[{b['y1']},{b['y2']}]")
-                if best_digit_boxes is None or len(dtext) > len(
-                    "".join(b["ch"] for b in best_digit_boxes)
-                ):
+                if len(dtext) > best_digits_len:
                     best_digit_boxes = digit_boxes
                     best_idx_0665 = idx
                     best_label = label
+                    best_digits_len = len(dtext)
 
-    if best_digit_boxes is None:
+    if not best_digit_boxes or best_idx_0665 < 0:
         print("  WARNING: Could not locate '0665' via char boxes!")
         print("  Falling back to column-profile estimation.")
         # Rough estimate: last 4 centers are '0665'
@@ -291,8 +295,8 @@ def main():
     print(f"\n  POS 12 — Total reads: {total}")
     for d, n in pos12_votes.most_common(8):
         pct = n / total * 100 if total else 0
-        bar = "█" * max(1, int(pct / 2))
-        print(f"    '{d}': {n:5d} ({pct:5.1f}%)  {bar}")
+        histogram = "█" * max(1, int(pct / 2))
+        print(f"    '{d}': {n:5d} ({pct:5.1f}%)  {histogram}")
 
     # Save zoomed POS 12 debug images
     zone_12 = gray[digit_y0:digit_y1, zx0:zx1]
@@ -371,8 +375,8 @@ def main():
     print(f"\n  POS 8 — Total reads: {total}")
     for d, n in pos8_all_votes.most_common(8):
         pct = n / total * 100 if total else 0
-        bar = "█" * max(1, int(pct / 2))
-        print(f"    '{d}': {n:5d} ({pct:5.1f}%)  {bar}")
+        histogram = "█" * max(1, int(pct / 2))
+        print(f"    '{d}': {n:5d} ({pct:5.1f}%)  {histogram}")
 
     # Save zoomed POS 8 debug images
     gap = pitch * 0.4
@@ -397,7 +401,7 @@ def main():
     print("\n" + "=" * 60)
     print("=== SUMMARY ===")
     print("=" * 60)
-    print(f"  PAN template: 4388 54?? ???? 0665")
+    print("  PAN template: 4388 54?? ???? 0665")
     print(f"  Pitch: {pitch:.1f}px")
 
     for label, votes in [("POS 8", pos8_all_votes), ("POS 12", pos12_votes)]:
