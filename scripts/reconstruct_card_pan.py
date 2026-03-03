@@ -16,7 +16,7 @@ import itertools
 import re
 import sys
 import time
-from typing import Any
+from typing import Any, Optional
 
 # ---------------------------------------------------------------------------
 # Luhn validation (mirrored from personal_doc_extractor for standalone use)
@@ -24,7 +24,7 @@ from typing import Any
 
 def luhn_valid(number: str) -> bool:
     """Return True when *number* (digits-only) satisfies the Luhn algorithm."""
-    if not number.isdigit() or not (13 <= len(number) <= 19):
+    if not number.isdigit() or not 13 <= len(number) <= 19:
         return False
     total = 0
     for i, ch in enumerate(reversed(number)):
@@ -92,7 +92,7 @@ def pixel_confidence(pan: str) -> float:
 # Brute-force reconstruction
 # ---------------------------------------------------------------------------
 
-def reconstruct(
+def reconstruct(  # pylint: disable=too-many-locals
     prefix: str,
     suffix: str,
     total_length: int = 16,
@@ -198,8 +198,8 @@ def parse_known_pattern(known: str) -> tuple[str, str, int]:
     return prefix, suffix, total
 
 
-def main() -> None:
-    """Run PAN reconstruction from visible digits and constraints."""
+def build_parser() -> argparse.ArgumentParser:
+    """Build CLI parser for PAN reconstruction options."""
     parser = argparse.ArgumentParser(
         description="Reconstruct occluded card PAN digits via Luhn+BIN brute force"
     )
@@ -224,30 +224,66 @@ def main() -> None:
             "position 11 could be 1/4/7"
         ),
     )
+    return parser
 
-    args = parser.parse_args()
 
+def resolve_pattern(args: argparse.Namespace) -> tuple[str, str, int]:
+    """Resolve prefix/suffix/length from CLI args or default sample pattern."""
     if args.known:
-        prefix, suffix, total = parse_known_pattern(args.known)
-    elif args.prefix and args.suffix:
-        prefix, suffix, total = args.prefix, args.suffix, args.total
-    else:
-        # Default: the card from the attached image
-        prefix, suffix, total = "438854", "0665", 16
-        print("Using default pattern from attached card image:")
-        print("  4388 54?? ???? 0665")
-        print()
+        return parse_known_pattern(args.known)
+    if args.prefix and args.suffix:
+        return args.prefix, args.suffix, args.total
 
-    # Apply user-provided partial pixel hints
-    if args.hints:
-        for pair in args.hints.split(","):
-            parts = pair.strip().split(":")
-            if len(parts) == 2:
-                pos = int(parts[0])
-                digits = parts[1]
-                weight = 1.0 / len(digits)
-                PIXEL_HINTS[pos] = {d: weight for d in digits}
-                print(f"  Hint: position {pos} restricted to [{digits}]")
+    print("Using default pattern from attached card image:")
+    print("  4388 54?? ???? 0665")
+    print()
+    return "438854", "0665", 16
+
+
+def apply_user_hints(hints: Optional[str]) -> None:
+    """Apply user-provided digit restrictions to PIXEL_HINTS."""
+    if not hints:
+        return
+
+    for pair in hints.split(","):
+        parts = pair.strip().split(":")
+        if len(parts) != 2:
+            continue
+        pos = int(parts[0])
+        digits = parts[1]
+        weight = 1.0 / len(digits)
+        PIXEL_HINTS[pos] = dict.fromkeys(digits, weight)
+        print(f"  Hint: position {pos} restricted to [{digits}]")
+
+
+def print_candidates(candidates: list[dict[str, Any]], top: int) -> None:
+    """Print top candidate list with optional pixel score."""
+    print(f"=== Top {min(top, len(candidates))} candidates ===")
+    print()
+    for index, candidate in enumerate(candidates[:top], 1):
+        line = f"  {index:3d}. {candidate['formatted']}"
+        if "pixel_score" in candidate:
+            line += f"  (pixel_score: {candidate['pixel_score']:.6e})"
+        print(line)
+
+
+def print_best_candidate(candidates: list[dict[str, Any]]) -> None:
+    """Print best-ranked candidate summary."""
+    if not candidates:
+        return
+    best = candidates[0]
+    print()
+    print(f">>> Best match: {best['formatted']}")
+    print(f"    Middle digits: {best['middle']}")
+    if "pixel_score" in best:
+        print(f"    Pixel confidence: {best['pixel_score']:.6e}")
+
+
+def main() -> None:
+    """Run PAN reconstruction from visible digits and constraints."""
+    args = build_parser().parse_args()
+    prefix, suffix, total = resolve_pattern(args)
+    apply_user_hints(args.hints)
 
     candidates = reconstruct(
         prefix,
@@ -260,24 +296,10 @@ def main() -> None:
         print("No valid PAN candidates found.")
         sys.exit(1)
 
-    print(f"=== Top {min(args.top, len(candidates))} candidates ===")
-    print()
-    for i, c in enumerate(candidates[:args.top], 1):
-        line = f"  {i:3d}. {c['formatted']}"
-        if "pixel_score" in c:
-            line += f"  (pixel_score: {c['pixel_score']:.6e})"
-        print(line)
-
+    print_candidates(candidates, args.top)
     print()
     print(f"Total valid: {len(candidates)} | Shown: {min(args.top, len(candidates))}")
-
-    if candidates:
-        best = candidates[0]
-        print()
-        print(f">>> Best match: {best['formatted']}")
-        print(f"    Middle digits: {best['middle']}")
-        if "pixel_score" in best:
-            print(f"    Pixel confidence: {best['pixel_score']:.6e}")
+    print_best_candidate(candidates)
 
 
 if __name__ == "__main__":
