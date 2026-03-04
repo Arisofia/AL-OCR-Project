@@ -1,3 +1,7 @@
+"""Storage router for presigned upload operations."""
+
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ocr_service.routers.deps import get_api_key, get_storage_service
@@ -8,13 +12,16 @@ from ocr_service.utils.limiter import limiter
 router = APIRouter()
 
 
-@router.post("/presign", response_model=PresignResponse)
+@router.post(
+    "/presign",
+    responses={500: {"description": "S3 bucket or presign generation error"}},
+)
 @limiter.limit("5/minute")
 async def generate_presigned_post(
-    request: Request,  # noqa: ARG001
+    request: Request,  # noqa: ARG001  # pylint: disable=unused-argument
     req: PresignRequest,
-    _api_key: str = Depends(get_api_key),
-    storage: StorageService = Depends(get_storage_service),
+    _api_key: Annotated[str, Depends(get_api_key)],
+    storage: Annotated[StorageService, Depends(get_storage_service)],
 ) -> PresignResponse:
     """
     Generates a secure, time-limited S3 POST URL for client-side direct uploads.

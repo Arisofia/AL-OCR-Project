@@ -3,7 +3,7 @@
 import inspect
 import logging
 import time
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 
@@ -22,14 +22,14 @@ def get_redis_client(settings: Settings):
     return redis_factory.get_redis_client(settings)
 
 
-async def verify_redis_connection(client: Any, timeout: float = 1.0):
-    result = redis_factory.verify_redis_connection(client, timeout=timeout)
+async def verify_redis_connection(client: Any):
+    result = redis_factory.verify_redis_connection(client)
     if inspect.isawaitable(result):
         return await result
     return result
 
 
-@router.get("/health", response_model=HealthResponse)
+@router.get("/health")
 async def health_check() -> HealthResponse:
     """Service availability heartbeat with component checks."""
     curr_settings = get_settings()
@@ -74,9 +74,9 @@ async def health_check() -> HealthResponse:
     return HealthResponse(status=status, timestamp=time.time(), components=components)
 
 
-@router.get("/recon/status", response_model=ReconStatusResponse)
+@router.get("/recon/status")
 async def recon_status(
-    curr_settings: Settings = Depends(get_settings),
+    curr_settings: Annotated[Settings, Depends(get_settings)],
 ) -> ReconStatusResponse:
     """Retrieves pixel reconstruction capability and version metadata."""
     return ReconStatusResponse(
