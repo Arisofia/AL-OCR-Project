@@ -471,10 +471,7 @@ def main():
     blue, green, red = row[:, :, 0], row[:, :, 1], row[:, :, 2]
     channels = {"gray": gray, "blue": blue, "green": green, "red": red}
 
-    print("\n" + "=" * 60)
-    print("=== POSITION 12 — Deep re-examination ===")
-    print("=" * 60)
-    print("  (We assumed this is '0'. Let's verify.)\n")
+    _print_section("=== POSITION 12 — Deep re-examination ===", "(We assumed this is '0'. Let's verify.)")
 
     pos12_votes = _scan_position(
         channels,
@@ -495,10 +492,7 @@ def main():
     zx1 = min(geom.rw, int(x_c12 + geom.half))
     _save_debug_images(gray, geom.digit_y0, geom.digit_y1, zx0, zx1, "pos12")
 
-    print("\n" + "=" * 60)
-    print("=== POSITION 8 — Deep re-examination ===")
-    print("=" * 60)
-    print("  (Previous evidence: '5' at 48%, '8' at 41%)\n")
+    _print_section("=== POSITION 8 — Deep re-examination ===", "(Previous evidence: '5' at 48%, '8' at 41%)")
 
     pos8_votes = _scan_position(
         channels,
@@ -521,9 +515,7 @@ def main():
 
     pos_votes: dict[int, Counter] = {8: pos8_votes, 12: pos12_votes}
     for pos in [9, 10, 11]:
-        print("\n" + "=" * 60)
-        print(f"=== POSITION {pos} — Deep re-examination ===")
-        print("=" * 60)
+        _print_section(f"=== POSITION {pos} — Deep re-examination ===")
 
         votes = _scan_position(
             channels,
@@ -544,9 +536,7 @@ def main():
         zx1 = min(geom.rw, int(x_center + geom.half))
         _save_debug_images(gray, geom.digit_y0, geom.digit_y1, zx0, zx1, f"pos{pos}")
 
-    print("\n" + "=" * 60)
-    print("=== SUMMARY ===")
-    print("=" * 60)
+    _print_section("=== SUMMARY ===")
     print("  PAN template: 4388 54?? ???? 0665")
     print(f"  Pitch: {pitch:.1f}px")
 
