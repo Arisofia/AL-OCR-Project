@@ -1,3 +1,5 @@
+"""Retry behavior tests for storage and textract services."""
+
 from unittest.mock import patch
 
 import pytest

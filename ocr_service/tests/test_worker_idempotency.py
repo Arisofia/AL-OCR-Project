@@ -1,3 +1,6 @@
+"""Idempotency behavior tests for Redis worker processing."""
+
+import asyncio
 import base64
 import json
 from typing import Any, cast
@@ -10,10 +13,13 @@ from ocr_service.worker import RedisWorker
 
 
 class DummyEngine:
+    """Simple async OCR engine stub with call counter."""
+
     def __init__(self):
         self.counter = 0
 
     async def process_image(self, _image_bytes, _use_reconstruction=False):
+        await asyncio.sleep(0)
         self.counter += 1
         return {"text": "ok", "confidence": 1.0}
 
@@ -92,7 +98,10 @@ async def test_worker_job_failure_resets_idempotency(redis_client, dummy_setting
     worker = RedisWorker(settings=dummy_settings, redis_client=redis_client)
 
     class FailingEngine(DummyEngine):
+        """OCR stub that always fails after one async turn."""
+
         async def process_image(self, _image_bytes, _use_reconstruction=False):
+            await asyncio.sleep(0)
             self.counter += 1
             raise RuntimeError("Simulated OCR Failure")
 

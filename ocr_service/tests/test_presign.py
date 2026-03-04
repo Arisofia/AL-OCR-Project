@@ -1,3 +1,5 @@
+"""Tests for /presign endpoint behavior."""
+
 import sys
 from unittest.mock import MagicMock, patch
 

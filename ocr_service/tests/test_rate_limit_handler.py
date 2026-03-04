@@ -1,7 +1,17 @@
+"""Tests for rate-limit exception handler behavior and logging."""
+
+import json
+from unittest.mock import MagicMock
+
+from fastapi import Request
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
 from ocr_service.main import app
 from ocr_service.utils import limiter as limiter_mod
+
+# pylint: disable=protected-access
 
 
 def test_rate_limit_handler_registered():
@@ -12,10 +22,6 @@ def test_rate_limit_handler_registered():
 
 def test_rate_limit_handler_response_and_logging(monkeypatch):
     """Directly call the handler to verify response payload and structured logging."""
-    import json
-
-    from fastapi import Request
-
     handler = limiter_mod._rate_limit_exceeded_handler_with_logging
 
     # Create a minimal ASGI scope for the Request
@@ -34,8 +40,6 @@ def test_rate_limit_handler_response_and_logging(monkeypatch):
     )()
 
     # Replace the module logger with a mock to assert logging behaviour
-    from unittest.mock import MagicMock
-
     mock = MagicMock()
     monkeypatch.setattr(limiter_mod, "logger", mock)
 
@@ -60,9 +64,6 @@ def test_rate_limit_handler_response_shape(monkeypatch):
     This exercises the handler directly (minimal Request scope) and ensures
     the JSON shape remains stable regardless of the original exception text.
     """
-    from starlette.requests import Request
-    from starlette.responses import JSONResponse
-
     scope = {
         "type": "http",
         "http_version": "1.1",
@@ -76,7 +77,7 @@ def test_rate_limit_handler_response_shape(monkeypatch):
         "server": ("testserver", 80),
     }
 
-    request = Request(scope)
+    request = StarletteRequest(scope)
 
     # Original exception message that should be logged but not echoed back
     message = "Too many OCR requests"
@@ -84,16 +85,12 @@ def test_rate_limit_handler_response_shape(monkeypatch):
 
     handler = limiter_mod._rate_limit_exceeded_handler_with_logging
 
-    from unittest.mock import MagicMock
-
     mock_logger = MagicMock()
     monkeypatch.setattr(limiter_mod, "logger", mock_logger)
 
     response = handler(request, exc)  # type: ignore
 
     assert isinstance(response, JSONResponse)
-    import json
-
     assert response.status_code == 429
     assert json.loads(response.body) == {
         "detail": "Rate limit exceeded. Please try again later."

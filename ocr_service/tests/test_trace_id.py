@@ -1,3 +1,5 @@
+"""Trace ID propagation tests for OCR processor error handling."""
+
 import asyncio
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
@@ -10,16 +12,21 @@ from ocr_service.modules.processor import OCRProcessor, ProcessingConfig
 
 
 class FakeRedis:
+    """Minimal async Redis stub for processor tests."""
+
     def __init__(self):
         self.store = {}
 
     async def get(self, _key):
+        await asyncio.sleep(0)
         return None
 
     async def set(self, _key, _value, _ex=None):
+        await asyncio.sleep(0)
         self.store[_key] = _value
 
     async def delete(self, _key):
+        await asyncio.sleep(0)
         self.store.pop(_key, None)
 
 

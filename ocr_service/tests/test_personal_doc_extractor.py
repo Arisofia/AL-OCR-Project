@@ -150,7 +150,7 @@ def test_bank_card_cvv_omitted(extractor):
     text = "4111 1111 1111 1111\nCVV 123\nEXP 12/26\n"
     fields, _ = extractor.extract(text, "bank_card")
     cvv_fields = [f for f in fields if f.name in {"cvv", "cvc", "cvv2", "cvc2"}]
-    assert cvv_fields == [], "CVV must be omitted from response"
+    assert not cvv_fields, "CVV must be omitted from response"
 
 
 def test_generic_document_returns_no_fields(extractor):
@@ -206,8 +206,11 @@ def test_warnings_generated_for_partial_reconstructions(extractor):
     fields, warnings = extractor.extract(text, "passport")
     # date_of_birth raw_ocr has '/' normalized to '-', so it triggers warning
     dob_field = next((f for f in fields if f.name == "date_of_birth"), None)
-    if dob_field and dob_field.raw_ocr != dob_field.value:
-        assert len(warnings) >= 1
+    assert (
+        dob_field is None
+        or dob_field.raw_ocr == dob_field.value
+        or len(warnings) >= 1
+    )
 
 
 def test_detect_metadata_spanish():
@@ -322,10 +325,10 @@ def test_invalid_expiry_month_lowers_confidence(extractor):
     """Expiry with month 13 must get confidence_level='low' and a warning."""
     text = "EXP 13/26\n"
     fields, warnings = extractor.extract(text, "bank_card")
-    exp = next((f for f in fields if f.name == "expiry_date"), None)
-    if exp:  # only assert if the pattern matched
-        assert exp.confidence_level == "low"
-        assert any("invalid month" in w for w in warnings), warnings
+    assert (exp := next((f for f in fields if f.name == "expiry_date"), None)) is None or (
+        exp.confidence_level == "low"
+        and any("invalid month" in w for w in warnings)
+    ), warnings
 
 
 def test_passport_full_date_expiry_boosts_confidence(extractor):

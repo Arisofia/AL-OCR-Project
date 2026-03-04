@@ -1,3 +1,7 @@
+"""System health endpoint tests."""
+
+import asyncio
+
 import pytest
 
 from ocr_service.config import Settings
@@ -10,6 +14,7 @@ async def test_health_degraded(monkeypatch):
     monkeypatch.setattr("ocr_service.routers.system.get_settings", lambda: settings)
 
     async def fake_verify(_client, _timeout=1.0):
+        await asyncio.sleep(0)
         return {"ok": False, "error": "no"}
 
     monkeypatch.setattr(
@@ -29,6 +34,7 @@ async def test_health_redis_check_skipped(monkeypatch):
     monkeypatch.setattr("ocr_service.routers.system.get_settings", lambda: settings)
 
     async def fake_verify(_client, _timeout=1.0):
+        await asyncio.sleep(0)
         raise RuntimeError("verify should be skipped")
 
     monkeypatch.setattr(

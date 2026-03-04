@@ -1,3 +1,5 @@
+"""Unit tests for limiter initialization paths."""
+
 import logging
 
 from ocr_service.utils import limiter as limiter_mod

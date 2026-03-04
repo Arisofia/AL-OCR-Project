@@ -1,3 +1,5 @@
+"""Smoke tests for rate limiting and handler logging."""
+
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
@@ -37,8 +39,7 @@ def test_rate_limit_smoke_triggers_handler():
 
     # Reset limiter storage to ensure a clean state for this test
     limiter_storage = getattr(cast(Any, limiter), "storage", None)
-    if limiter_storage is not None and hasattr(limiter_storage, "clear"):
-        limiter_storage.clear()
+    (getattr(limiter_storage, "clear", None) or (lambda: None))()
 
     client = TestClient(app)
     headers = {str(settings.api_key_header_name): str(settings.ocr_api_key)}

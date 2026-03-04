@@ -1,3 +1,5 @@
+"""Unit tests for trace id helper functions."""
+
 from unittest.mock import MagicMock
 
 from ocr_service.utils.tracing import get_current_trace_id

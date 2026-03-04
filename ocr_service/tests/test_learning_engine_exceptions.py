@@ -1,3 +1,5 @@
+"""Exception-path tests for learning engine pattern loading."""
+
 import logging
 import os
 import tempfile
@@ -7,8 +9,10 @@ import pytest
 from ocr_service.modules.learning_engine import LearningEngine
 
 
-@pytest.mark.asyncio
-async def test_load_patterns_logs_on_invalid_json(caplog):
+# pylint: disable=protected-access
+
+
+def test_load_patterns_logs_on_invalid_json(caplog):
     caplog.set_level(logging.ERROR)
     with tempfile.NamedTemporaryFile("w", delete=False) as tmp:
         tmp.write("{bad json")

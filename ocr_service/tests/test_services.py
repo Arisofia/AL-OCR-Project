@@ -1,3 +1,5 @@
+"""Unit tests for storage and textract service wrappers."""
+
 from ocr_service.services.storage import StorageService
 from ocr_service.services.textract import TextractService
 

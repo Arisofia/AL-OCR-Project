@@ -1,3 +1,5 @@
+"""Request ID propagation tests for OCR processor."""
+
 import asyncio
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
@@ -31,10 +33,13 @@ def test_processor_returns_request_id():
     processor = OCRProcessor(engine, storage)
 
     class DummyFile:
+        """Minimal UploadFile-compatible test double."""
+
         filename = "test.png"
         content_type = "image/png"
 
         async def read(self):
+            await asyncio.sleep(0)
             return b"image-bytes"
 
     # Act

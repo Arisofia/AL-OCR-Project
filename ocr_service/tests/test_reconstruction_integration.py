@@ -1,17 +1,21 @@
+"""Integration test for OCR endpoint with reconstruction enabled."""
+
+import asyncio
 import os
 from unittest.mock import patch
 
+import cv2
+import numpy as np
 from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock
 
+from ocr_service.config import get_settings
 from ocr_service.main import app
 
 
 def _get_test_image(base_path, tmp_path):
     if os.path.exists(base_path):
         return base_path
-
-    import cv2
-    import numpy as np
 
     dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
     cv2.putText(
@@ -30,8 +34,6 @@ def _get_test_image(base_path, tmp_path):
 
 def test_reconstruction_enabled(tmp_path, monkeypatch):
     # Clear lru_cache for settings to ensure environment variables are picked up
-    from ocr_service.config import get_settings
-
     get_settings.cache_clear()
 
     # Ensure reconstruction is enabled for this test (monkeypatch used)
@@ -62,14 +64,13 @@ def test_reconstruction_enabled(tmp_path, monkeypatch):
         headers = {"X-API-KEY": test_key}
 
         # Mock the processor's run_reconstruction to return something
-        from unittest.mock import AsyncMock
-
         with patch(
             "ocr_service.modules.ocr_engine.DocumentProcessor.run_reconstruction",
             new_callable=AsyncMock,
         ) as mock_recon:
 
             async def side_effect(ctx, _max_iterations):
+                await asyncio.sleep(0)
                 ctx.reconstruction_info = {"preview_text": "recon text", "meta": "data"}
 
             mock_recon.side_effect = side_effect

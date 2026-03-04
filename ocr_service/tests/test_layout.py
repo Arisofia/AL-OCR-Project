@@ -1,3 +1,5 @@
+"""Tests for layout region detection and classification."""
+
 import cv2
 import numpy as np
 
@@ -23,10 +25,9 @@ def test_detect_regions_real_image():
 
     # It should find at least 2 regions (depending on dilation)
     assert len(regions) >= 2
-    for r in regions:
-        assert "bbox" in r
-        assert "rel_bbox" in r
-        assert "area_ratio" in r
+    assert all("bbox" in r for r in regions)
+    assert all("rel_bbox" in r for r in regions)
+    assert all("area_ratio" in r for r in regions)
 
 
 def test_classify_layout():

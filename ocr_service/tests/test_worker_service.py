@@ -1,3 +1,5 @@
+"""Unit tests for worker service S3 record processing."""
+
 from typing import Any, cast
 from unittest.mock import patch
 
