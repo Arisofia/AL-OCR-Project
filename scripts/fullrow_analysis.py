@@ -3,12 +3,15 @@
 Minimal full-row OCR approach for positions 8 and 12.
 No per-digit zone extraction — just full-row reads + analysis.
 """
+import contextlib
 import re, sys
 from collections import Counter
 import cv2, numpy as np, pytesseract
 
 IMG = sys.argv[1] if len(sys.argv) > 1 else "/Users/jenineferderas/Desktop/card_image.jpg"
 WL = "-c tessedit_char_whitelist=0123456789"
+_SUFFIX_TAG = "SUFFIX:"
+_MID_TAG = "MID:"
 
 img = cv2.imread(IMG)
 h, w = img.shape[:2]
@@ -47,19 +50,17 @@ print(f"Image: {w}x{h}, row: {rw}x{rh}, {len(variants)} enhancements\n")
 
 # Full-row OCR  
 reads = []
-for label, src in variants.items():
+for src in variants.values():
     for scale in [2, 3]:
         big = cv2.resize(src, (rw*scale, rh*scale), interpolation=cv2.INTER_CUBIC)
         for psm in [7, 13, 6]:
             for t in [0, 120, 150]:
                 s = big if t == 0 else cv2.threshold(big, t, 255, cv2.THRESH_BINARY)[1]
-                try:
+                with contextlib.suppress(Exception):
                     txt = pytesseract.image_to_string(s, config=f"--oem 3 --psm {psm} {WL}").strip()
-                    d = re.sub(r'\D', '', txt)
-                    if len(d) >= 6:
-                        reads.append(d)
-                except Exception:
-                    pass
+                    if d := re.sub(r'\D', '', txt):
+                        if len(d) >= 6:
+                            reads.append(d)
 
 # Also suffix zone (right 40%)
 sz = gray[:, int(rw*0.60):]
@@ -72,13 +73,11 @@ for clip in [8, 32]:
         for psm in [7, 8, 13]:
             for t in [0, 130]:
                 s = big if t == 0 else cv2.threshold(big, t, 255, cv2.THRESH_BINARY)[1]
-                try:
+                with contextlib.suppress(Exception):
                     txt = pytesseract.image_to_string(s, config=f"--oem 3 --psm {psm} {WL}").strip()
-                    d = re.sub(r'\D', '', txt)
-                    if len(d) >= 2:
-                        reads.append("SUFFIX:" + d)
-                except Exception:
-                    pass
+                    if d := re.sub(r'\D', '', txt):
+                        if len(d) >= 2:
+                            reads.append(_SUFFIX_TAG + d)
 
 # Also middle zone (30%-70%) for hidden digits
 mz = gray[:, int(rw*0.25):int(rw*0.72)]
@@ -91,18 +90,15 @@ for clip in [16, 64]:
         for psm in [7, 13]:
             for t in [0, 140]:
                 s = big if t == 0 else cv2.threshold(big, t, 255, cv2.THRESH_BINARY)[1]
-                try:
+                with contextlib.suppress(Exception):
                     txt = pytesseract.image_to_string(s, config=f"--oem 3 --psm {psm} {WL}").strip()
-                    d = re.sub(r'\D', '', txt)
-                    if d:
-                        reads.append("MID:" + d)
-                except Exception:
-                    pass
+                    if d := re.sub(r'\D', '', txt):
+                        reads.append(_MID_TAG + d)
 
 # === Analyze ===
-full_reads = [r for r in reads if not r.startswith(("SUFFIX:", "MID:"))]
-suffix_reads = [r[7:] for r in reads if r.startswith("SUFFIX:")]
-mid_reads = [r[4:] for r in reads if r.startswith("MID:")]
+full_reads = [r for r in reads if not r.startswith((_SUFFIX_TAG, _MID_TAG))]
+suffix_reads = [r[len(_SUFFIX_TAG):] for r in reads if r.startswith(_SUFFIX_TAG)]
+mid_reads = [r[len(_MID_TAG):] for r in reads if r.startswith(_MID_TAG)]
 
 print(f"Full-row reads: {len(full_reads)}")
 print(f"Suffix-zone reads: {len(suffix_reads)}")
@@ -150,8 +146,8 @@ else:
 # What about reads containing '0665' vs '3665' vs '7665' etc?
 print("\nFull sequence before '665':") 
 for prefix_d in "0123456789":
-    pattern = prefix_d + "665"
-    count = sum(1 for r in full_reads + suffix_reads if pattern in r)
+    pattern = f"{prefix_d}665"
+    count = sum(pattern in r for r in full_reads + suffix_reads)
     if count > 0:
         print(f"  '{pattern}' appears in {count} reads")
 

@@ -32,7 +32,7 @@ OCR_EXCEPTIONS = (
     TypeError,
     ValueError,
 )
-OCR_TIMEOUT_SEC = 0.8
+OCR_TIMEOUT_SEC = 1
 FAST_OCR_SWEEP = True
 MAX_OCR_CALLS_PER_POS = 1200 if FAST_OCR_SWEEP else 4000
 
@@ -318,6 +318,22 @@ if not FAST_OCR_SWEEP:
 THRESHOLDS = [120, 150] if FAST_OCR_SWEEP else [110, 130, 150]
 
 
+def _ocr_single(src, cfg):
+    """Run OCR on a single image and return the first digit found, or None."""
+    try:
+        txt = pytesseract.image_to_string(
+            src,
+            config=cfg,
+            timeout=OCR_TIMEOUT_SEC,
+        ).strip()
+        d = re.sub(r"\D", "", txt)
+        if d:
+            return d[0]
+    except OCR_EXCEPTIONS:
+        pass
+    return None
+
+
 def ocr_digit(im, budget):
     reads = []
     calls_used = 0
@@ -326,33 +342,15 @@ def ocr_digit(im, budget):
     for cfg in CONFIGS:
         if calls_used >= budget:
             break
-        try:
-            txt = pytesseract.image_to_string(
-                im,
-                config=cfg,
-                timeout=OCR_TIMEOUT_SEC,
-            ).strip()
-            d = re.sub(r"\D", "", txt)
-            if d:
-                reads.append(d[0])
-        except OCR_EXCEPTIONS:
-            pass
+        if digit := _ocr_single(im, cfg):
+            reads.append(digit)
         calls_used += 1
         for thr in THRESHOLDS:
             if calls_used >= budget:
                 break
             _, bw = cv2.threshold(im, thr, 255, cv2.THRESH_BINARY)
-            try:
-                txt = pytesseract.image_to_string(
-                    bw,
-                    config=cfg,
-                    timeout=OCR_TIMEOUT_SEC,
-                ).strip()
-                d = re.sub(r"\D", "", txt)
-                if d:
-                    reads.append(d[0])
-            except OCR_EXCEPTIONS:
-                pass
+            if digit := _ocr_single(bw, cfg):
+                reads.append(digit)
             calls_used += 1
     return reads, calls_used
 

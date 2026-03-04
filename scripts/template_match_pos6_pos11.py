@@ -37,7 +37,7 @@ import pytesseract
 IMG = "/Users/jenineferderas/Desktop/card_image.jpg"
 WL = "-c tessedit_char_whitelist=0123456789"
 OCR_EXCEPTIONS = (pytesseract.TesseractError, RuntimeError, TypeError, ValueError)
-OCR_TIMEOUT_SEC = 0.8
+OCR_TIMEOUT_SEC = 1
 FAST_OCR_SWEEP = True
 MAX_OCR_CALLS_PER_POS = 2500 if FAST_OCR_SWEEP else 12000
 OCR_SWEEP_DX = [-8, -3, 0, 3, 8] if FAST_OCR_SWEEP else [-12, -8, -5, -3, 0, 3, 5, 8, 12]
@@ -181,9 +181,7 @@ def ncc_score(template: np.ndarray, target: np.ndarray) -> float:
     t_f -= t_f.mean()
     g_f -= g_f.mean()
     denom = (np.linalg.norm(t_f) * np.linalg.norm(g_f))
-    if denom < 1e-9:
-        return 0.0
-    return float(np.sum(t_f * g_f) / denom)
+    return 0.0 if denom < 1e-9 else float(np.sum(t_f * g_f) / denom)
 
 
 def mse_score(template: np.ndarray, target: np.ndarray) -> float:
@@ -337,6 +335,22 @@ if not FAST_OCR_SWEEP:
 THRESHOLDS = [120, 150] if FAST_OCR_SWEEP else [100, 120, 130, 150, 170]
 
 
+def _ocr_single(src: np.ndarray, cfg: str) -> str | None:
+    """Run OCR on a single image and return the first digit found, or None."""
+    try:
+        txt = pytesseract.image_to_string(
+            src,
+            config=cfg,
+            timeout=OCR_TIMEOUT_SEC,
+        ).strip()
+        digit_str = re.sub(r"\D", "", txt)
+        if digit_str:
+            return digit_str[0]
+    except OCR_EXCEPTIONS:
+        pass
+    return None
+
+
 def ocr_reads(img_in: np.ndarray, budget: int) -> tuple[list[str], int]:
     """Run OCR on one image, return (digit reads, OCR calls used)."""
     results: list[str] = []
@@ -347,34 +361,16 @@ def ocr_reads(img_in: np.ndarray, budget: int) -> tuple[list[str], int]:
     for cfg in OCR_CONFIGS:
         if calls_used >= budget:
             break
-        try:
-            txt = pytesseract.image_to_string(
-                img_in,
-                config=cfg,
-                timeout=OCR_TIMEOUT_SEC,
-            ).strip()
-            digit_str = re.sub(r"\D", "", txt)
-            if digit_str:
-                results.append(digit_str[0])
-        except OCR_EXCEPTIONS:
-            pass
+        if digit := _ocr_single(img_in, cfg):
+            results.append(digit)
         calls_used += 1
 
         for thr in THRESHOLDS:
             if calls_used >= budget:
                 break
-            try:
-                _, bw = cv2.threshold(img_in, thr, 255, cv2.THRESH_BINARY)
-                txt = pytesseract.image_to_string(
-                    bw,
-                    config=cfg,
-                    timeout=OCR_TIMEOUT_SEC,
-                ).strip()
-                digit_str = re.sub(r"\D", "", txt)
-                if digit_str:
-                    results.append(digit_str[0])
-            except OCR_EXCEPTIONS:
-                pass
+            _, bw = cv2.threshold(img_in, thr, 255, cv2.THRESH_BINARY)
+            if digit := _ocr_single(bw, cfg):
+                results.append(digit)
             calls_used += 1
     return results, calls_used
 
@@ -411,8 +407,7 @@ for target_pos in TARGET_POS:
                 break
             ch = zone_bgr_up[:, :, ch_idx]
             better_enhs = make_enhancements(ch)
-            if BGR_ENH_LIMIT is not None:
-                better_enhs = better_enhs[:BGR_ENH_LIMIT]
+            better_enhs = better_enhs[:BGR_ENH_LIMIT]
             for _, enh_img in better_enhs:
                 digit_reads, calls_used = ocr_reads(enh_img, budget_remaining)
                 budget_remaining -= calls_used

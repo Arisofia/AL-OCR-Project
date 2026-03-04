@@ -66,7 +66,7 @@ def binarize(enh):
 def features(binary):
     """Compute structural features from a binarized digit image."""
     zh, zw = binary.shape
-    mh, mw = zh // 2, zw // 2
+    _, _ = zh // 2, zw // 2
     # Trim 10% margins to avoid border noise
     margin_x = int(zw * 0.10)
     margin_y = int(zh * 0.10)
@@ -100,7 +100,7 @@ def features(binary):
     max_gap_l = _max_run_below(col_dens_l, 0.15)
 
     # Right-side: row-by-row presence
-    right_row_presence = (right_half.astype(float).mean(axis=1) / 255.0 > 0.10).astype(int)
+    right_row_presence = (right_half.astype(float).mean(axis=1) > 25.5).astype(int)
     right_coverage = right_row_presence.mean()  # fraction of rows with stuff on right
 
     # Horizontal midline crossings (transitions white↔black along middle row band)

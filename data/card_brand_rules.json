@@ -1,0 +1,89 @@
+{
+  "_description": "Card brand identification rules: prefix patterns, lengths, and security code info",
+  "brands": [
+    {
+      "brand": "American Express",
+      "lengths": [15],
+      "security_code": { "name": "CID", "digits": 4 },
+      "prefixes": ["34", "37"]
+    },
+    {
+      "brand": "Diners Club - Carte Blanche",
+      "lengths": [14],
+      "security_code": { "name": "CVV", "digits": 3 },
+      "prefixes": ["300", "301", "302", "303", "304", "305"]
+    },
+    {
+      "brand": "Diners Club - International",
+      "lengths": [14],
+      "security_code": { "name": "CVV", "digits": 3 },
+      "prefixes": ["36", "38"]
+    },
+    {
+      "brand": "Diners Club - USA & Canada",
+      "lengths": [16],
+      "security_code": { "name": "CVV", "digits": 3 },
+      "prefixes": ["54"]
+    },
+    {
+      "brand": "Discover",
+      "lengths": [16],
+      "security_code": { "name": "CID", "digits": 3 },
+      "prefixes": ["6011", "644", "645", "646", "647", "648", "649", "65"]
+    },
+    {
+      "brand": "enRoute",
+      "lengths": [15],
+      "security_code": { "name": "CVV", "digits": 3 },
+      "prefixes": ["2014", "2149"]
+    },
+    {
+      "brand": "InstaPayment",
+      "lengths": [16],
+      "security_code": { "name": "CVV", "digits": 3 },
+      "prefixes": ["637", "638", "639"]
+    },
+    {
+      "brand": "JCB Co Inc",
+      "lengths": [15],
+      "security_code": { "name": "CVV", "digits": 3 },
+      "prefixes": ["1800", "2100"]
+    },
+    {
+      "brand": "JCB Co Inc",
+      "lengths": [16],
+      "security_code": { "name": "CVV", "digits": 3 },
+      "prefixes": ["3088", "3096", "3112", "3158", "3337", "3528"]
+    },
+    {
+      "brand": "Laser",
+      "lengths": [16, 17, 18, 19],
+      "security_code": { "name": "CVV", "digits": 3 },
+      "prefixes": ["6304", "6706", "6709", "6771"]
+    },
+    {
+      "brand": "MasterCard",
+      "lengths": [16],
+      "security_code": { "name": "CVC2", "digits": 3 },
+      "prefixes": ["51", "52", "53", "54", "55"]
+    },
+    {
+      "brand": "Visa",
+      "lengths": [13, 16],
+      "security_code": { "name": "CVV2", "digits": 3 },
+      "prefixes": ["4", "40240071", "4485", "4532", "4539", "4556", "4716", "4916", "4929"]
+    },
+    {
+      "brand": "Visa Electron",
+      "lengths": [16],
+      "security_code": { "name": "CVV", "digits": 3 },
+      "prefixes": ["4026", "417500", "4508", "4844", "4913", "4917"]
+    },
+    {
+      "brand": "Voyager",
+      "lengths": [15],
+      "security_code": { "name": "CVV", "digits": 3 },
+      "prefixes": ["8699"]
+    }
+  ]
+}

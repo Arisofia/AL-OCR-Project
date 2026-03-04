@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+    #!/usr/bin/env python3
 """
 Exact edge-based observation of hidden positions 6-11.
 

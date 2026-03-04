@@ -25,12 +25,12 @@ def _luhn_valid(pan: str) -> bool:
 # Template matching (pos6→'5' best among 0,3,4,5,6,8; pos11→'3'/'8')
 # OCR sweep (corrected regex, 8 enhancements, R-channel, 7 offsets)
 WEIGHTS: Final[dict[int, dict[str, float]]] = {
-    6: {"0": 0.30, "5": 0.25, "4": 0.20, "2": 0.15, "7": 0.10}, # edges:'0'>'5'>'4'; template:'5'; OCR:'2'
+    6: {"0": 0.30, "5": 0.25, "4": 0.20, "2": 0.15, "7": 0.10},
     7: {"4": 0.30, "7": 0.25, "3": 0.20, "2": 0.15, "8": 0.10}, # edges:'4'>'8'>'3'; OCR:'7'~'2'
-    8: {"3": 0.30, "7": 0.25, "8": 0.20, "4": 0.15, "5": 0.10}, # edges:'3'>'8'>'4'; OCR:'7'
-    9: {"3": 0.30, "7": 0.25, "8": 0.20, "4": 0.15, "2": 0.10}, # edges:'3'>'8'>'4'; OCR:'7'
+    8: {"3": 0.30, "7": 0.25, "8": 0.20, "4": 0.15, "5": 0.10},
+    9: {"3": 0.30, "7": 0.25, "8": 0.20, "4": 0.15, "2": 0.10},
     10: {"3": 0.30, "7": 0.20, "4": 0.20, "8": 0.15, "1": 0.15},# edges:'3'>'8'>'4'; OCR:'7'~'4'
-    11: {"5": 0.35, "3": 0.25, "6": 0.20, "8": 0.15, "0": 0.05},# edges:'5'>'6'>'0'; template:'3'; visual:gap
+    11: {"5": 0.35, "3": 0.25, "6": 0.20, "8": 0.15, "0": 0.05},
 }
 
 PREFIX: Final = "438854"
@@ -40,8 +40,8 @@ SUFFIX: Final = "0665"
 TOP_PER_POS: Final[dict[int, str]] = {
     6: "05427",      # edges+template+OCR combined
     7: "47328",      # edges:'4'; OCR:'7'~'2'; template:N/A
-    8: "37845",      # edges:'3'; OCR:'7'; template:'5'
-    9: "37842",      # edges:'3'; OCR:'7'; template:N/A
+    8: "37845",
+    9: "37842",
     10: "37418",     # edges:'3'; OCR:'7'~'4'
     11: "53680",     # edges:'5'; template:'3'; visual: gap on right
 }
@@ -49,7 +49,7 @@ TOP_PER_POS: Final[dict[int, str]] = {
 
 def _format_pan(pan: str) -> str:
     """Format PAN into 4-digit groups."""
-    return f"{pan[0:4]} {pan[4:8]} {pan[8:12]} {pan[12:16]}"
+    return f"{pan[:4]} {pan[4:8]} {pan[8:12]} {pan[12:16]}"
 
 
 def _iter_mid_combinations() -> itertools.product:
