@@ -1,3 +1,5 @@
+"""Smoke test for exception handler guard script entrypoint."""
+
 import importlib
 
 

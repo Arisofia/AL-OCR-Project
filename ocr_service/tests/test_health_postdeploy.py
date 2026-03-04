@@ -1,3 +1,5 @@
+"""Post-deploy health endpoint check against configured URL."""
+
 import os
 
 import pytest

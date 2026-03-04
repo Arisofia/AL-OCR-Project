@@ -47,10 +47,15 @@ for m in matches[:10]:
 # Try homography with good matches
 good = matches[:100]
 if len(good) >= 4:
-    pts1 = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1,1,2)
-    pts2 = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1,1,2)
+    pts1 = np.reshape(np.float32([kp1[m.queryIdx].pt for m in good]), (-1, 1, 2))
+    pts2 = np.reshape(np.float32([kp2[m.trainIdx].pt for m in good]), (-1, 1, 2))
     
-    H, mask = cv2.findHomography(pts1, pts2, cv2.RANSAC, 5.0)
+    H, mask = cv2.findHomography(
+        pts1,
+        pts2,
+        method=cv2.RANSAC,
+        ransacReprojThreshold=5.0,
+    )
     inliers = mask.ravel().sum()
     print(f"\nHomography inliers: {inliers}/{len(good)}")
     
@@ -318,18 +323,20 @@ try:
     matches_s = bf2.knnMatch(des1s, des2s, k=2)
     
     # Lowe's ratio test
-    good_s = []
-    for m, n in matches_s:
-        if m.distance < 0.7 * n.distance:
-            good_s.append(m)
+    good_s = [m for m, n in matches_s if m.distance < 0.7 * n.distance]
     
     print(f"Good SIFT matches: {len(good_s)}")
     
     if len(good_s) >= 10:
-        pts1s = np.float32([kp1s[m.queryIdx].pt for m in good_s]).reshape(-1,1,2)
-        pts2s = np.float32([kp2s[m.trainIdx].pt for m in good_s]).reshape(-1,1,2)
+        pts1s = np.reshape(np.float32([kp1s[m.queryIdx].pt for m in good_s]), (-1, 1, 2))
+        pts2s = np.reshape(np.float32([kp2s[m.trainIdx].pt for m in good_s]), (-1, 1, 2))
         
-        Hs, masks = cv2.findHomography(pts1s, pts2s, cv2.RANSAC, 5.0)
+        Hs, masks = cv2.findHomography(
+            pts1s,
+            pts2s,
+            method=cv2.RANSAC,
+            ransacReprojThreshold=5.0,
+        )
         inliers_s = masks.ravel().sum() if masks is not None else 0
         print(f"SIFT Homography inliers: {inliers_s}/{len(good_s)}")
         

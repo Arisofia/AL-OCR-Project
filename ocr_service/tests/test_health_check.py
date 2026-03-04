@@ -1,9 +1,12 @@
+"""Health endpoint tests for app factory output."""
+
 from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
 from ocr_service.app import create_app
 from ocr_service.config import Settings
+import ocr_service.routers.system as system_router
 
 
 def test_health_check_ok(monkeypatch):
@@ -11,8 +14,6 @@ def test_health_check_ok(monkeypatch):
     app = create_app(settings=settings)
 
     # Patch redis and storage checks to return healthy
-    import ocr_service.routers.system as system_router
-
     def _fake_get_redis_client(_settings):
         return MagicMock()
 
@@ -25,6 +26,8 @@ def test_health_check_ok(monkeypatch):
     )
 
     class DummyStorage:
+        """Storage stub that always reports healthy connectivity."""
+
         def check_connection(self):
             return True
 

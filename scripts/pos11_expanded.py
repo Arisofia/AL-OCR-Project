@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Expanded POS 11 scan with wider offset range and more enhancements."""
+import contextlib
 import re
 from collections import Counter
 import cv2
@@ -31,22 +32,16 @@ def try_ocr(img_in):
     """Run OCR on one image, return digit or None."""
     results = []
     for cfg in configs:
-        try:
+        with contextlib.suppress(Exception):
             txt = pytesseract.image_to_string(img_in, config=cfg).strip()
-            d = re.sub(r"\D", "", txt)
-            if d:
+            if d := re.sub(r"\D", "", txt):
                 results.append(d[0])
-        except Exception:
-            pass
         # One threshold
         _, bw = cv2.threshold(img_in, 130, 255, cv2.THRESH_BINARY)
-        try:
+        with contextlib.suppress(Exception):
             txt = pytesseract.image_to_string(bw, config=cfg).strip()
-            d = re.sub(r"\D", "", txt)
-            if d:
+            if d := re.sub(r"\D", "", txt):
                 results.append(d[0])
-        except Exception:
-            pass
     return results
 
 print(f"Image: {w}x{h}, ROI: {rw}x{rh}")

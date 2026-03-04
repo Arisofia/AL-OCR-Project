@@ -361,3 +361,6 @@ def test_bank_statement_opening_balance_field(extractor):
     )
 
 
+
+
+

@@ -97,15 +97,14 @@ class _MockAsyncClient:
     async def __aexit__(self, exc_type, exc, tb):
         return False
 
-    async def post(self, url, headers=None, json=None, timeout=None):
+    async def post(self, url, headers=None, json=None, **kwargs):
         """
         Emulates an asynchronous POST request to the OpenAI API.
         """
         logger.debug("MockAsyncClient.post called for URL: %s", url)
         logger.debug("Request headers: %s", headers)
         logger.debug("Request payload keys: %s", list((json or {}).keys()))
-        # Use the timeout parameter if provided to simulate delay
-        if timeout:
+        if timeout := kwargs.get("timeout"):
             await asyncio.sleep(timeout)
         return _MockResponse(status_code=self._status_code, body=self._body)
 

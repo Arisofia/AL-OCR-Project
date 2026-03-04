@@ -292,6 +292,13 @@ def _print_votes(label: str, votes: Counter[str], limit: int = 8) -> None:
         print(f"  '{digit}': {count:4d} ({percentage:5.1f}%)  {histogram}")
 
 
+def _print_section(title: str) -> None:
+    """Print standardized section headings."""
+    print(f"\n{'=' * 50}")
+    print(title)
+    print(f"{'=' * 50}")
+
+
 def main() -> None:
     """Run fast focused scan for PAN positions 8 and 12."""
     image = cv2.imread(IMG_PATH)
@@ -319,16 +326,12 @@ def main() -> None:
         f"y=[{context.y0},{context.y1}]"
     )
 
-    print(f"\n{'=' * 50}")
-    print("POSITION 12 (first digit of last group)")
-    print(f"{'=' * 50}")
+    _print_section("POSITION 12 (first digit of last group)")
     pos12_votes = _scan_pos12_votes(gray, row, context)
     _print_votes("POS 12", pos12_votes)
     _save_debug_images(gray, context, context.x12_center, "pos12")
 
-    print(f"\n{'=' * 50}")
-    print("POSITION 8 (3rd hidden digit)")
-    print(f"{'=' * 50}")
+    _print_section("POSITION 8 (3rd hidden digit)")
     pos8_votes = _scan_pos8_votes(gray, row, context)
     _print_votes("POS 8", pos8_votes)
     x8_debug = context.x12_center - 0.4 * context.pitch - 3.5 * context.pitch

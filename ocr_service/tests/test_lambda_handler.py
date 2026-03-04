@@ -46,6 +46,8 @@ def test_handler_with_aws_request_id(s3_event):
     """Test that handler passes RequestId to worker."""
 
     class MockContext:
+        """Minimal Lambda context carrying aws_request_id."""
+
         aws_request_id = "RID-456"
 
     with patch("ocr_service.lambda_handler.worker") as mock_worker:

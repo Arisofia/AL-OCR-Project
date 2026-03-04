@@ -8,14 +8,13 @@ import cv2
 import numpy as np
 
 from ocr_service.modules import ImageEnhancer
+from ocr_service.modules.ocr_engine import IterativeOCREngine
 
 
 def test_ocr_engine_invalid_input():
     """
     Tests the OCR engine with invalid inputs like empty or oversized files.
     """
-    from ocr_service.modules.ocr_engine import IterativeOCREngine
-
     engine = IterativeOCREngine()
 
     # Test empty input

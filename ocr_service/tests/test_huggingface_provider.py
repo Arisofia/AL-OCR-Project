@@ -1,3 +1,5 @@
+"""Tests for HuggingFace vision provider request/response behavior."""
+
 import asyncio
 
 import httpx
@@ -33,13 +35,14 @@ class _MockClient:
     async def __aexit__(self, exc_type, exc, tb):
         return False
 
-    async def post(self, url, headers=None, json=None, timeout=None):
-        # Keep the timeout parameter to match httpx.AsyncClient.post signature
-        _ = timeout
+    async def post(self, url, headers=None, json=None, **kwargs):
+        await asyncio.sleep(0)
+        _ = kwargs
         self.calls.append({"url": url, "headers": headers, "json": json})
         return self._responses.pop(0)
 
     async def request(self, method, url, **kwargs):
+        await asyncio.sleep(0)
         headers = kwargs.get("headers")
         json_data = kwargs.get("json")
         self.calls.append(

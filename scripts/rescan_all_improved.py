@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Rescan ALL hidden positions 6-11 with improved pipeline."""
+import contextlib
 import re
 from collections import Counter
 import cv2
@@ -54,42 +55,51 @@ def enhance_variants(zone):
     return out
 
 
+def _sweep_thresholds(image_in, cfg_in, budget_left, ocr_fn):
+    """Run OCR over binary-threshold variants within a call budget."""
+    local_reads = []
+    local_calls = 0
+    for thr in THRESHOLDS:
+        if local_calls >= budget_left:
+            break
+        _, bw = cv2.threshold(image_in, thr, 255, cv2.THRESH_BINARY)
+        if digit := ocr_fn(bw, cfg_in):
+            local_reads.append(digit)
+        local_calls += 1
+    return local_reads, local_calls
+
+
 def ocr_digit(im, budget):
+    def _ocr_one(src, cfg):
+        with contextlib.suppress(Exception):
+            txt = pytesseract.image_to_string(
+                src,
+                config=cfg,
+                timeout=OCR_TIMEOUT_SEC,
+            ).strip()
+            if d := re.sub(r"\D", "", txt):
+                return d[0]
+        return None
+
     reads = []
     calls_used = 0
+
     if budget <= 0:
         return reads, calls_used
     for cfg in CONFIGS:
         if calls_used >= budget:
             break
-        try:
-            txt = pytesseract.image_to_string(
-                im,
-                config=cfg,
-                timeout=OCR_TIMEOUT_SEC,
-            ).strip()
-            d = re.sub(r"\D", "", txt)
-            if d:
-                reads.append(d[0])
-        except Exception:
-            pass
+        if digit := _ocr_one(im, cfg):
+            reads.append(digit)
         calls_used += 1
-        for thr in THRESHOLDS:
-            if calls_used >= budget:
-                break
-            _, bw = cv2.threshold(im, thr, 255, cv2.THRESH_BINARY)
-            try:
-                txt = pytesseract.image_to_string(
-                    bw,
-                    config=cfg,
-                    timeout=OCR_TIMEOUT_SEC,
-                ).strip()
-                d = re.sub(r"\D", "", txt)
-                if d:
-                    reads.append(d[0])
-            except Exception:
-                pass
-            calls_used += 1
+        threshold_reads, threshold_calls = _sweep_thresholds(
+            im,
+            cfg,
+            budget - calls_used,
+            _ocr_one,
+        )
+        reads.extend(threshold_reads)
+        calls_used += threshold_calls
     return reads, calls_used
 
 
@@ -160,9 +170,7 @@ print("-" * 50)
 for pos in range(6, 12):
     votes, total = all_results[pos]
     mc = votes.most_common(3)
-    cols = []
-    for d, n in mc:
-        cols.append(f"'{d}'={n/total:.0%}")
+    cols = [f"'{d}'={n/total:.0%}" for d, n in mc]
     while len(cols) < 3:
         cols.append("")
     print(f"  {pos}  {cols[0]:>8}  {cols[1]:>8}  {cols[2]:>8}  {total:>5}")
@@ -172,9 +180,7 @@ print("\n# Python dict for WEIGHTS update:")
 print("WEIGHTS = {")
 for pos in range(6, 12):
     votes, total = all_results[pos]
-    items = []
-    for d, n in votes.most_common(5):
-        items.append(f'"{d}": {n/total:.2f}')
+    items = [f'"{d}": {n/total:.2f}' for d, n in votes.most_common(5)]
     print(f"    {pos}: {{{', '.join(items)}}},")
 print("}")
 

@@ -1,3 +1,5 @@
+"""Integration-style tests for IterativeOCREngine reconstruction path."""
+
 import asyncio
 from pathlib import Path
 

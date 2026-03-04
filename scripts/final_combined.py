@@ -232,7 +232,7 @@ def match_digit(features):
         dist += (features["bottom"] - prof["bottom"]) ** 2
         dist += (features["left"] - prof["left"]) ** 2
         dist += (features["right"] - prof["right"]) ** 2
-        dist += ((features["h_v_ratio"] / 2 - prof["h_v"] / 2)) ** 2
+        dist += (features["h_v_ratio"] / 2 - prof["h_v"] / 2) ** 2
         scores[d] = dist
     
     return sorted(scores.items(), key=lambda x: x[1])

@@ -1,3 +1,5 @@
+"""Settings tests for Hugging Face token environment mapping."""
+
 import contextlib
 
 from ocr_service.config import get_settings

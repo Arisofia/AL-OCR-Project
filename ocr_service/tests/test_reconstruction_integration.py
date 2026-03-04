@@ -2,12 +2,11 @@
 
 import asyncio
 import os
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import cv2
 import numpy as np
 from fastapi.testclient import TestClient
-from unittest.mock import AsyncMock
 
 from ocr_service.config import get_settings
 from ocr_service.main import app
