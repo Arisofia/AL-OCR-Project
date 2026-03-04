@@ -5,8 +5,7 @@ WORKDIR /app
 
 
 COPY package*.json ./
-RUN if [ -f package-lock.json ]; then npm ci; fi
-RUN if [ ! -f package-lock.json ]; then npm install; fi
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 COPY . .
 # Vite will pick up .env.production automatically during build
@@ -15,11 +14,10 @@ RUN npm run build
 # Stage 2: Production
 FROM nginx:stable-alpine
 
-# Add a non-root user
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-
-# Set permissions for nginx to run as non-root
-RUN touch /var/run/nginx.pid && \
+# Add a non-root user and set permissions for nginx to run as non-root
+RUN addgroup -S appgroup && \
+    adduser -S appuser -G appgroup && \
+    touch /var/run/nginx.pid && \
     chown -R appuser:appgroup /var/run/nginx.pid /var/cache/nginx /var/log/nginx /etc/nginx/conf.d
 
 COPY --from=build /app/dist /usr/share/nginx/html

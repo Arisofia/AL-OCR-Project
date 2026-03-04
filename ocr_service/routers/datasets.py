@@ -29,7 +29,7 @@ def _safe_name(value: str) -> str:
 @router.post("/upload")
 @limiter.limit("30/minute")
 async def upload_dataset_image(
-    request: Request,  # noqa: ARG001 (slowapi)
+    request: Request,
     file: UploadFile = File(...),
     dataset: str = Form("occlusion_cards"),
     split: str = Form("inbox"),
@@ -46,6 +46,9 @@ async def upload_dataset_image(
 
     This endpoint is protected by X-API-KEY and X-DATASET-KEY.
     """
+    # SlowAPI's limiter requires `request` in the endpoint signature.
+    _ = request
+
     if not storage.bucket_name:
         raise HTTPException(status_code=500, detail="S3 bucket not configured")
 

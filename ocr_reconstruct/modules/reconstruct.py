@@ -160,7 +160,7 @@ def deblur_wiener(img: np.ndarray, kernel: Optional[np.ndarray] = None) -> np.nd
         return cast(np.ndarray, np.clip(wiener_filtered * 255.0, 0, 255)).astype(
             "uint8"
         )
-    except (ImportError, Exception):
+    except Exception:
         # Fallback to a simple sharpening filter
         sharpen_kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
         return cv2.filter2D(img, -1, sharpen_kernel)
