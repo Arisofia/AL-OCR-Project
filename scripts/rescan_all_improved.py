@@ -9,7 +9,7 @@ import pytesseract
 
 IMG = "/Users/jenineferderas/Desktop/card_image.jpg"
 WL = "-c tessedit_char_whitelist=0123456789"
-OCR_TIMEOUT_SEC = 0.8
+OCR_TIMEOUT_SEC = 1
 FAST_OCR_SWEEP = True
 MAX_OCR_CALLS_PER_POS = 900 if FAST_OCR_SWEEP else 3000
 

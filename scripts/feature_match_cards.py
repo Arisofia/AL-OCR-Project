@@ -6,6 +6,7 @@ Then read the hidden digits from the new image.
 """
 import re
 from collections import Counter
+from typing import Any, cast
 
 import cv2
 import numpy as np
@@ -28,9 +29,12 @@ print(f"Image 2: {w2}x{h2}")
 # ─── Step 1: Feature matching ───
 print("\n=== FEATURE MATCHING ===\n")
 
-orb = cv2.ORB_create(nfeatures=5000)
-kp1, des1 = orb.detectAndCompute(gray1, None)
-kp2, des2 = orb.detectAndCompute(gray2, None)
+orb_create = getattr(cv2, "ORB_create", None)
+if orb_create is None:
+    orb_create = cv2.ORB.create
+orb = orb_create(nfeatures=5000)
+kp1, des1 = cast(Any, orb).detectAndCompute(gray1, None)
+kp2, des2 = cast(Any, orb).detectAndCompute(gray2, None)
 print(f"ORB keypoints: img1={len(kp1)}, img2={len(kp2)}")
 
 bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
@@ -47,8 +51,8 @@ for m in matches[:10]:
 # Try homography with good matches
 good = matches[:100]
 if len(good) >= 4:
-    pts1 = np.reshape(np.float32([kp1[m.queryIdx].pt for m in good]), (-1, 1, 2))
-    pts2 = np.reshape(np.float32([kp2[m.trainIdx].pt for m in good]), (-1, 1, 2))
+    pts1 = np.array([kp1[m.queryIdx].pt for m in good], dtype=np.float32).reshape((-1, 1, 2))
+    pts2 = np.array([kp2[m.trainIdx].pt for m in good], dtype=np.float32).reshape((-1, 1, 2))
     
     H, mask = cv2.findHomography(
         pts1,
@@ -77,7 +81,7 @@ if len(good) >= 4:
         mapped_centers = {}
         for pos in range(16):
             cx = ORIG_CENTERS[pos]
-            pt = np.float32([[[cx, digit_y_orig]]])
+            pt = np.array([[[cx, digit_y_orig]]], dtype=np.float32)
             mapped = cv2.perspectiveTransform(pt, H)
             mx, my = mapped[0][0]
             mapped_centers[pos] = (int(mx), int(my))
@@ -314,9 +318,12 @@ else:
 # ─── Also try SIFT ───
 print("\n\n=== TRYING SIFT ===\n")
 try:
-    sift = cv2.SIFT_create(nfeatures=5000)
-    kp1s, des1s = sift.detectAndCompute(gray1, None)
-    kp2s, des2s = sift.detectAndCompute(gray2, None)
+    sift_create = getattr(cv2, "SIFT_create", None)
+    if sift_create is None:
+        sift_create = cv2.SIFT.create
+    sift = sift_create(nfeatures=5000)
+    kp1s, des1s = cast(Any, sift).detectAndCompute(gray1, None)
+    kp2s, des2s = cast(Any, sift).detectAndCompute(gray2, None)
     print(f"SIFT keypoints: img1={len(kp1s)}, img2={len(kp2s)}")
     
     bf2 = cv2.BFMatcher(cv2.NORM_L2)
@@ -328,8 +335,8 @@ try:
     print(f"Good SIFT matches: {len(good_s)}")
     
     if len(good_s) >= 10:
-        pts1s = np.reshape(np.float32([kp1s[m.queryIdx].pt for m in good_s]), (-1, 1, 2))
-        pts2s = np.reshape(np.float32([kp2s[m.trainIdx].pt for m in good_s]), (-1, 1, 2))
+        pts1s = np.array([kp1s[m.queryIdx].pt for m in good_s], dtype=np.float32).reshape((-1, 1, 2))
+        pts2s = np.array([kp2s[m.trainIdx].pt for m in good_s], dtype=np.float32).reshape((-1, 1, 2))
         
         Hs, masks = cv2.findHomography(
             pts1s,
@@ -353,7 +360,7 @@ try:
             print("\n  SIFT-mapped positions:")
             for pos in range(16):
                 cx = ORIG_CENTERS[pos]
-                pt = np.float32([[[cx, digit_y_orig]]])
+                pt = np.array([[[cx, digit_y_orig]]], dtype=np.float32)
                 mapped = cv2.perspectiveTransform(pt, Hs)
                 mx, my = mapped[0][0]
                 known = "✓" if pos in {0,1,2,3,4,5,12,13,14,15} else "?"

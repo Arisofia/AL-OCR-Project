@@ -4,6 +4,7 @@
 extension-pkg-allow-list=cv2
 # Ensure local package imports (e.g. ocr_service.*) resolve when linting files in scripts/
 init-hook='import os, sys; sys.path.insert(0, os.getcwd())'
+ignore-paths=^/opt/homebrew/.*
 
 [TYPECHECK]
 generated-members=cv2.*

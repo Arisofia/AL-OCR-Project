@@ -262,8 +262,8 @@ for pos in sorted(KNOWN.keys()):
                 feats = analyze_structure(enh)
                 matches = match_digit(feats)
                 if matches:
-                    best_over_offsets[matches[0][0]] += 1
-                    best_over_offsets[matches[1][0]] += 0.5
+                    best_over_offsets[matches[0][0]] += 2
+                    best_over_offsets[matches[1][0]] += 1
     
     top3 = best_over_offsets.most_common(3)
     best = top3[0][0] if top3 else "?"
@@ -298,8 +298,8 @@ for pos in range(6, 12):
                     feats = analyze_structure(enh)
                     matches = match_digit(feats)
                     if matches:
-                        votes[matches[0][0]] += 1
-                        votes[matches[1][0]] += 0.5
+                        votes[matches[0][0]] += 2
+                        votes[matches[1][0]] += 1
     
     hidden_edge[pos] = votes
     top5 = ", ".join(f"'{k}'={v:.0f}" for k,v in votes.most_common(5))
