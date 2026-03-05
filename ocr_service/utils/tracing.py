@@ -44,6 +44,4 @@ def get_current_trace_id() -> Optional[str]:
         return None
     ctx = get_span_context()
     trace_id = getattr(ctx, "trace_id", None)
-    if isinstance(trace_id, int):
-        return format(trace_id, "x")
-    return None
+    return format(trace_id, "x") if isinstance(trace_id, int) else None

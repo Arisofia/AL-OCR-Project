@@ -3,23 +3,18 @@
 
 from __future__ import annotations
 
-import itertools
+from pathlib import Path
+import sys
 from typing import Final
 
+try:
+    from ocr_service.modules.pan_candidates import generate_pan_candidates
+except ModuleNotFoundError:
+    # Allow running this script directly without installing the package.
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+    from ocr_service.modules.pan_candidates import generate_pan_candidates
+
 Candidate = tuple[str, float, str]
-
-
-def _luhn_valid(pan: str) -> bool:
-    """Luhn checksum validation."""
-    total = 0
-    for i, ch in enumerate(reversed(pan)):
-        d = int(ch)
-        if i % 2 == 1:
-            d *= 2
-            if d > 9:
-                d -= 9
-        total += d
-    return total % 10 == 0
 
 # Per-position evidence — improved pipeline (template match + expanded OCR)
 # Template matching (pos6→'5' best among 0,3,4,5,6,8; pos11→'3'/'8')
@@ -52,11 +47,6 @@ def _format_pan(pan: str) -> str:
     return f"{pan[:4]} {pan[4:8]} {pan[8:12]} {pan[12:16]}"
 
 
-def _iter_mid_combinations() -> itertools.product:
-    """Return product iterator across candidate digits per hidden position."""
-    return itertools.product(*[TOP_PER_POS[pos] for pos in range(6, 12)])
-
-
 def _score_mid_digits(mid_digits: str) -> float:
     """Compute multiplicative confidence score for a hidden 6-digit sequence."""
     score = 1.0
@@ -68,12 +58,16 @@ def _score_mid_digits(mid_digits: str) -> float:
 
 def _find_valid_candidates() -> list[Candidate]:
     """Generate all Luhn-valid PAN candidates ranked by confidence."""
+    constraints = {
+        position: {int(digit) for digit in TOP_PER_POS[position]}
+        for position in range(6, 12)
+    }
+    pattern = PREFIX + ("X" * 6) + SUFFIX
+    pans = generate_pan_candidates(pattern, constraints=constraints, enforce_luhn=True)
+
     valid: list[Candidate] = []
-    for combo in _iter_mid_combinations():
-        mid_digits = "".join(combo)
-        pan = PREFIX + mid_digits + SUFFIX
-        if not _luhn_valid(pan):
-            continue
+    for pan in pans:
+        mid_digits = pan[6:12]
         valid.append((pan, _score_mid_digits(mid_digits), mid_digits))
     valid.sort(key=lambda row: -row[1])
     return valid

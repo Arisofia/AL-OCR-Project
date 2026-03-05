@@ -30,24 +30,14 @@ if str(PROJECT_ROOT) not in sys.path:
 from ocr_reconstruct.modules.reconstruct import (  # pylint: disable=wrong-import-position,import-error
     PixelReconstructor,
 )
+from ocr_service.modules.pan_candidates import (  # pylint: disable=wrong-import-position,import-error
+    luhn_ok,
+)
 
-try:
-    from ocr_service.modules.personal_doc_extractor import (  # pylint: disable=wrong-import-position,import-error
-        _luhn_valid as luhn_valid,
-    )
-except ImportError:
 
-    def luhn_valid(number: str) -> bool:
-        """Fallback Luhn validation when service module is unavailable."""
-        if not number.isdigit() or not 13 <= len(number) <= 19:
-            return False
-        total = 0
-        for index, char in enumerate(reversed(number)):
-            digit = int(char)
-            if index % 2 == 1:
-                digit = digit * 2 - 9 if digit > 4 else digit * 2
-            total += digit
-        return total % 10 == 0
+def luhn_valid(number: str) -> bool:
+    """Validate 13-19 digit card numbers using shared Luhn logic."""
+    return number.isdigit() and 13 <= len(number) <= 19 and luhn_ok(number)
 
 
 def load_and_inspect(path: str) -> np.ndarray:
@@ -333,13 +323,12 @@ def print_results(unique_results: list[dict[str, Any]]) -> None:
             luhn_ok = luhn_valid(digits)
             print(f"    {groups}  {'LUHN-VALID' if luhn_ok else 'LUHN-FAIL'}")
 
-    partials = [
+    if partials := [
         row
         for row in unique_results
         if ("4388" in str(row["digits"]) or "0665" in str(row["digits"]))
         and row not in best
-    ]
-    if partials:
+    ]:
         print("\n>>> PARTIAL MATCHES (contain known digit groups):")
         for row in partials[:20]:
             digits = str(row["digits"])

@@ -22,12 +22,20 @@ import dataclasses
 import itertools
 import re
 import sys
+from pathlib import Path
 from collections import Counter
 from typing import TypedDict
 
 import cv2
 import numpy as np
 import pytesseract
+
+try:
+    from ocr_service.modules.pan_candidates import luhn_ok
+except ModuleNotFoundError:
+    # Allow running this script directly without installing the package.
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+    from ocr_service.modules.pan_candidates import luhn_ok
 
 IMG = sys.argv[1] if len(sys.argv) > 1 else "/Users/jenineferderas/Desktop/card_image.jpg"
 
@@ -371,15 +379,7 @@ def _scan_position(
 
 def _luhn_valid(number: str) -> bool:
     """Return True when number satisfies the Luhn checksum."""
-    if not number.isdigit() or len(number) != 16:
-        return False
-    total = 0
-    for i, ch in enumerate(reversed(number)):
-        d = int(ch)
-        if i % 2 == 1:
-            d = d * 2 - 9 if d > 4 else d * 2
-        total += d
-    return total % 10 == 0
+    return number.isdigit() and len(number) == 16 and luhn_ok(number)
 
 
 def _top_digits(votes: Counter, top_k: int = 3) -> list[tuple[str, float]]:

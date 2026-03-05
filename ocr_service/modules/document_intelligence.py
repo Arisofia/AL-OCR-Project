@@ -12,6 +12,8 @@ from typing import Any, ClassVar, Optional
 
 import httpx
 
+from .pan_candidates import luhn_ok
+
 __all__ = ["DocumentIntelligence"]
 
 logger = logging.getLogger("ocr-service.document-intelligence")
@@ -26,7 +28,6 @@ class DocumentIntelligence:
     _BIN_INFO_CACHE: ClassVar[dict[str, Optional[dict[str, Any]]]] = {}
     _BIN_CACHE_MAX_SIZE: ClassVar[int] = 512
 
-    # Confidence scoring constants for personal document classification
     _MAX_TYPE_CONFIDENCE: ClassVar[float] = 0.95
     _BASE_PERSONAL_DOC_CONFIDENCE: ClassVar[float] = 0.70
     _KEYWORD_SCORE_WEIGHT: ClassVar[float] = 0.05
@@ -75,7 +76,6 @@ class DocumentIntelligence:
         "id",
     }
 
-    # Personal document keyword sets
     _PASSPORT_KEYWORDS: ClassVar[set[str]] = {
         "passport",
         "pasaporte",
@@ -279,16 +279,15 @@ class DocumentIntelligence:
             row = {
                 "masked": cls._mask_number(number),
                 "length": len(number),
-                "luhn_valid": cls._is_valid_luhn(number),
-                "brand_guess": cls._guess_card_brand(number),
+                "luhn_valid": cls.is_valid_luhn(number),
+                "brand_guess": cls.guess_card_brand(number),
             }
             if include_bin_info:
-                bin_info = cls.fetch_bin_info(number)
-                if bin_info:
+                if bin_info := cls.fetch_bin_info(number):
                     row["bin_info"] = bin_info
             card_rows.append(row)
 
-        luhn_valid_count = sum(1 for row in card_rows if row["luhn_valid"])
+        luhn_valid_count = sum(row["luhn_valid"] for row in card_rows)
         card_analysis = {
             "detected": len(card_rows) > 0,
             "candidate_count": len(card_rows),
@@ -322,19 +321,9 @@ class DocumentIntelligence:
         return candidates
 
     @staticmethod
-    def _is_valid_luhn(number: str) -> bool:
+    def is_valid_luhn(number: str) -> bool:
         """Validate a numeric string with Luhn (13-19 digits only)."""
-        if not number.isdigit() or len(number) < 13 or len(number) > 19:
-            return False
-        total = 0
-        for index, char in enumerate(reversed(number)):
-            digit = int(char)
-            if index % 2 == 1:
-                digit *= 2
-                if digit > 9:
-                    digit -= 9
-            total += digit
-        return total % 10 == 0
+        return number.isdigit() and 13 <= len(number) <= 19 and luhn_ok(number)
 
     @staticmethod
     def _mask_number(number: str) -> str:
@@ -345,31 +334,47 @@ class DocumentIntelligence:
         return " ".join(masked[i : i + 4] for i in range(0, len(masked), 4)).strip()
 
     @staticmethod
-    def _guess_card_brand(number: str) -> str:
+    def _is_mastercard(number: str) -> bool:
+        if len(number) != 16:
+            return False
+        prefix2 = int(number[:2]) if len(number) >= 2 else 0
+        prefix4 = int(number[:4]) if len(number) >= 4 else 0
+        return 51 <= prefix2 <= 55 or 2221 <= prefix4 <= 2720
+
+    @staticmethod
+    def _is_discover(number: str) -> bool:
+        if number.startswith("6011") or number.startswith("65"):
+            return True
+        if len(number) >= 3 and 644 <= int(number[:3]) <= 649:
+            return True
+        return len(number) >= 6 and 622126 <= int(number[:6]) <= 622925
+
+    @staticmethod
+    def _is_diners(number: str) -> bool:
+        if len(number) != 14:
+            return False
+        if len(number) >= 3 and 300 <= int(number[:3]) <= 305:
+            return True
+        return len(number) >= 2 and number[:2] in {"36", "38", "39"}
+
+    @staticmethod
+    def _guess_minor_brand(number: str) -> str:
+        if len(number) >= 4 and 3528 <= int(number[:4]) <= 3589:
+            return "jcb"
+        return "unionpay" if number.startswith("62") else "unknown"
+
+    @classmethod
+    def guess_card_brand(cls, number: str) -> str:
         """Heuristic brand guess by IIN/BIN prefix."""
         if number.startswith("4") and len(number) in {13, 16, 19}:
             return "visa"
         if len(number) >= 2 and number[:2] in {"34", "37"} and len(number) == 15:
             return "amex"
-        if len(number) >= 2 and 51 <= int(number[:2]) <= 55 and len(number) == 16:
+        if cls._is_mastercard(number):
             return "mastercard"
-        if len(number) >= 4 and 2221 <= int(number[:4]) <= 2720 and len(number) == 16:
-            return "mastercard"
-        if number.startswith("6011") or number.startswith("65"):
+        if cls._is_discover(number):
             return "discover"
-        if len(number) >= 3 and 644 <= int(number[:3]) <= 649:
-            return "discover"
-        if len(number) >= 6 and 622126 <= int(number[:6]) <= 622925:
-            return "discover"
-        if len(number) >= 3 and 300 <= int(number[:3]) <= 305 and len(number) == 14:
-            return "diners"
-        if len(number) >= 2 and number[:2] in {"36", "38", "39"} and len(number) == 14:
-            return "diners"
-        if len(number) >= 4 and 3528 <= int(number[:4]) <= 3589:
-            return "jcb"
-        if number.startswith("62"):
-            return "unionpay"
-        return "unknown"
+        return "diners" if cls._is_diners(number) else cls._guess_minor_brand(number)
 
     @classmethod
     def _classify_document_type(
@@ -388,7 +393,7 @@ class DocumentIntelligence:
         lower = (text or "").lower()
 
         def _keyword_score(keywords: set[str]) -> int:
-            return sum(1 for kw in keywords if kw in lower)
+            return sum(kw in lower for kw in keywords)
 
         has_card_keyword = any(keyword in lower for keyword in cls._CARD_KEYWORDS)
         has_invoice_keyword = any(keyword in lower for keyword in cls._INVOICE_KEYWORDS)
@@ -409,7 +414,6 @@ class DocumentIntelligence:
         residence_score = _keyword_score(cls._RESIDENCE_PERMIT_KEYWORDS)
         membership_score = _keyword_score(cls._MEMBERSHIP_CARD_KEYWORDS)
 
-        # Build list of (doc_type, raw_score) for personal documents.
         personal_doc_candidates: list[tuple[str, int]] = [
             ("passport", passport_score),
             ("driver_license", driver_score),
@@ -426,9 +430,7 @@ class DocumentIntelligence:
             personal_doc_candidates, key=lambda x: x[1]
         )
 
-        # --- Personal document classification (high-confidence, checked first) ---
         if best_personal_score >= 2:
-            # Multiple matching keywords → higher confidence; skip card detection
             confidence = min(
                 cls._MAX_TYPE_CONFIDENCE,
                 cls._BASE_PERSONAL_DOC_CONFIDENCE
@@ -436,7 +438,6 @@ class DocumentIntelligence:
             )
             return best_personal_type, round(confidence, 2)
 
-        # --- Hard classification rules (high confidence) ---
         if has_invoice_keyword:
             return "invoice", 0.90
         if has_receipt_keyword:
@@ -446,20 +447,25 @@ class DocumentIntelligence:
         if has_card_candidates and (has_card_keyword or max_card_len >= 11):
             return "bank_card", 0.80
 
-        if best_personal_score == 1:
-            # Single keyword match → moderate confidence
-            # Check for legacy id_document (catch-all)
-            if has_id_keyword and best_personal_type in {
-                "passport",
-                "national_id",
-                "driver_license",
-            }:
-                return best_personal_type, 0.65
-            if has_id_keyword:
-                return "id_document", 0.60
+        return cls._classify_fallback(
+            best_personal_score, best_personal_type, has_id_keyword, layout_type
+        )
 
-        # --- Legacy fallback rules ---
+    @classmethod
+    def _classify_fallback(
+        cls,
+        best_personal_score: int,
+        best_personal_type: str,
+        has_id_keyword: bool,
+        layout_type: str,
+    ) -> tuple[str, float]:
+        """Low-confidence personal doc and generic fallback classification."""
         if has_id_keyword:
+            if best_personal_score == 1:
+                _id_types = {"passport", "national_id", "driver_license"}
+                if best_personal_type in _id_types:
+                    return best_personal_type, 0.65
+                return "id_document", 0.60
             return "id_document", 0.55
         if layout_type == "dense_text":
             return "statement", 0.60

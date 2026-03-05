@@ -1,11 +1,13 @@
+"""Monitoring utilities: Sentry integration and OpenTelemetry tracing setup."""
+
 import logging
+import os
 from typing import Any, Optional, cast
 
 import sentry_sdk
 
 from .custom_logging import setup_logging
 
-# OpenTelemetry imports
 trace = None
 TracerProvider = None
 BatchSpanProcessor = None
@@ -28,12 +30,10 @@ def init_monitoring(settings: Any, integrations: Optional[list[Any]] = None, **k
         integrations: Optional list of Sentry integrations to add.
         **kwargs: Additional parameters for sentry_sdk.init (e.g., release).
     """
-    # 1. Initialize logging
     log_level = logging.INFO if settings.environment == "production" else logging.DEBUG
     setup_logging(level=log_level)
     logger = logging.getLogger("ocr-service.init")
 
-    # 2. Initialize Sentry
     if settings.sentry_dsn:
         default_integrations = []
         if integrations:
@@ -52,7 +52,10 @@ def init_monitoring(settings: Any, integrations: Optional[list[Any]] = None, **k
     else:
         logger.info("Sentry DSN not configured, skipping SDK initialization")
 
-    # 3. Initialize OpenTelemetry
+    if settings.environment == "test" or os.getenv("PYTEST_CURRENT_TEST"):
+        logger.debug("Skipping OpenTelemetry console exporter in test environment")
+        return
+
     if (
         trace is not None
         and TracerProvider is not None

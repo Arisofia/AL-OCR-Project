@@ -38,15 +38,15 @@ def _safe_name(value: str) -> str:
 async def upload_dataset_image(
     request: Request,
     file: Annotated[UploadFile, File(...)],
-    dataset: Annotated[str, Form("occlusion_cards")],
-    split: Annotated[str, Form("inbox")],
-    doc_type: Annotated[str, Form("bank_card")],
-    occlusion_type: Annotated[str, Form("unknown")],
-    use_reconstruction: Annotated[bool, Form(False)],
-    notes: Annotated[str, Form("")],
     _api_key: Annotated[str, Depends(get_api_key)],
     _dataset_key: Annotated[str, Depends(get_dataset_upload_key)],
     storage: Annotated[StorageService, Depends(get_storage_service)],
+    dataset: Annotated[str, Form()] = "occlusion_cards",
+    split: Annotated[str, Form()] = "inbox",
+    doc_type: Annotated[str, Form()] = "bank_card",
+    occlusion_type: Annotated[str, Form()] = "unknown",
+    use_reconstruction: Annotated[bool, Form()] = False,
+    notes: Annotated[str, Form()] = "",
 ) -> dict:
     """
     Upload a dataset image into S3 under a datasets/ prefix with sidecar metadata.

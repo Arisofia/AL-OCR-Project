@@ -28,13 +28,11 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+from .pan_candidates import luhn_ok
+
 __all__ = ["PersonalDocExtractor", "ExtractedField", "detect_metadata", "_luhn_valid"]
 
 logger = logging.getLogger("ocr-service.personal-doc-extractor")
-
-# ---------------------------------------------------------------------------
-# Data structures
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -44,27 +42,16 @@ class ExtractedField:
     name: str
     value: str
     raw_ocr: Optional[str] = None
-    confidence_level: str = "low"  # "high", "medium", or "low"
+    confidence_level: str = "low"
 
-
-# ---------------------------------------------------------------------------
-# Country / document-type pattern configuration
-# ---------------------------------------------------------------------------
-# Patterns are keyed by field name.  Each entry is a list of regex patterns
-# tried in order; the first match wins.  This structure makes adding new
-# countries or variants purely a configuration exercise.
 
 _DATE_PATTERNS = [
-    # ISO: 1990-05-12
     r"\b(\d{4}[-/]\d{2}[-/]\d{2})\b",
-    # DMY: 12/05/1990 or 12-05-1990 or 12.05.1990
     r"\b(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})\b",
-    # MDY (US): 05/12/1990
     r"\b(\d{1,2}[/]\d{1,2}[/]\d{2,4})\b",
 ]
 
 _DOC_NUMBER_PATTERNS = [
-    # Alphanumeric IDs like "A1234567" or "DNI 12345678X"; allow '?' for OCR uncertainty
     r"\b(?:DNI|NIE|NIF|ID|No\.?|NUM\.?|CÉDULA|CEDULA|DOC)[\s:#]*([A-Z0-9?]{6,20})(?=[^A-Z0-9?]|$)",
     r"\b([A-Z]{1,3}\s?\d{6,12})\b",
     r"\b(\d{7,12}[A-Z]?)\b",
@@ -75,18 +62,14 @@ _PASSPORT_NUMBER_PATTERNS = [
     r"\b([A-Z0-9]{8,9})\b",
 ]
 
-# MRZ lines: two lines of 44 (TD3/passport) or 30/36 characters
 _MRZ_PATTERNS = [
     r"([A-Z0-9<]{30,44}\n[A-Z0-9<]{30,44})",
     r"([A-Z0-9<]{30,44})",
 ]
 
 _NAME_PATTERNS = [
-    # Full name label (prefer complete names when available)
     r"(?:FULL\s+NAME|NOMBRE\s+COMPLETO)[:\s]+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s\-']{4,60})",
-    # MRZ name: P<COUNTRY<SURNAME<<GIVEN<< (full name block)
     r"P<[A-Z]{3}<([A-Z<]{5,44})",
-    # Fallbacks: component labels (surname / given names)
     r"(?:SURNAME|APELLIDOS?|LAST\s+NAME|NOM)[:\s]+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s\-']{2,50})",
     r"(?:GIVEN\s+NAMES?|NOMBRES?|FIRST\s+NAME|PRÉNOM)[:\s]+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s\-']{2,40})",
 ]
@@ -97,9 +80,7 @@ _ADDRESS_PATTERNS = [
 ]
 
 _EXPIRY_PATTERNS = [
-    # Full date (DD/MM/YYYY or DD/MM/YY) – matched first to avoid truncating the year
     r"(?:EXPIRY|EXPIRATION|EXP\.?|VENC\.?|VÁLIDO\s+HASTA|VALID\s+(?:THRU|UNTIL))[:\s/]+(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})",
-    # Short MM/YY – only when NOT followed by another date component
     r"(?:EXPIRY|EXP\.?|EXPIRATION|VENC\.?|VALID\s+THRU)[:\s/]+(\d{1,2}[/.\-]\d{2,4})(?![/.\-]\d{2,4})",
 ]
 
@@ -113,15 +94,14 @@ _GENDER_PATTERNS = [
 ]
 
 _TAX_NUMBER_PATTERNS = [
-    # Spain NIF/NIE, Mexico RFC, Brazil CPF/CNPJ, generic
     r"(?:NIF|NIE|RFC|CPF|CNPJ|TIN|VAT|TAX\s+ID)[:\s#]*([A-Z0-9\-\.]{6,20})",
-    r"\b(\d{3}[.\-]\d{3}[.\-]\d{3}[.\-]\d{1,2})\b",  # Brazil CPF: 000.000.000-00
-    r"\b([A-Z]{4}\d{6}[A-Z0-9]{3})\b",  # Mexico RFC
+    r"\b(\d{3}[.\-]\d{3}[.\-]\d{3}[.\-]\d{1,2})\b",
+    r"\b([A-Z]{4}\d{6}[A-Z0-9]{3})\b",
 ]
 
 _PAN_PATTERNS = [
     r"\b(\d{4}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4})\b",
-    r"\b(\d{4}[\s\-]?\d{6}[\s\-]?\d{5})\b",  # Amex 15-digit
+    r"\b(\d{4}[\s\-]?\d{6}[\s\-]?\d{5})\b",
 ]
 
 _CVV_PATTERNS = [
@@ -188,12 +168,6 @@ _OUTSTANDING_AMOUNT_PATTERNS = [
     r"(?:OVERDUE|PAST\s+DUE)[:\s]+([£$€\d,\.\s]+)",
 ]
 
-# ---------------------------------------------------------------------------
-# Field definitions per document type
-# ---------------------------------------------------------------------------
-# Each entry: (field_name, patterns_list, is_sensitive, base_confidence)
-#   is_sensitive: if True the value is masked before returning
-#   base_confidence: "high"/"medium"/"low" – reduced when reconstruction needed
 
 _FieldDef = tuple[str, list[str], bool, str]
 
@@ -242,10 +216,8 @@ FIELD_DEFINITIONS: dict[str, list[_FieldDef]] = {
         ("address", _ADDRESS_PATTERNS, False, "low"),
     ],
     "bank_card": [
-        # PAN is sensitive — masked to last 4 digits in the response
         ("card_number", _PAN_PATTERNS, True, "high"),
         ("expiry_date", _EXPIRY_PATTERNS, False, "high"),
-        # CVV is highly sensitive — omitted from response entirely
         ("cvv", _CVV_PATTERNS, True, "high"),
         ("cardholder_name", _NAME_PATTERNS, False, "medium"),
     ],
@@ -294,7 +266,6 @@ FIELD_DEFINITIONS: dict[str, list[_FieldDef]] = {
         ("document_number", _DOC_NUMBER_PATTERNS, False, "medium"),
         ("expiry_date", _EXPIRY_PATTERNS, False, "high"),
     ],
-    # Aliases for extended document types that share the same definitions
     "invoice": [
         ("full_name", _NAME_PATTERNS, False, "low"),
         ("total_amount", _TOTAL_PATTERNS, False, "high"),
@@ -308,34 +279,22 @@ FIELD_DEFINITIONS: dict[str, list[_FieldDef]] = {
     ],
 }
 
-# Aliases: document types that reuse the same field definitions as a base type.
 _ALIAS_DOCUMENT_TYPES: dict[str, str] = {
-    # id_card → same fields as national_id
     "id_card": "national_id",
-    # credit_card / debit_card → same fields as bank_card
     "credit_card": "bank_card",
     "debit_card": "bank_card",
 }
 
-# Populate FIELD_DEFINITIONS for aliases by referencing their base type lists.
 for _alias_doc_type, _base_doc_type in _ALIAS_DOCUMENT_TYPES.items():
     FIELD_DEFINITIONS[_alias_doc_type] = FIELD_DEFINITIONS[_base_doc_type]
-# Document types that are treated as generic (minimal field extraction)
 _GENERIC_DOC_TYPES = {"generic", "generic_document", "form", "unknown"}
 
-# Sensitive field names — value masked, never logged in plain text
 _SENSITIVE_FIELDS = {"card_number", "cvv", "pan", "cvc", "cvv2", "cvc2"}
 
-# Fields that are completely omitted from API responses (too sensitive)
 _OMIT_FROM_RESPONSE = {"cvv", "cvc", "cvv2", "cvc2"}
 
 
-# ---------------------------------------------------------------------------
-# Language / country detection helpers
-# ---------------------------------------------------------------------------
-
 _LANG_HINTS: list[tuple[re.Pattern, str, str]] = [
-    # (pattern, language_code, country_code)
     (re.compile(r"\b(cpf|cnpj|rg)\b", re.I), "pt", "BR"),
     (re.compile(r"\b(rfc|curp|ine)\b", re.I), "es", "MX"),
     (re.compile(r"\b(dni|nie)\b", re.I), "es", "ES"),
@@ -351,15 +310,10 @@ _LANG_HINTS: list[tuple[re.Pattern, str, str]] = [
 
 def _detect_language_and_country(text: str) -> tuple[str, str]:
     """Return (language_code, country_code) based on text cues."""
-    for pattern, lang, country in _LANG_HINTS:
-        if pattern.search(text):
-            return lang, country
-    return "en", ""
-
-
-# ---------------------------------------------------------------------------
-# Masking helpers
-# ---------------------------------------------------------------------------
+    return next(
+        ((lang, country) for pattern, lang, country in _LANG_HINTS if pattern.search(text)),
+        ("en", ""),
+    )
 
 
 def _mask_pan(value: str) -> str:
@@ -368,40 +322,14 @@ def _mask_pan(value: str) -> str:
     if len(digits) <= 4:
         return value
     masked_digits = "*" * (len(digits) - 4) + digits[-4:]
-    # Rebuild with spaces every 4 chars
     return " ".join(
         masked_digits[i : i + 4] for i in range(0, len(masked_digits), 4)
     ).strip()
 
 
-# ---------------------------------------------------------------------------
-# Pattern-aware confidence validators (continuous learning layer)
-# ---------------------------------------------------------------------------
-# Design: adding a new field validation rule is purely a configuration exercise
-# — define a validator function and register it in _FIELD_VALIDATORS.
-#
-# Each validator receives (normalized_value, raw_ocr_value) and returns:
-#   (confidence_override, advisory_note)
-#   confidence_override  – "high"/"medium"/"low", or None to keep existing level
-#   advisory_note        – human-readable string (positive or warning), or None
-#
-# This registry is the "continuous learning" representation for this codebase:
-# domain knowledge about valid formats (card lengths, Luhn, expiry ranges) is
-# encoded here in a centrally managed, extendable configuration map rather than
-# scattered across pattern strings.
-
-
 def _luhn_valid(number: str) -> bool:
-    """Return True when *number* (digits-only string) satisfies the Luhn algorithm."""
-    if not number.isdigit() or not (13 <= len(number) <= 19):
-        return False
-    total = 0
-    for i, ch in enumerate(reversed(number)):
-        d = int(ch)
-        if i % 2 == 1:
-            d = d * 2 - 9 if d > 4 else d * 2
-        total += d
-    return total % 10 == 0
+    """Return True when *number* is 13-19 digits and passes Luhn."""
+    return number.isdigit() and 13 <= len(number) <= 19 and luhn_ok(number)
 
 
 def _validate_pan(
@@ -419,8 +347,6 @@ def _validate_pan(
         ("high", positive note)   – all checks pass
         ("low",  warning note)    – any check fails
     """
-    # Reject PANs that include alphabetic or symbol characters beyond
-    # benign separators (spaces and hyphens).
     if not re.fullmatch(r"[0-9\s\-]+", raw):
         return "low", (
             "card_number contains invalid characters (only digits, spaces, and "
@@ -431,7 +357,7 @@ def _validate_pan(
         return "low", (
             "card_number does not contain any digits; value likely misread"
         )
-    if not (13 <= len(digits) <= 19):
+    if not 13 <= len(digits) <= 19:
         return "low", (
             f"card_number digit count ({len(digits)}) is outside expected "
             "range 13-19; verify manually"
@@ -439,6 +365,17 @@ def _validate_pan(
     if _luhn_valid(digits):
         return "high", "Luhn check passed; confidence boosted to high"
     return "low", "Luhn check failed; card number likely misread – verify manually"
+
+
+_EXPIRY_INVALID_MONTH_MSG = "Expiry date has invalid month (must be 01-12); verify manually"
+
+
+def _check_expiry_month_year(
+    month: int, year: int, cutoff_year: int, fmt: str
+) -> tuple[Optional[str], Optional[str]]:
+    if not 1 <= month <= 12:
+        return "low", _EXPIRY_INVALID_MONTH_MSG
+    return ("high", f"Expiry date format valid ({fmt})") if year >= cutoff_year else (None, None)
 
 
 def _validate_expiry_date(
@@ -458,49 +395,29 @@ def _validate_expiry_date(
     - Unrecognised format                                   → ``None`` (keep base)
     """
     now = datetime.date.today()
-    # Allow documents up to 10 years expired (historical / archival use-cases)
     cutoff_year = now.year - 10
 
-    # MM-YY  (e.g. "12-26")
-    m = re.match(r"^(\d{1,2})-(\d{2})$", value)
-    if m:
-        month, year = int(m.group(1)), 2000 + int(m.group(2))
-        if not (1 <= month <= 12):
-            return "low", "Expiry date has invalid month (must be 01-12); verify manually"
-        if year >= cutoff_year:
-            return "high", "Expiry date format valid (MM/YY)"
-        return None, None  # Very old; keep base confidence
+    if m := re.match(r"^(\d{1,2})-(\d{2})$", value):
+        return _check_expiry_month_year(int(m[1]), 2000 + int(m[2]), cutoff_year, "MM/YY")
 
-    # MM-YYYY  (e.g. "12-2026")
-    m = re.match(r"^(\d{1,2})-(\d{4})$", value)
-    if m:
-        month, year = int(m.group(1)), int(m.group(2))
-        if not (1 <= month <= 12):
-            return "low", "Expiry date has invalid month (must be 01-12); verify manually"
-        if year >= cutoff_year:
-            return "high", "Expiry date format valid (MM/YYYY)"
-        return None, None
+    if m := re.match(r"^(\d{1,2})-(\d{4})$", value):
+        return _check_expiry_month_year(int(m[1]), int(m[2]), cutoff_year, "MM/YYYY")
 
-    # DD-MM-YYYY or DD-MM-YY  (e.g. "25-09-2030")
-    m = re.match(r"^(\d{1,2})-(\d{1,2})-(\d{2,4})$", value)
-    if m:
-        day, month = int(m.group(1)), int(m.group(2))
-        year_s = m.group(3)
-        year = int(year_s) if len(year_s) == 4 else 2000 + int(year_s)
-        if not (1 <= month <= 12):
-            return "low", "Expiry date has invalid month (must be 01-12); verify manually"
-        if not (1 <= day <= 31):
-            return "low", "Expiry date has invalid day (must be 01-31); verify manually"
-        if year >= cutoff_year:
-            return "high", "Expiry date format valid (DD/MM/YYYY)"
-        return None, None
+    if m := re.match(r"^(\d{1,2})-(\d{1,2})-(\d{2,4})$", value):
+        return _validate_expiry_dmy(int(m[1]), int(m[2]), m[3], cutoff_year)
 
-    return None, None  # Unrecognised format; keep existing confidence
+    return None, None
 
 
-# Registry: maps field_name → validator callable
-# To add a new validation rule, add an entry here; the execution loop in
-# extract() applies all registered validators automatically.
+def _validate_expiry_dmy(
+    day: int, month: int, year_s: str, cutoff_year: int
+) -> tuple[Optional[str], Optional[str]]:
+    if not 1 <= day <= 31:
+        return "low", "Expiry date has invalid day (must be 01-31); verify manually"
+    year = int(year_s) if len(year_s) == 4 else 2000 + int(year_s)
+    return _check_expiry_month_year(month, year, cutoff_year, "DD/MM/YYYY")
+
+
 _FIELD_VALIDATORS: dict[
     str, Callable[[str, str], tuple[Optional[str], Optional[str]]]
 ] = {
@@ -509,9 +426,31 @@ _FIELD_VALIDATORS: dict[
 }
 
 
-# ---------------------------------------------------------------------------
-# Core extractor
-# ---------------------------------------------------------------------------
+def _normalize_full_name(value: str) -> str:
+    value = re.sub(r"<+", " ", value)
+    return re.sub(r"\s+", " ", value).upper().strip()
+
+
+def _normalize_mrz_data(value: str) -> str:
+    return re.sub(r"[^\w<\n]", "", value).strip()
+
+
+def _normalize_gender(value: str) -> str:
+    mapping = {
+        "MALE": "M",
+        "FEMALE": "F",
+        "MASCULINO": "M",
+        "FEMENINO": "F",
+    }
+    return mapping.get(value.upper(), value.upper()[:1])
+
+
+_FIELD_NORMALIZERS: dict[str, Callable[[str], str]] = {
+    "full_name": _normalize_full_name,
+    "mrz_data": _normalize_mrz_data,
+    "nationality": lambda value: value.upper().strip(),
+    "gender": _normalize_gender,
+}
 
 
 class PersonalDocExtractor:
@@ -548,7 +487,6 @@ class PersonalDocExtractor:
 
         definitions = FIELD_DEFINITIONS.get(document_type)
         if definitions is None:
-            # Attempt to fall back to id_document extraction for unknown personal docs
             logger.debug(
                 "No field definitions for document_type=%r; using id_document fallback",
                 document_type,
@@ -556,74 +494,75 @@ class PersonalDocExtractor:
             definitions = FIELD_DEFINITIONS.get("id_document", [])
 
         for field_name, patterns, is_sensitive, base_confidence in definitions:
-            # Fields that must never appear in the API response
             if field_name in _OMIT_FROM_RESPONSE:
                 continue
-
             raw_value = self._try_patterns(text, patterns)
             if raw_value is None:
                 continue
-
-            normalized = self._normalize(field_name, raw_value)
-            confidence = self._adjust_confidence(
-                base_confidence, raw_value, normalized
-            )
-
-            # Post-extraction format/algorithm validation (Luhn, expiry range, etc.)
-            # Produces field-specific confidence adjustments and advisory notes.
-            validator_note: Optional[str] = None
-            validator = _FIELD_VALIDATORS.get(field_name)
-            if validator:
-                conf_override, validator_note = validator(normalized, raw_value)
-                if conf_override is not None:
-                    confidence = conf_override
-                if validator_note is not None:
-                    warnings.append(validator_note)
-
-            # Mask sensitive values before returning
-            display_value = normalized
-            if is_sensitive or field_name in _SENSITIVE_FIELDS:
-                display_value = _mask_pan(normalized)
-                logger.debug(
-                    "Sensitive field '%s' extracted and masked (last 4 preserved). "
-                    "Raw value NOT logged.",
-                    field_name,
-                )
-
-            ef = ExtractedField(
-                name=field_name,
-                value=display_value,
-                raw_ocr=raw_value if not is_sensitive else "[REDACTED]",
-                confidence_level=confidence,
+            ef, field_warnings = self._build_field(
+                field_name, raw_value, is_sensitive, base_confidence
             )
             fields.append(ef)
-
-            if confidence == "low" and validator_note is None:
-                # Skip generic warning when a validator already emitted a specific note
-                warnings.append(
-                    f"{field_name} extracted with low confidence; "
-                    "verify manually"
-                )
-            elif confidence == "medium" and normalized != raw_value:
-                warnings.append(
-                    f"{field_name} partially reconstructed from OCR output; "
-                    "verify manually"
-                )
+            warnings.extend(field_warnings)
 
         return fields, warnings
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
+    def _build_field(
+        self,
+        field_name: str,
+        raw_value: str,
+        is_sensitive: bool,
+        base_confidence: str,
+    ) -> tuple[ExtractedField, list[str]]:
+        """Build an ExtractedField and collect any advisory warnings for it."""
+        field_warnings: list[str] = []
+        normalized = self._normalize(field_name, raw_value)
+        confidence = self._adjust_confidence(base_confidence, raw_value, normalized)
+
+        validator_note: Optional[str] = None
+        validator = _FIELD_VALIDATORS.get(field_name)
+        if validator:
+            conf_override, validator_note = validator(normalized, raw_value)
+            if conf_override is not None:
+                confidence = conf_override
+            if validator_note is not None:
+                field_warnings.append(validator_note)
+
+        display_value = normalized
+        if is_sensitive or field_name in _SENSITIVE_FIELDS:
+            display_value = _mask_pan(normalized)
+            logger.debug(
+                "Sensitive field '%s' extracted and masked (last 4 preserved). "
+                "Raw value NOT logged.",
+                field_name,
+            )
+
+        ef = ExtractedField(
+            name=field_name,
+            value=display_value,
+            raw_ocr="[REDACTED]" if is_sensitive else raw_value,
+            confidence_level=confidence,
+        )
+
+        if confidence == "low" and validator_note is None:
+            field_warnings.append(
+                f"{field_name} extracted with low confidence; verify manually"
+            )
+        elif confidence == "medium" and normalized != raw_value:
+            field_warnings.append(
+                f"{field_name} partially reconstructed from OCR output; verify manually"
+            )
+
+        return ef, field_warnings
+
 
     @staticmethod
     def _try_patterns(text: str, patterns: list[str]) -> Optional[str]:
         """Return the first match found in *text* for any pattern in *patterns*."""
         for pat in patterns:
             try:
-                m = re.search(pat, text, re.IGNORECASE | re.MULTILINE)
-                if m:
-                    return m.group(1).strip() if m.lastindex else m.group(0).strip()
+                if m := re.search(pat, text, re.IGNORECASE | re.MULTILINE):
+                    return m[1].strip() if m.lastindex else m[0].strip()
             except re.error as exc:
                 logger.debug("Regex error for pattern %r: %s", pat, exc)
         return None
@@ -634,30 +573,10 @@ class PersonalDocExtractor:
         value = raw.strip()
 
         if "date" in field_name or field_name == "expiry_date":
-            # Normalize separators → ISO-like where possible
             value = re.sub(r"[./]", "-", value)
 
-        if field_name == "full_name":
-            # Remove MRZ filler characters and collapse whitespace
-            value = re.sub(r"<+", " ", value)
-            value = re.sub(r"\s+", " ", value).upper().strip()
-
-        if field_name == "mrz_data":
-            # Keep MRZ compact (single line with newline if two lines present)
-            value = re.sub(r"[^\w<\n]", "", value).strip()
-
-        if field_name == "nationality":
-            value = value.upper().strip()
-
-        if field_name == "gender":
-            # Normalize to single letter
-            mapping = {
-                "MALE": "M",
-                "FEMALE": "F",
-                "MASCULINO": "M",
-                "FEMENINO": "F",
-            }
-            value = mapping.get(value.upper(), value.upper()[:1])
+        if normalizer := _FIELD_NORMALIZERS.get(field_name):
+            value = normalizer(value)
 
         return value
 
@@ -672,19 +591,13 @@ class PersonalDocExtractor:
         (e.g. '?' markers or unusual character mix).
         """
         if "?" in raw:
-            # '?' inserted by OCR engine to indicate uncertain character
             return "low"
-        suspicious_chars = sum(1 for c in raw if c in "!|")
+        suspicious_chars = sum(c in "!|" for c in raw)
         if suspicious_chars >= 2:
             return "low"
         if raw != normalized and base_confidence == "high":
             return "medium"
         return base_confidence
-
-
-# ---------------------------------------------------------------------------
-# Module-level helper used by the router
-# ---------------------------------------------------------------------------
 
 
 def detect_metadata(text: str) -> dict[str, Any]:

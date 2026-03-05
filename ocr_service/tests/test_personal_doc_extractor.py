@@ -359,20 +359,3 @@ def test_bank_statement_opening_balance_field(extractor):
         f"opening_balance value should contain the extracted amount; "
         f"got {ob_field.value!r}"
     )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

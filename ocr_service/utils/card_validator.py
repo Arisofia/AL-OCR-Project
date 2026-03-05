@@ -9,6 +9,7 @@ validates numbers provided by upstream OCR and should be used with tokenization
 flows (Stripe/Adyen/etc.) rather than storing PAN.
 """
 
+import asyncio
 import logging
 import os
 from typing import Any, Optional
@@ -37,13 +38,13 @@ class CardValidator:
 
     @staticmethod
     def _local_luhn_and_brand(clean_number: str) -> dict[str, Any]:
-        if not clean_number.isdigit() or not (13 <= len(clean_number) <= 19):
+        if not clean_number.isdigit() or not 13 <= len(clean_number) <= 19:
             return {"valid": False, "error": "Invalid length"}
-        if not DocumentIntelligence._is_valid_luhn(clean_number):
+        if not DocumentIntelligence.is_valid_luhn(clean_number):
             return {"valid": False, "error": "Local Luhn check failed"}
         return {
             "valid": True,
-            "brand": DocumentIntelligence._guess_card_brand(clean_number),
+            "brand": DocumentIntelligence.guess_card_brand(clean_number),
         }
 
     async def validate(self, card_number: str) -> dict[str, Any]:
@@ -60,33 +61,16 @@ class CardValidator:
 
         brand = local.get("brand", "unknown")
 
-        if self.provider == "mock":
-            result = await self._validate_mock(clean_number)
-            result["brand"] = brand
-            return result
-
-        if self.provider == "numbrify":
-            result = await self._validate_numbrify(clean_number)
-            result["brand"] = brand
-            return result
-
-        if self.provider == "binlist":
-            result = await self._validate_binlist(clean_number)
-            result["brand"] = brand
-            return result
-
-        if self.provider == "cardio":
-            result = await self._validate_cardio(clean_number)
-            result["brand"] = brand
-            return result
-
-        if self.provider == "worldpay":
-            result = await self._validate_worldpay(clean_number)
-            result["brand"] = brand
-            return result
-
-        if self.provider == "dama":
-            result = await self._validate_dama(clean_number)
+        _provider_handlers = {
+            "mock": self._validate_mock,
+            "numbrify": self._validate_numbrify,
+            "binlist": self._validate_binlist,
+            "cardio": self._validate_cardio,
+            "worldpay": self._validate_worldpay,
+            "dama": self._validate_dama,
+        }
+        if handler := _provider_handlers.get(self.provider):
+            result = await handler(clean_number)
             result["brand"] = brand
             return result
 
@@ -94,6 +78,7 @@ class CardValidator:
 
     async def _validate_cardio(self, _card_number: str) -> dict[str, Any]:
         """Card.io validation (stub)."""
+        await asyncio.sleep(0)
         return {
             "valid": True,
             "provider": "cardio",
@@ -102,6 +87,7 @@ class CardValidator:
 
     async def _validate_dama(self, _card_number: str) -> dict[str, Any]:
         """DAMA validation (stub)."""
+        await asyncio.sleep(0)
         return {
             "valid": True,
             "provider": "dama",
@@ -110,6 +96,7 @@ class CardValidator:
 
     async def _validate_worldpay(self, _card_number: str) -> dict[str, Any]:
         """Worldpay validation (stub)."""
+        await asyncio.sleep(0)
         return {
             "valid": True,
             "provider": "worldpay",
@@ -118,6 +105,7 @@ class CardValidator:
 
     async def _validate_mock(self, card_number: str) -> dict[str, Any]:
         """Mock validator for testing; accepts numbers ending in '0005'."""
+        await asyncio.sleep(0)
         is_valid = card_number.endswith("0005")
         return {
             "valid": is_valid,

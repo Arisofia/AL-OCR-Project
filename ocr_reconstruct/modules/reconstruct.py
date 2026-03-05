@@ -5,10 +5,15 @@ Note: These are intentionally conservative heuristics for research;
 full recovery is not guaranteed.
 """
 
-from typing import Optional
+from typing import Optional, cast
 
 import cv2
 import numpy as np
+
+try:
+    from scipy import signal as scipy_signal
+except Exception:
+    scipy_signal = None
 
 __all__ = ["PixelReconstructor", "deblur_wiener", "depixelate_naive", "inpaint_bbox"]
 
@@ -27,11 +32,9 @@ class PixelReconstructor:
         if len(image.shape) < 3:
             return image
 
-        # Downsample for faster clustering
         small_img = cv2.resize(image, (0, 0), fx=0.5, fy=0.5)
         pixels = small_img.reshape(-1, 3).astype(np.float32)
 
-        # 3 clusters: Background, Text, and Overlay (e.g., highlighter)
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
         _, _, centers = cv2.kmeans(
             pixels,
@@ -42,27 +45,20 @@ class PixelReconstructor:
             cv2.KMEANS_RANDOM_CENTERS,
         )
 
-        # Find which center is likely the overlay (usually bright but not pure white)
-        # Background is typically the brightest
         brightness = np.sum(centers, axis=1)
         bg_idx = np.argmax(brightness)
         text_idx = np.argmin(brightness)
-        overlay_idx = 3 - bg_idx - text_idx  # The remaining index
+        overlay_idx = 3 - bg_idx - text_idx
 
-        # Apply the logic to the full image
         full_pixels = image.reshape(-1, 3).astype(np.float32)
-        # We can create a mask for the overlay color
-        overlay_color = centers[overlay_idx]  # type: ignore
+        overlay_color = centers[overlay_idx]
 
-        # Calculate distance of each pixel to the overlay color
         dist = np.linalg.norm(full_pixels - overlay_color, axis=1)
         mask = (dist < 50).reshape(image.shape[:2]).astype(np.uint8) * 255
 
-        # Dilation of mask to cover edges
         mask = cv2.dilate(mask, np.ones((3, 3), np.uint8), iterations=1)
 
-        # Inpaint the overlay areas with background color
-        bg_color = centers[bg_idx].astype(np.uint8).tolist()  # type: ignore
+        bg_color = centers[bg_idx].astype(np.uint8).tolist()
         result = image.copy()
         result[mask > 0] = bg_color
 
@@ -86,10 +82,8 @@ class PixelReconstructor:
             else image
         )
 
-        # Black boxes have very low intensity
         _, mask = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY_INV)
 
-        # Filter for rectangular shapes (redactions are usually blocks)
         contours, _ = cv2.findContours(
             mask,
             cv2.RETR_EXTERNAL,
@@ -98,7 +92,6 @@ class PixelReconstructor:
         final_mask = np.zeros_like(mask)
         for cnt in contours:
             x_coord, y_coord, width, height = cv2.boundingRect(cnt)
-            # Filter by size and aspect ratio typical for redactions
             if width > 20 and height > 10:
                 cv2.rectangle(
                     final_mask,
@@ -108,7 +101,6 @@ class PixelReconstructor:
                     -1,
                 )
 
-        # Inpaint
         return cv2.inpaint(image, final_mask, 3, cv2.INPAINT_TELEA)
 
     @staticmethod
@@ -117,7 +109,6 @@ class PixelReconstructor:
         Attempts to reverse pixelation by applying a bilateral filter
         to smooth block boundaries while preserving possible text edges.
         """
-        # _block_size is currently unused but kept for interface consistency
         return cv2.bilateralFilter(image, 9, 75, 75)
 
     @staticmethod
@@ -134,7 +125,6 @@ class PixelReconstructor:
         return cv2.medianBlur(upscaled, 3)
 
 
-# Backward compatibility
 def depixelate_naive(img_gray: np.ndarray, block: int = 6) -> np.ndarray:
     """Wrapper for PixelReconstructor.depixelate_naive"""
     return PixelReconstructor.depixelate_naive(img_gray, block)
@@ -152,15 +142,13 @@ def deblur_wiener(img: np.ndarray, kernel: Optional[np.ndarray] = None) -> np.nd
 
     img_f = img.astype("float32") / 255.0
     try:
-        from typing import cast
+        if scipy_signal is None:
+            raise ImportError("scipy.signal unavailable")
 
-        from scipy import signal  # type: ignore
-
-        wiener_filtered = signal.wiener(img_f)
+        wiener_filtered = scipy_signal.wiener(img_f)
         return cast(np.ndarray, np.clip(wiener_filtered * 255.0, 0, 255)).astype(
             "uint8"
         )
     except Exception:
-        # Fallback to a simple sharpening filter
         sharpen_kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
         return cv2.filter2D(img, -1, sharpen_kernel)

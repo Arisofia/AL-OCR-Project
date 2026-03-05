@@ -62,6 +62,13 @@ from .open_source_ocr_stack import (
     FintechQualityEvaluator,
     OpenSourceOCRRouter,
 )
+from .pan_candidates import (
+    build_pattern_from_schema,
+    compute_luhn_check_digit,
+    generate_pan_candidates,
+    luhn_ok,
+    parse_pan_pattern,
+)
 from .processor import OCRProcessor
 
 __all__ = [
@@ -76,4 +83,9 @@ __all__ = [
     "OpenSourceOCRRouter",
     "OCRProcessor",
     "PixelReconstructor",
+    "build_pattern_from_schema",
+    "compute_luhn_check_digit",
+    "generate_pan_candidates",
+    "luhn_ok",
+    "parse_pan_pattern",
 ]

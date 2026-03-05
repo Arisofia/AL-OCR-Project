@@ -13,23 +13,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-try:
-    from ocr_service.modules.personal_doc_extractor import (  # pylint: disable=wrong-import-position,import-error
-        _luhn_valid as luhn_valid,
-    )
-except ImportError:
-
-    def luhn_valid(number: str) -> bool:
-        """Fallback Luhn validation when service module is unavailable."""
-        if not number.isdigit() or not 13 <= len(number) <= 19:
-            return False
-        total = 0
-        for index, char in enumerate(reversed(number)):
-            digit = int(char)
-            if index % 2 == 1:
-                digit = digit * 2 - 9 if digit > 4 else digit * 2
-            total += digit
-        return total % 10 == 0
+from ocr_service.modules.pan_candidates import (  # pylint: disable=wrong-import-position,import-error
+    generate_pan_candidates,
+)
 
 
 PARTIALS = [
@@ -80,13 +66,8 @@ Positions 8-11: mostly blank (fully occluded by marker)
 
 def build_luhn_candidates(prefix: str, suffix: str, unknown: int) -> list[str]:
     """Brute-force all middle digits and keep only Luhn-valid PANs."""
-    valid_candidates: list[str] = []
-    for combo in itertools.product("0123456789", repeat=unknown):
-        middle = "".join(combo)
-        pan = prefix + middle + suffix
-        if luhn_valid(pan):
-            valid_candidates.append(pan)
-    return valid_candidates
+    pattern = prefix + ("X" * unknown) + suffix
+    return generate_pan_candidates(pattern, enforce_luhn=True)
 
 
 def print_candidate_summary(valid_candidates: list[str]) -> list[str]:

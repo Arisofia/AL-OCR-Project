@@ -3,9 +3,8 @@
 """
 Reconstruct occluded card PAN digits using Luhn + BIN constraints.
 
-Uses the repo's own _luhn_valid() from personal_doc_extractor and
-applies brute-force enumeration with filtering to find all valid
-16-digit PANs matching the visible digit pattern.
+Uses the reusable pan_candidates library to enumerate pattern-constrained
+PANs and apply Luhn/global filters, then ranks results using pixel hints.
 
 Usage:
   python3 scripts/reconstruct_card_pan.py --known "4388 54?? ???? 0665"
@@ -13,28 +12,18 @@ Usage:
 """
 
 import argparse
-import itertools
+from pathlib import Path
 import re
 import sys
 import time
 from typing import Any, Optional
 
-# ---------------------------------------------------------------------------
-# Luhn validation (mirrored from personal_doc_extractor for standalone use)
-# ---------------------------------------------------------------------------
-
-def luhn_valid(number: str) -> bool:
-    """Return True when *number* (digits-only) satisfies the Luhn algorithm."""
-    if not number.isdigit() or not 13 <= len(number) <= 19:
-        return False
-    total = 0
-    for i, ch in enumerate(reversed(number)):
-        d = int(ch)
-        if i % 2 == 1:
-            d = d * 2 - 9 if d > 4 else d * 2
-        total += d
-    return total % 10 == 0
-
+try:
+    from ocr_service.modules.pan_candidates import generate_pan_candidates
+except ModuleNotFoundError:
+    # Allow running this script directly without installing the package.
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+    from ocr_service.modules.pan_candidates import generate_pan_candidates
 
 # ---------------------------------------------------------------------------
 # BIN range heuristics for Visa cards
@@ -124,14 +113,16 @@ def reconstruct(  # pylint: disable=too-many-locals
         f"(positions {len(prefix)}-{len(prefix) + unknown_count - 1})"
     )
 
-    # Build per-position digit sets
+    # Build per-position digit sets and constraints for generic generator.
     all_digits = "0123456789"
+    constraints: dict[int, set[int]] = {}
     position_digits: list[str] = []
     for i in range(unknown_count):
         abs_pos = len(prefix) + i
         if hard_filter_hints and abs_pos in PIXEL_HINTS:
             allowed = "".join(sorted(PIXEL_HINTS[abs_pos].keys()))
             position_digits.append(allowed)
+            constraints[abs_pos] = {int(digit) for digit in allowed}
         else:
             position_digits.append(all_digits)
 
@@ -142,24 +133,22 @@ def reconstruct(  # pylint: disable=too-many-locals
     print()
 
     valid_candidates: list[dict[str, Any]] = []
-    checked = 0
+    checked = search_size
     start = time.time()
 
-    for combo in itertools.product(*position_digits):
-        middle = "".join(combo)
-        pan = prefix + middle + suffix
-        checked += 1
+    pattern = prefix + ("X" * unknown_count) + suffix
+    pans = generate_pan_candidates(
+        pattern,
+        constraints=constraints,
+        enforce_luhn=True,
+        global_constraints=[visa_bin_plausible],
+    )
 
-        if not luhn_valid(pan):
-            continue
-
-        if not visa_bin_plausible(pan):
-            continue
-
+    for pan in pans:
         entry: dict[str, Any] = {
             "pan": pan,
             "formatted": f"{pan[:4]} {pan[4:8]} {pan[8:12]} {pan[12:16]}",
-            "middle": middle,
+            "middle": pan[len(prefix): len(prefix) + unknown_count],
         }
 
         if use_pixel_hints:
