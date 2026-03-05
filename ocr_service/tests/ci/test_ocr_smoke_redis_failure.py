@@ -49,5 +49,4 @@ def test_ocr_endpoint_returns_structured_error_on_redis_failure(monkeypatch):
     body = resp.json()
     assert body.get("phase") == "idempotency"
     assert body.get("correlation_id") is not None
-    # trace_id may be None if no span is present; ensure key exists (may be absent)
     assert "trace_id" in body

@@ -9,7 +9,6 @@ import logging
 from io import BytesIO
 from typing import Any, Optional
 
-# pylint: disable=no-member
 import cv2
 import numpy as np
 from PIL import Image
@@ -40,7 +39,6 @@ class ImageToolkit:
 
         if isinstance(data, str):
             try:
-                # Check for common base64 data URL prefixes
                 if data.startswith("data:image"):
                     data = data.split(",")[-1]
                 return base64.b64decode(data)
@@ -74,8 +72,6 @@ class ImageToolkit:
                 try:
                     with Image.open(BytesIO(image_bytes)) as pil_img:
                         rgb = pil_img.convert("RGB")
-                        # Avoid cv2 color conversion in fallback path because some
-                        # Lambda/OpenCV builds fail ndarray type checks.
                         img = np.array(rgb)[:, :, ::-1].copy()
                 except Exception as pil_exc:
                     logger.error(
@@ -129,8 +125,6 @@ class ImageToolkit:
         """
         Applies padding to a Region of Interest for better OCR performance.
         """
-        # OpenCV's `value` behaves differently for multi-channel images:
-        # `value=[255]` only sets the first channel. Make the border white.
         if len(roi.shape) < 3:
             border_value = (255.0,)
         else:
@@ -182,15 +176,9 @@ class ImageToolkit:
         height, width = img.shape[:2]
         long_side = max(height, width)
 
-        # If the image is already large enough, do nothing.
         if long_side >= max_long_side_px:
             return img
 
-        # Heuristic: upsample small images more aggressively.
-        # Example:
-        #   < 800px  -> try 2x
-        #   < 1500px -> try 1.5x
-        #   otherwise -> no upscaling
         if long_side < 800:
             desired_scale = 2.0
         elif long_side < 1500:
@@ -198,21 +186,17 @@ class ImageToolkit:
         else:
             desired_scale = 1.0
 
-        # Enforce configured max upscale factor.
         scale = min(desired_scale, max_upscale_factor)
         if scale <= 1.0:
             return img
 
-        # Compute new size but cap by max_long_side_px.
         new_width = int(width * scale)
         new_height = int(height * scale)
 
         long_after = max(new_height, new_width)
         if long_after > max_long_side_px:
-            # Adjust scale so that the long side equals max_long_side_px.
             cap_scale = max_long_side_px / float(long_side)
             new_width = int(width * cap_scale)
             new_height = int(height * cap_scale)
 
-        # Use bicubic interpolation for better text detail enlargement.
         return cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_CUBIC)

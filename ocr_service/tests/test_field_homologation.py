@@ -13,11 +13,6 @@ def extractor():
     return PersonalDocExtractor()
 
 
-# ---------------------------------------------------------------------------
-# Alias tests
-# ---------------------------------------------------------------------------
-
-
 def test_id_card_alias_extraction(extractor):
     """'id_card' type must use same field extraction as 'national_id'."""
     text = (
@@ -49,11 +44,6 @@ def test_debit_card_alias(extractor):
     field_names = {f.name for f in fields}
     assert "card_number" in field_names
     assert "expiry_date" in field_names
-
-
-# ---------------------------------------------------------------------------
-# New pattern tests
-# ---------------------------------------------------------------------------
 
 
 def test_invoice_vat_extraction(extractor):
@@ -124,11 +114,6 @@ def test_id_card_place_of_birth(extractor):
     fields, _ = extractor.extract(text, "id_card")
     field_names = {f.name for f in fields}
     assert "place_of_birth" in field_names
-
-
-# ---------------------------------------------------------------------------
-# FIELD_DEFINITIONS completeness checks
-# ---------------------------------------------------------------------------
 
 
 def test_id_card_in_field_definitions():

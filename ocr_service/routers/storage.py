@@ -18,7 +18,7 @@ router = APIRouter()
 )
 @limiter.limit("5/minute")
 async def generate_presigned_post(
-    request: Request,  # noqa: ARG001  # pylint: disable=unused-argument
+    request: Request,
     req: PresignRequest,
     _api_key: Annotated[str, Depends(get_api_key)],
     storage: Annotated[StorageService, Depends(get_storage_service)],

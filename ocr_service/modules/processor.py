@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import importlib
 import json
 import logging
 import mimetypes
@@ -9,9 +10,9 @@ import time
 from dataclasses import dataclass
 from typing import Any, ClassVar, Optional, cast
 
-import redis.asyncio as redis  # pylint: disable=import-error
-import redis.exceptions as redis_exceptions  # pylint: disable=import-error
-from fastapi import UploadFile  # pylint: disable=import-error
+import redis.asyncio as redis
+import redis.exceptions as redis_exceptions
+from fastapi import UploadFile
 
 from ocr_service.exceptions import OCRPipelineError
 from ocr_service.metrics import (
@@ -51,7 +52,7 @@ class _NoopRedis:
     async def get(self, _key: str) -> None:
         """Get method for compatibility."""
         await asyncio.sleep(0)
-        return None  # noqa: RET501,PLR1711
+        return None
 
     async def set(
         self,
@@ -117,7 +118,7 @@ class OCRProcessor:
             redis_client=redis_client,
         )
 
-    async def process_bytes(  # pylint: disable=too-many-arguments
+    async def process_bytes(
         self,
         contents: bytes,
         filename: str,
@@ -163,7 +164,6 @@ class OCRProcessor:
                     filename=filename,
                 )
 
-            # 4. Persist to storage
             s3_key = await self._persist_results(
                 contents,
                 filename,
@@ -172,7 +172,6 @@ class OCRProcessor:
                 config.request_id,
             )
 
-            # 5. Finalize result
             result.update(
                 {
                     "status": JobStatus.COMPLETED,
@@ -183,7 +182,6 @@ class OCRProcessor:
                 }
             )
 
-            # 6. Cache final result
             await self._write_cached_result(
                 redis_client,
                 cache_key,
@@ -294,7 +292,7 @@ class OCRProcessor:
             filename=filename,
         )
 
-    def _build_idempotency_key(  # pylint: disable=too-many-arguments
+    def _build_idempotency_key(
         self,
         idempotency_key: Optional[str],
         filename: str,
@@ -376,11 +374,7 @@ class OCRProcessor:
         ttl: int,
     ) -> None:
         """Set a key-value pair in Redis with expiration time."""
-        try:
-            await redis_client.set(key, value, ex=ttl)
-        except TypeError:
-            # Some test doubles expose _ex instead of ex.
-            await redis_client.set(key, value, _ex=ttl)  # type: ignore[call-arg]
+        await redis_client.set(key, value, ex=ttl)
 
     async def _delete_cached_result(
         self,
@@ -402,7 +396,7 @@ class OCRProcessor:
         doc_type: str,
     ) -> dict[str, Any]:
         """Convert a PDF to images and run OCR on each page, then aggregate."""
-        import cv2  # pylint: disable=import-outside-toplevel
+        cv2 = importlib.import_module("cv2")
 
         pages = pdf_pages_to_images(contents)
         if not pages:
@@ -462,7 +456,6 @@ class OCRProcessor:
                 doc_type=doc_type,
             )
         except TypeError as exc:
-            # Backward compatibility for test doubles that do not accept doc_type.
             if "unexpected keyword argument 'doc_type'" not in str(exc):
                 raise
             return await self.ocr_engine.process_image(
@@ -470,7 +463,7 @@ class OCRProcessor:
                 use_reconstruction=use_recon,
             )
 
-    async def _persist_results(  # pylint: disable=too-many-arguments
+    async def _persist_results(
         self,
         contents: bytes,
         filename: str,
@@ -480,7 +473,6 @@ class OCRProcessor:
     ) -> Optional[str]:
         """Persist OCR results and original file to storage."""
         try:
-            # Upload raw file
             s3_key = await asyncio.to_thread(
                 self.storage_service.upload_file,
                 contents,
@@ -488,7 +480,6 @@ class OCRProcessor:
                 content_type,
             )
 
-            # Optional metadata upload
             if result.get("reconstruction"):
                 await asyncio.to_thread(
                     self.storage_service.upload_json,
@@ -498,8 +489,6 @@ class OCRProcessor:
 
             return s3_key
         except Exception as exc:
-            # Try to catch storage-specific errors if available,
-            # else fallback to Exception
             logger.error("Storage upload failed: %s", exc)
             raise OCRPipelineError(
                 phase="storage",

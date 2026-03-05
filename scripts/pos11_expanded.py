@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Expanded POS 11 scan with wider offset range and more enhancements."""
 import contextlib
 import re
@@ -36,7 +35,6 @@ def try_ocr(img_in):
             txt = pytesseract.image_to_string(img_in, config=cfg).strip()
             if d := re.sub(r"\D", "", txt):
                 results.append(d[0])
-        # One threshold
         _, bw = cv2.threshold(img_in, 130, 255, cv2.THRESH_BINARY)
         with contextlib.suppress(Exception):
             txt = pytesseract.image_to_string(bw, config=cfg).strip()
@@ -47,14 +45,12 @@ def try_ocr(img_in):
 print(f"Image: {w}x{h}, ROI: {rw}x{rh}")
 print(f"Scanning POS 11 at cx={CX}, half={HALF}\n")
 
-# Multiple offsets
 for dx in [-15, -10, -5, -3, 0, 3, 5, 10, 15]:
     cx = CX + dx
     x0 = max(0, cx - HALF)
     x1 = min(rw, cx + HALF)
     zone = gray[:, x0:x1]
 
-    # Enhancement 1: CLAHE inv
     for clip in [8, 32]:
         c = cv2.createCLAHE(clipLimit=float(clip), tileGridSize=(3, 3))
         enh = cv2.bitwise_not(c.apply(zone))
@@ -62,21 +58,18 @@ for dx in [-15, -10, -5, -3, 0, 3, 5, 10, 15]:
         for d in try_ocr(big):
             votes[d] += 1
 
-    # Enhancement 2: top-hat
     kern = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
     th = cv2.morphologyEx(zone, cv2.MORPH_TOPHAT, kern)
     big_th = cv2.resize(th, (th.shape[1]*SCALE, th.shape[0]*SCALE), interpolation=cv2.INTER_CUBIC)
     for d in try_ocr(big_th):
         votes[d] += 1
 
-    # Enhancement 3: gamma 0.3 inv
     lut = np.array([((i/255.0)**0.3)*255 for i in range(256)]).astype(np.uint8)
     gm = cv2.bitwise_not(cv2.LUT(zone, lut))
     big_gm = cv2.resize(gm, (gm.shape[1]*SCALE, gm.shape[0]*SCALE), interpolation=cv2.INTER_CUBIC)
     for d in try_ocr(big_gm):
         votes[d] += 1
 
-# Also BGR channels at center offset
 for ch_idx in range(3):
     zone_ch = roi[0:rh, max(0,CX-HALF):min(rw,CX+HALF), ch_idx]
     for clip in [8, 32]:

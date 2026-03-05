@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# pylint: disable=duplicate-code
 """
 Targeted card digit extraction from embossed card images.
 
@@ -27,10 +25,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from ocr_reconstruct.modules.reconstruct import (  # pylint: disable=wrong-import-position,import-error
+from ocr_reconstruct.modules.reconstruct import (
     PixelReconstructor,
 )
-from ocr_service.modules.pan_candidates import (  # pylint: disable=wrong-import-position,import-error
+from ocr_service.modules.pan_candidates import (
     luhn_ok,
 )
 

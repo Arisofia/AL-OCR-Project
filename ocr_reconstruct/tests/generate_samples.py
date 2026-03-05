@@ -8,7 +8,6 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 try:
     RESAMPLING: Any = Image.Resampling
 except AttributeError:
-    # Older Pillow versions
     RESAMPLING = Image
 
 OUT_DIR = os.path.join(os.path.dirname(__file__), "data")
@@ -16,8 +15,8 @@ os.makedirs(OUT_DIR, exist_ok=True)
 
 try:
     DEFAULT_FONT = ImageFont.load_default()
-except Exception:  # pylint: disable=broad-exception-caught
-    DEFAULT_FONT = None  # type: ignore
+except Exception:
+    DEFAULT_FONT = None
 
 
 def make_base(text="HELLO WORLD", size=(400, 120)):

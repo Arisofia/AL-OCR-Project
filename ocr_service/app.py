@@ -25,7 +25,6 @@ logger = logging.getLogger("ocr-service")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage startup/shutdown resources for the FastAPI application."""
-    # Startup
     settings = getattr(app.state, "settings", None) or get_settings()
     app.state.redis_client = get_redis_client(settings)
 
@@ -44,14 +43,13 @@ async def lifespan(app: FastAPI):
             app.state.redis_diagnostics = redis_status
             app.state.degraded = not redis_status.get("ok", False)
             logger.info("Startup dependency check: %s", redis_status)
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             logger.exception("Startup dependency check failed")
             app.state.degraded = True
             app.state.redis_diagnostics = {"ok": False}
 
     yield
 
-    # Shutdown
     redis_client = getattr(app.state, "redis_client", None)
     if redis_client is not None:
         await redis_client.aclose()
@@ -65,7 +63,6 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     if settings is None:
         settings = get_settings()
 
-    # Initialize enterprise-grade logging & monitoring
     init_monitoring(settings, release=getattr(settings, "version", None))
 
     app = FastAPI(
@@ -77,18 +74,14 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         lifespan=lifespan,
     )
 
-    # State
     app.state.settings = settings
     app.state.limiter = limiter
 
-    # If explicit settings were provided (tests or custom embedding), preserve them.
     if explicit_settings:
         app.dependency_overrides[get_settings] = lambda: settings
 
-    # Exception Handlers
     register_handlers(app)
 
-    # Middleware
     app.add_middleware(ProcessTimeAndLoggingMiddleware)
     app.add_middleware(
         CORSMiddleware,
@@ -98,12 +91,10 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Metrics endpoint
     @app.get("/metrics")
     async def metrics():
         return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
-    # Routers
     app.include_router(system.router, tags=["System"])
     app.include_router(ocr.router, tags=["OCR"])
     app.include_router(storage.router, tags=["Storage"])

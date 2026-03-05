@@ -37,7 +37,6 @@ def test_rate_limit_smoke_triggers_handler():
     settings = get_settings()
     settings.s3_bucket_name = "test-bucket"
 
-    # Reset limiter storage to ensure a clean state for this test
     limiter_storage = getattr(cast(Any, limiter), "storage", None)
     (getattr(limiter_storage, "clear", None) or (lambda: None))()
 
@@ -48,7 +47,6 @@ def test_rate_limit_smoke_triggers_handler():
         "content_type": "image/png",
     }
 
-    # Patch S3 client so presign succeeds during the first calls
     with (
         patch("boto3.client") as mock_boto,
         patch("ocr_service.utils.limiter.logger") as mock_logger,
@@ -66,9 +64,7 @@ def test_rate_limit_smoke_triggers_handler():
             rate_limited_response is not None
         ), "Expected at least one 429 response from rate limiter"
         assert "detail" in rate_limited_response.json()
-        # Validate the handler-specific payload (adjust if message changes)
         expected_message = "Rate limit exceeded. Please try again later."
         assert rate_limited_response.json().get("detail") == expected_message
 
-        # Assert our enhanced handler logged the rate limiting occurrence
         _verify_log_emission(mock_logger, "/presign")

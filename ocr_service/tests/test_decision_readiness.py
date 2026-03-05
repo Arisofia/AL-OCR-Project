@@ -13,11 +13,6 @@ def _field(name: str, confidence: str = "high") -> ExtractedField:
     return ExtractedField(name=name, value="value", confidence_level=confidence)
 
 
-# ---------------------------------------------------------------------------
-# Core scoring tests
-# ---------------------------------------------------------------------------
-
-
 def test_passport_all_fields_high_confidence():
     fields = [_field(f) for f in MANDATORY_FIELDS["passport"]]
     result = compute_decision_readiness("passport", fields, type_confidence=0.90)
@@ -27,9 +22,6 @@ def test_passport_all_fields_high_confidence():
 
 
 def test_passport_missing_fields():
-    # Only full_name and date_of_birth present; document_number + expiry_date missing
-    # With low type_confidence:
-    # 0.50*0.50 + 1.0*0.30 + 0.40*0.20 = 0.25+0.30+0.08 = 0.63 < 0.70
     fields = [_field("full_name"), _field("date_of_birth")]
     result = compute_decision_readiness("passport", fields, type_confidence=0.40)
     assert result["ready"] is False
@@ -41,7 +33,6 @@ def test_low_confidence_fields():
     """All mandatory fields present but all low confidence - score < 0.70."""
     fields = [_field(f, "low") for f in MANDATORY_FIELDS["passport"]]
     result = compute_decision_readiness("passport", fields, type_confidence=0.50)
-    # presence=1.0*0.50 + avg_conf=0.3*0.30 + type=0.5*0.20 = 0.50+0.09+0.10 = 0.69
     assert result["score"] < 0.70
     assert result["ready"] is False
 

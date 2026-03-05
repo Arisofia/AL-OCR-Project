@@ -11,10 +11,6 @@ from ocr_service.modules.personal_doc_extractor import (
     detect_metadata,
 )
 
-# ---------------------------------------------------------------------------
-# Enhanced DocumentIntelligence classification tests
-# ---------------------------------------------------------------------------
-
 
 def test_analyze_returns_type_confidence():
     """analyze() must return type_confidence as a float."""
@@ -91,11 +87,6 @@ def test_classify_generic_document_low_confidence():
     assert result["type_confidence"] < 0.55
 
 
-# ---------------------------------------------------------------------------
-# PersonalDocExtractor tests
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture
 def extractor():
     return PersonalDocExtractor()
@@ -138,9 +129,7 @@ def test_bank_card_pan_is_masked(extractor):
     fields, _ = extractor.extract(text, "bank_card")
     card_field = next((f for f in fields if f.name == "card_number"), None)
     assert card_field is not None, "card_number field should be present"
-    # Last 4 digits should be visible
     assert "1111" in card_field.value
-    # Full PAN must not appear in value or raw_ocr
     assert "4111 1111 1111 1111" not in card_field.value
     assert card_field.raw_ocr == "[REDACTED]"
 
@@ -204,7 +193,6 @@ def test_warnings_generated_for_partial_reconstructions(extractor):
         "Date of Birth: 15/03/1985\n"
     )
     fields, warnings = extractor.extract(text, "passport")
-    # date_of_birth raw_ocr has '/' normalized to '-', so it triggers warning
     dob_field = next((f for f in fields if f.name == "date_of_birth"), None)
     assert (
         dob_field is None
@@ -254,11 +242,6 @@ def test_driver_license_fields(extractor):
     assert "expiry_date" in field_names
 
 
-# ---------------------------------------------------------------------------
-# Luhn algorithm unit tests
-# ---------------------------------------------------------------------------
-
-
 def test_luhn_valid_known_good_card():
     """Standard Visa test PAN 4111111111111111 must pass Luhn."""
     assert _luhn_valid("4111111111111111") is True
@@ -274,21 +257,16 @@ def test_luhn_rejects_non_digit_string():
 
 
 def test_luhn_rejects_too_short():
-    assert _luhn_valid("123456789012") is False  # 12 digits, below min 13
+    assert _luhn_valid("123456789012") is False
 
 
 def test_luhn_rejects_too_long():
-    assert _luhn_valid("1" * 20) is False  # 20 digits, above max 19
+    assert _luhn_valid("1" * 20) is False
 
 
 def test_luhn_amex_valid():
     """Standard Amex test PAN 378282246310005 must pass Luhn."""
     assert _luhn_valid("378282246310005") is True
-
-
-# ---------------------------------------------------------------------------
-# Pattern-aware validator integration tests (Luhn + expiry date)
-# ---------------------------------------------------------------------------
 
 
 def test_luhn_valid_card_boosts_confidence_to_high(extractor):

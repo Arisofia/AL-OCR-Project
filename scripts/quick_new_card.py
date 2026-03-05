@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Quick focused analysis of new card image.
 We ONLY need positions 8, 9, 10 (pattern: 4388 5454 ???5 0665).
@@ -22,13 +21,10 @@ g_ch = img[:, :, 1]
 
 print(f"Image: {w}x{h}\n")
 
-# ─── Strategy: Get all 16-digit reads, extract positions 8-10 ───
-# Try MANY combinations but only keep 16-digit reads that start with 4388
 
 all_reads = []
 configs_tried = 0
 
-# Use full image at different scales
 for scale in [3, 4, 5, 6, 8]:
     for ch_name, ch in [("gray", gray), ("rchan", r_ch), ("blue", b_ch), ("green", g_ch)]:
         big = cv2.resize(ch, (w*scale, h*scale), interpolation=cv2.INTER_CUBIC)
@@ -49,7 +45,6 @@ for scale in [3, 4, 5, 6, 8]:
                 except Exception:
                     pass
             
-            # Also binary threshold
             for thr in [100, 120, 140, 160]:
                 _, bw = cv2.threshold(inv, thr, 255, cv2.THRESH_BINARY)
                 for psm in [6, 7]:
@@ -64,7 +59,6 @@ for scale in [3, 4, 5, 6, 8]:
                     except Exception:
                         pass
         
-        # Gamma
         for gamma in [0.3, 0.5, 2.0, 3.0]:
             lut = np.array([((i/255.0)**gamma)*255 for i in range(256)], np.uint8)
             bright = cv2.LUT(big, lut)
@@ -81,7 +75,6 @@ for scale in [3, 4, 5, 6, 8]:
                 except Exception:
                     pass
 
-# Now try ROI-crop variants (digit row only)
 for y_pct_start in [25, 30, 35, 40]:
     for y_pct_end in [55, 60, 65, 70]:
         y0 = int(h * y_pct_start / 100)
@@ -113,7 +106,6 @@ for y_pct_start in [25, 30, 35, 40]:
 print(f"\nTotal configs tried: {configs_tried}")
 print(f"Total reads >= 14 digits: {len(all_reads)}")
 
-# ─── Filter: reads that contain "4388" or "0665" ───
 matched = []
 for digits, info in all_reads:
     if "4388" in digits or "0665" in digits:
@@ -121,7 +113,6 @@ for digits, info in all_reads:
 
 print(f"\nReads containing '4388' or '0665': {len(matched)}")
 for digits, info in matched[:30]:
-    # Try to align: find "4388" and extract 16 digits from there
     idx = digits.find("4388")
     if idx >= 0 and len(digits) >= idx + 16:
         pan16 = digits[idx:idx+16]
@@ -140,7 +131,6 @@ for digits, info in matched[:30]:
     else:
         print(f"  ??? '{digits}' ({info})")
 
-# ─── Extract position 8,9,10 evidence ───
 print("\n=== POSITION 8, 9, 10 EVIDENCE ===\n")
 
 pos8_votes = Counter()
@@ -151,10 +141,9 @@ for digits, info in matched:
     idx = digits.find("4388")
     if idx >= 0 and len(digits) >= idx + 16:
         pan16 = digits[idx:idx+16]
-        # Verify some known digits
         checks = 0
-        if pan16[4:6] == "54": checks += 1  # pos 4-5
-        if pan16[12:16] == "0665": checks += 1  # pos 12-15
+        if pan16[4:6] == "54": checks += 1
+        if pan16[12:16] == "0665": checks += 1
         
         if checks >= 1:
             pos8_votes[pan16[8]] += 1
@@ -165,12 +154,9 @@ print(f"Position 8: {pos8_votes.most_common()}")
 print(f"Position 9: {pos9_votes.most_common()}")
 print(f"Position 10: {pos10_votes.most_common()}")
 
-# ─── Also try: use known pattern to anchor ───
-# If we see 438854??...?0665, extract the middle
 print("\n=== PATTERN MATCHING: 438854??????0665 ===\n")
 
 for digits, info in all_reads:
-    # Look for 438854 ... 0665
     idx_start = digits.find("438854")
     if idx_start >= 0:
         remaining = digits[idx_start:]
@@ -179,7 +165,6 @@ for digits, info in all_reads:
             if pan16.endswith("0665") or "0665" in remaining[10:20]:
                 print(f"  FULL: {pan16[:4]} {pan16[4:8]} {pan16[8:12]} {pan16[12:16]}  ({info})")
 
-# Also look for ???50665 suffix pattern
 print("\n=== SUFFIX PATTERN: ???50665 ===\n")
 for digits, info in all_reads:
     idx = digits.find("50665")

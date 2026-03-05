@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# pylint: disable=too-many-nested-blocks
 """
 Locate '0665' on the card and work leftward to examine the two digits
 immediately to its left (positions 10 and 11 in the PAN).
@@ -42,7 +40,6 @@ def get_char_boxes(img, config="--oem 3 --psm 6"):
         if len(parts) >= 5:
             ch = parts[0]
             x1, y1, x2, y2 = int(parts[1]), int(parts[2]), int(parts[3]), int(parts[4])
-            # Tesseract uses bottom-left origin; flip y
             boxes.append({"ch": ch, "x1": x1, "y1": h - y2, "x2": x2, "y2": h - y1})
     return boxes
 
@@ -51,13 +48,11 @@ def find_suffix_box(boxes, suffix="0665"):
     """Find the bounding box of the last 4 digits '0665' in char boxes."""
     chars = [b["ch"] for b in boxes]
     text = "".join(chars)
-    # Find rightmost occurrence of 0665
     idx = text.rfind(suffix)
     if idx < 0:
-        # Try with fuzzy: look for 665
         idx = text.rfind("665")
         if idx >= 0:
-            idx -= 1  # include the digit before 665
+            idx -= 1
     return idx
 
 
@@ -69,25 +64,20 @@ def focused_enhance(gray, scale=6):
     def up(img):
         return cv2.resize(img, (w * scale, h * scale), interpolation=cv2.INTER_CUBIC)
 
-    # CLAHE
     for clip in [4, 8, 16, 32, 64]:
         c = cv2.createCLAHE(clipLimit=float(clip), tileGridSize=(3, 3))
         out.append((f"clahe{clip}", up(cv2.bitwise_not(c.apply(gray)))))
         out.append((f"clahe{clip}-raw", up(c.apply(gray))))
 
-    # Morph gradient
     kernel = np.ones((3, 3), np.uint8)
     out.append(("morphgrad", up(cv2.morphologyEx(gray, cv2.MORPH_GRADIENT, kernel))))
 
-    # Top-hat (reveal bright features on dark bg)
     for k in [7, 11]:
         kern = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
         out.append((f"tophat{k}", up(cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, kern))))
 
-    # Histogram eq
     out.append(("histeq", up(cv2.bitwise_not(cv2.equalizeHist(gray)))))
 
-    # Gamma
     for gamma in [0.3, 0.5]:
         lut = np.array([((i / 255.0) ** gamma) * 255 for i in range(256)]).astype(np.uint8)
         out.append((f"gamma{gamma}", up(cv2.bitwise_not(cv2.LUT(gray, lut)))))
@@ -112,7 +102,6 @@ def ocr_digit(img):
                 results.append((d[0], mode))
         except (pytesseract.TesseractError, RuntimeError, TypeError, ValueError):
             pass
-        # Also with a couple of thresholds
         for t in [100, 130, 160]:
             _, bw = cv2.threshold(img, t, 255, cv2.THRESH_BINARY)
             try:
@@ -125,27 +114,23 @@ def ocr_digit(img):
     return results
 
 
-def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-nested-blocks  # NOSONAR
+def main() -> None:
     """Run focused deep-zoom OCR for PAN positions 10 and 11."""
     path = sys.argv[1] if len(sys.argv) > 1 else "/Users/jenineferderas/Desktop/card_image.jpg"
     img = load(path)
     h, w = img.shape[:2]
     print(f"Image: {w}x{h}")
 
-    # ── Step 1: Locate visible digits via char-level boxes ──
     print("\n=== Step 1: Locating visible digits ===\n")
 
-    # Focus on the card number region
     y0, y1 = int(h * 0.20), int(h * 0.70)
     roi = img[y0:y1]
 
     gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
 
-    # Try different enhancements to get char boxes
     best_boxes = None
     best_text = ""
     for config in ["--oem 3 --psm 6", "--oem 3 --psm 7", "--oem 3 --psm 11"]:
-        # Try with CLAHE
         clahe = cv2.createCLAHE(clipLimit=8.0, tileGridSize=(4, 4))
         enhanced = clahe.apply(gray_roi)
         inv = cv2.bitwise_not(enhanced)
@@ -160,17 +145,12 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-man
                 best_boxes = boxes
                 best_text = chars
                 print(f"  Found with {label}/{config}: '{chars}'")
-                # Find digit-only boxes
                 digit_boxes = [b for b in boxes if b["ch"].isdigit()]
                 digit_text = "".join(b["ch"] for b in digit_boxes)
                 print(f"  Digits: {digit_text}")
 
     if best_boxes is None:
         print("  Could not locate '0665' via char boxes. Falling back to column analysis.")
-        # Fallback: use the right portion of the image
-        # We know the card has format 4388 54XX XXXX 0665
-        # Try to find where "0665" starts by scanning from right
-        # Use the right 40% of the image
         right_roi = roi[:, int(w * 0.6):]
         gray_right = (
             cv2.cvtColor(right_roi, cv2.COLOR_BGR2GRAY)
@@ -185,13 +165,11 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-man
         digit_boxes = [b for b in boxes if b["ch"].isdigit()]
         if digit_boxes:
             best_boxes = digit_boxes
-            # Adjust x coordinates to full-image space
             offset_x = int(w * 0.6)
             for b in best_boxes:
                 b["x1"] += offset_x
                 b["x2"] += offset_x
 
-    # ── Step 2: Find the '0' of '0665' and compute digit pitch ──
     print("\n=== Step 2: Computing digit positions ===\n")
 
     if best_boxes:
@@ -199,7 +177,6 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-man
         digit_text = "".join(b["ch"] for b in digit_boxes)
         print(f"  All digit boxes: {digit_text}")
 
-        # Find '0665' sequence
         idx_0665 = digit_text.rfind("0665")
         if idx_0665 >= 0:
             box_0 = digit_boxes[idx_0665]
@@ -207,7 +184,6 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-man
             box_6b = digit_boxes[idx_0665 + 2]
             box_5 = digit_boxes[idx_0665 + 3]
 
-            # Digit pitch from the suffix
             pitches = []
             suffix_boxes = [box_0, box_6a, box_6b, box_5]
             for i in range(len(suffix_boxes) - 1):
@@ -225,10 +201,6 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-man
                 f"y=[{box_0['y1']}, {box_0['y2']}]"
             )
 
-            # Position 11 center = 0's x1 - 0.5*pitch (one digit to the left of '0')
-            # But there's a group space between group3 and group4: ???? 0665
-            # The space adds roughly 0.3-0.5 * pitch
-            # Position 10 = one more pitch to the left
 
             print("\n  Scanning multiple offsets for group gap...")
 
@@ -242,7 +214,6 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-man
                     f"pos11_center={pos11_center:.0f}"
                 )
 
-            # ── Step 3: Extract and OCR positions 10 and 11 ──
             print("\n=== Step 3: Deep OCR on positions 10 & 11 ===\n")
 
             gray_full_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
@@ -290,7 +261,6 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-man
                     print("    No reads")
                 print()
 
-            # ── Step 4: Two-digit pair ──
             print("  ── PAIR (pos 10+11 together) ──")
             pair_votes = Counter()
             for gap_factor in [0.0, 0.3, 0.5, 0.7, 1.0]:
@@ -345,7 +315,6 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-man
                     print(f"      '{pair}': {n:4d} ({pct:5.1f}%)")
             print()
 
-            # ── Step 5: Transition zone (last 2-3 hidden + 0665) ──
             print("  ── TRANSITION (last hidden digits → 0665) ──")
             trans_votes = Counter()
             for gap_extra in range(-20, 21, 10):
@@ -383,7 +352,6 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-man
                     tag2 = " ◄ ends 665" if seq.endswith("665") and not tag else ""
                     print(f"      '{seq}': {n:4d} ({pct:5.1f}%){tag}{tag2}")
 
-            # ── Save zoomed images for visual inspection ──
             print("\n=== Debug images saved to /tmp/ ===")
             for pos_label, pos_idx in [("pos11", 0.5), ("pos10", 1.5)]:
                 for gap_factor in [0.0, 0.5]:
@@ -395,9 +363,7 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-man
                     zy0 = max(0, box_0["y1"] - int(digit_h * 0.3))
                     zy1 = min(roi.shape[0], box_0["y2"] + int(digit_h * 0.3))
                     zone = gray_full_roi[zy0:zy1, zx0:zx1]
-                    # Save raw
                     cv2.imwrite(f"/tmp/dz_{pos_label}_gap{gap_factor}_raw.png", zone)
-                    # Save enhanced 8x
                     clahe = cv2.createCLAHE(clipLimit=32.0, tileGridSize=(3, 3))
                     enh = cv2.bitwise_not(clahe.apply(zone))
                     big = cv2.resize(

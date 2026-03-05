@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Rescan all hidden PAN positions using multiple suffix-anchor offsets."""
 
 from __future__ import annotations

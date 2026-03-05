@@ -1,7 +1,5 @@
 """Regression tests for OCR engine fallbacks and preprocessing behavior."""
 
-# OpenCV binary modules commonly trigger false `no-member` in pylint.
-# pylint: disable=missing-function-docstring,no-member,import-error,protected-access,too-many-lines
 
 import logging
 import asyncio
@@ -18,7 +16,6 @@ from ocr_service.modules.ocr_engine import DocumentContext, DocumentProcessor
 async def test_reconstruction_logs_exception(caplog, monkeypatch):
     caplog.set_level(logging.ERROR)
 
-    # Replace the recon_process_bytes with a sync function that raises
     def bad_sync(*_args, **_kwargs):
         raise RuntimeError("recon-failed")
 
@@ -46,7 +43,6 @@ async def test_reconstruction_logs_exception(caplog, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_document_processor_applies_upscaling():
-    # Create a small test image
     small_img = np.zeros((200, 200, 3), dtype=np.uint8)
 
     _, img_bytes = cv2.imencode(".png", small_img)
@@ -66,7 +62,7 @@ async def test_document_processor_applies_upscaling():
     success = await processor.decode_and_validate(ctx)
     assert success
     assert ctx.current_img is not None
-    assert ctx.current_img.shape[0] > 200  # Should be upscaled
+    assert ctx.current_img.shape[0] > 200
 
 
 @pytest.mark.asyncio
@@ -82,7 +78,7 @@ async def test_decode_and_validate_handles_unexpected_preprocess_error(monkeypat
         image_bytes=b"valid-bytes", use_reconstruction=False, doc_type="generic"
     )
 
-    async def _decode_ok(_bytes):  # noqa: RUF029
+    async def _decode_ok(_bytes):
         await asyncio.sleep(0)
         return np.zeros((10, 10, 3), dtype=np.uint8)
 
@@ -411,7 +407,6 @@ async def test_process_image_triggers_textract_fallback_on_ambiguous_digits(
 
     assert calls["textract"] == 1
     assert calls["direct"] == 1
-    # Keep the digits extracted by Textract; do not predict/complete missing PAN digits.
     text = result.get("text")
     assert isinstance(text, str)
     assert text.startswith("4048 3700 0453")
@@ -662,14 +657,12 @@ def test_sanitize_text_normalizes_grouped_numeric_noise():
         reconstructor=None,
     )
 
-    # Noise punctuation around grouped digits should be normalized.
     cleaned = processor.sanitize_text("4048-.. 3700 045——")
     assert cleaned == "4048 3700 045"
 
     cleaned_single = processor.sanitize_text("4048-. 3700 045—")
     assert cleaned_single == "4048 3700 045"
 
-    # Keep decimal/monetary formatting readable.
     amount = processor.sanitize_text("Total: 1.250,00 EUR")
     assert "1.250,00" in amount
 
@@ -683,14 +676,11 @@ def test_preprocess_frame_uses_clean_for_ocr():
         reconstructor=None,
     )
 
-    # Create a noisy image
     rng = np.random.default_rng(42)
     img = rng.integers(0, 255, (100, 100, 3), dtype=np.uint8)
 
-    # First iteration (0) should use clean_for_ocr
     thresh = processor.preprocess_frame(img, iteration=0, use_recon=False)
 
-    # clean_for_ocr returns a binary image (thresholded)
     assert len(thresh.shape) == 2
     assert thresh.dtype == np.uint8
     assert set(np.unique(thresh)).issubset({0, 255})
@@ -1123,7 +1113,7 @@ async def test_extract_text_card_digits_only_uses_roi_candidates(monkeypatch):
         reconstructor=None,
     )
 
-    async def _decode(_image_bytes):  # noqa: RUF029
+    async def _decode(_image_bytes):
         await asyncio.sleep(0)
         return np.zeros((120, 320, 3), dtype=np.uint8)
 

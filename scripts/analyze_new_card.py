@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Full analysis of the NEW card image (no grey background).
 /Users/jenineferderas/Downloads/20241007_002852000_iOS 3.jpg
@@ -26,20 +25,16 @@ if img_bgr is None:
     raise FileNotFoundError(f"Cannot load image: {IMG}")
 h, w = img_bgr.shape[:2]
 gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-r_ch = img_bgr[:, :, 2]  # Red channel
+r_ch = img_bgr[:, :, 2]
 
 print(f"Image: {w}x{h}")
 print(f"Mean brightness: {gray.mean():.0f}")
 print()
 
-# ─── Step 1: Locate digit row ───
-# Try multiple ROI candidates since image geometry differs
-# Card numbers are typically in the middle-lower area
 print("=" * 60)
 print("STEP 1: Locate digit row")
 print("=" * 60)
 
-# Column brightness profiles for different y-bands
 best_roi = None
 best_contrast = 0
 
@@ -60,15 +55,13 @@ if best_roi is None:
 y0, y1 = best_roi
 print(f"Best ROI: y=[{y0}, {y1}] ({y0/h*100:.0f}%-{y1/h*100:.0f}%), contrast={best_contrast:.0f}")
 
-# Also try the direct approach with known card layout
 roi_candidates = [
-    (int(h * 0.30), int(h * 0.60)),  # typical card number band
-    (int(h * 0.25), int(h * 0.55)),  # original image range
-    (int(h * 0.35), int(h * 0.65)),  # lower
+    (int(h * 0.30), int(h * 0.60)),
+    (int(h * 0.25), int(h * 0.55)),
+    (int(h * 0.35), int(h * 0.65)),
     best_roi,
 ]
 
-# ─── Step 2: OCR on full ROI to find digits ───
 print("\n" + "=" * 60)
 print("STEP 2: Full ROI OCR to detect digit positions")
 print("=" * 60)
@@ -77,12 +70,10 @@ for roi_y0, roi_y1 in roi_candidates:
     roi = gray[roi_y0:roi_y1, :]
     roi_h, roi_w = roi.shape
     
-    # Try multiple enhancements
     for clip in [8, 16, 32, 64]:
         enh = cv2.createCLAHE(clipLimit=float(clip), tileGridSize=(4, 4)).apply(roi)
         inv = cv2.bitwise_not(enh)
         
-        # Upscale
         scale = max(1, 600 // roi_h)
         up = cv2.resize(inv, (roi_w * scale, roi_h * scale), interpolation=cv2.INTER_CUBIC)
         
@@ -96,7 +87,6 @@ for roi_y0, roi_y1 in roi_candidates:
                     if '4388' in digits or '0665' in digits:
                         print("    >>> MATCH! Contains known prefix/suffix")
 
-    # Also try R-channel
     roi_r = r_ch[roi_y0:roi_y1, :]
     for clip in [16, 32, 64]:
         enh = cv2.createCLAHE(clipLimit=float(clip), tileGridSize=(4, 4)).apply(roi_r)
@@ -113,7 +103,6 @@ for roi_y0, roi_y1 in roi_candidates:
                     if '4388' in digits or '0665' in digits:
                         print("    >>> MATCH!")
 
-    # Try gamma
     for gamma in [0.3, 0.5]:
         lut = np.array([((i / 255.0) ** gamma) * 255 for i in range(256)], np.uint8)
         bright = cv2.LUT(roi, lut)
@@ -131,14 +120,10 @@ for roi_y0, roi_y1 in roi_candidates:
                         print("    >>> MATCH!")
 
 
-# ─── Step 3: Column brightness analysis to find digit centers ───
 print("\n" + "=" * 60)
 print("STEP 3: Column brightness analysis for digit positions")
 print("=" * 60)
 
-# Use the image proportions to estimate digit positions
-# Original image: 1568x499, digit centers at x positions relative to width
-# Scale factor from original to new image
 scale_x = w / 1568.0
 
 ORIG_CENTERS = {
@@ -148,7 +133,6 @@ ORIG_CENTERS = {
     12: 1133, 13: 1208, 14: 1283, 15: 1358,
 }
 
-# Estimate new centers by scaling
 NEW_CENTERS = {pos: int(cx * scale_x) for pos, cx in ORIG_CENTERS.items()}
 
 print(f"Scale factor x: {scale_x:.3f}")
@@ -157,13 +141,11 @@ for pos in range(16):
     known = "✓" if pos in {0,1,2,3,4,5,12,13,14,15} else "?"
     print(f"  pos{pos:2d}: x={NEW_CENTERS[pos]:4d} [{known}]")
 
-# Also estimate Y-range
 scale_y = h / 499.0
 est_y0 = int(499 * 0.25 * scale_y)
 est_y1 = int(499 * 0.55 * scale_y)
 print(f"\nEstimated digit ROI y: [{est_y0}, {est_y1}]")
 
-# ─── Step 4: Per-position OCR on the new image ───
 print("\n" + "=" * 60)
 print("STEP 4: Per-position digit reading (new image)")
 print("=" * 60)
@@ -172,7 +154,6 @@ KNOWN_DIGITS = {0:"4", 1:"3", 2:"8", 3:"8", 4:"5", 5:"4", 12:"0", 13:"6", 14:"6"
 HALF_NEW = int(34 * scale_x)
 SCALE_UP = 4
 
-# Try multiple y-ranges
 y_ranges = [
     (est_y0, est_y1),
     (int(h*0.30), int(h*0.60)),
@@ -181,7 +162,6 @@ y_ranges = [
     (int(h*0.20), int(h*0.50)),
 ]
 
-# For each y-range, try to read known digits to validate
 for yi, (ry0, ry1) in enumerate(y_ranges):
     roi_g = gray[ry0:ry1, :]
     roi_r = r_ch[ry0:ry1, :]
@@ -199,7 +179,6 @@ for yi, (ry0, ry1) in enumerate(y_ranges):
         zone_g = roi_g[:, x0:x1]
         zone_r = roi_r[:, x0:x1]
         
-        # Upscale
         zg_up = cv2.resize(zone_g, (zone_g.shape[1]*SCALE_UP, zone_g.shape[0]*SCALE_UP), interpolation=cv2.INTER_CUBIC)
         zr_up = cv2.resize(zone_r, (zone_r.shape[1]*SCALE_UP, zone_r.shape[0]*SCALE_UP), interpolation=cv2.INTER_CUBIC)
         
@@ -226,7 +205,6 @@ for yi, (ry0, ry1) in enumerate(y_ranges):
                                 votes[d[0]] += 1
                         except Exception:
                             pass
-            # Gamma
             for gamma in [0.3, 0.5]:
                 lut = np.array([((i/255.0)**gamma)*255 for i in range(256)], np.uint8)
                 bright = cv2.bitwise_not(cv2.LUT(src, lut))
@@ -250,12 +228,11 @@ for yi, (ry0, ry1) in enumerate(y_ranges):
     print(f"  Y-range [{ry0}-{ry1}]: {correct}/{total_known} known digits correct ({accuracy:.0f}%)")
     
     if accuracy < 50:
-        continue  # Skip this y-range for hidden positions
+        continue
     
     print("\n  >>> Using this Y-range for hidden position analysis <<<")
     print()
     
-    # Read known digits detail
     print("  Known digit verification:")
     for pos in sorted(KNOWN_DIGITS.keys()):
         expected = KNOWN_DIGITS[pos]
@@ -301,7 +278,6 @@ for yi, (ry0, ry1) in enumerate(y_ranges):
         hit = "✓" if best == expected else "✗"
         print(f"    pos{pos:2d} expect='{expected}' got='{best}' [{hit}]  {top3}")
     
-    # ─── Hidden positions ───
     print("\n  HIDDEN POSITIONS (6-11):")
     hidden_results = {}
     for pos in range(6, 12):
@@ -349,7 +325,6 @@ for yi, (ry0, ry1) in enumerate(y_ranges):
                             d = re.sub(r'\D', '', txt)
                             if d: votes[d[0]] += 1
                         except Exception: pass
-                # tophat
                 kern = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9,9))
                 tophat = cv2.morphologyEx(src, cv2.MORPH_TOPHAT, kern)
                 for psm in [10, 13]:
@@ -365,7 +340,6 @@ for yi, (ry0, ry1) in enumerate(y_ranges):
         best = votes.most_common(1)[0][0] if votes else "?"
         print(f"    pos{pos:2d}: BEST='{best}'  [{top5}]  (total={total})")
     
-    # Save enhanced images for visual inspection
     for pos in range(6, 12):
         cx = NEW_CENTERS[pos]
         x0 = max(0, cx - HALF_NEW)
@@ -379,9 +353,7 @@ for yi, (ry0, ry1) in enumerate(y_ranges):
         cv2.imwrite(f"/tmp/new_pos{pos}_gray.png", enh_g)
         cv2.imwrite(f"/tmp/new_pos{pos}_rchan.png", enh_r)
     
-    # ─── Luhn check ───
     print("\n  LUHN VALIDATION:")
-    # Build candidates from top OCR reads
     from itertools import product as iprod
     
     top_per_pos = {}
@@ -407,7 +379,6 @@ for yi, (ry0, ry1) in enumerate(y_ranges):
         mid = "".join(combo)
         pan = prefix + mid + suffix
         if luhn(pan):
-            # Score
             score = 1.0
             for idx, dig in enumerate(mid):
                 p = 6 + idx
@@ -429,6 +400,6 @@ for yi, (ry0, ry1) in enumerate(y_ranges):
         formatted = f"{best_pan[:4]} {best_pan[4:8]} {best_pan[8:12]} {best_pan[12:16]}"
         print(f"\n  >>> BEST: {formatted}")
     
-    break  # Use first good y-range
+    break
 
 print("\nDone.")

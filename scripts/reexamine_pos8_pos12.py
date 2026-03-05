@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Re-examine PAN positions 8 and 12 with deep pixel analysis.
 
@@ -33,7 +32,6 @@ import pytesseract
 try:
     from ocr_service.modules.pan_candidates import luhn_ok
 except ModuleNotFoundError:
-    # Allow running this script directly without installing the package.
     sys.path.append(str(Path(__file__).resolve().parents[1]))
     from ocr_service.modules.pan_candidates import luhn_ok
 

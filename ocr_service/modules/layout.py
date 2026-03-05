@@ -84,9 +84,9 @@ class DocumentLayoutAnalyzer:
             num_regions = len(regions)
             avg_area = sum(r["area_ratio"] for r in regions) / num_regions
             if num_regions > 20 and avg_area < 0.05:
-                return "dense_text"  # Like a page of a book
+                return "dense_text"
             if num_regions < 10 and any(r["area_ratio"] > 0.4 for r in regions):
-                return "large_blocks"  # Like a poster or simple form
+                return "large_blocks"
             return "standard_form"
         except Exception as e:
             logger.error("Exception in classify_layout: %s", e)

@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# pylint: disable=duplicate-code
 """
 Reconstruct occluded card PAN digits using Luhn + BIN constraints.
 
@@ -21,48 +19,21 @@ from typing import Any, Optional
 try:
     from ocr_service.modules.pan_candidates import generate_pan_candidates
 except ModuleNotFoundError:
-    # Allow running this script directly without installing the package.
     sys.path.append(str(Path(__file__).resolve().parents[1]))
     from ocr_service.modules.pan_candidates import generate_pan_candidates
 
-# ---------------------------------------------------------------------------
-# BIN range heuristics for Visa cards
-# ---------------------------------------------------------------------------
 
 def visa_bin_plausible(pan: str) -> bool:
     """Basic Visa BIN plausibility check."""
     return pan.startswith("4") and len(pan) in {13, 16, 19}
 
 
-# ---------------------------------------------------------------------------
-# Partial-pixel visual analysis clues
-# ---------------------------------------------------------------------------
-
-# From the attached image, the embossed digits show:
-# Position 0-3:  4 3 8 8   (clear)
-# Position 4-5:  5 4       (clear)
-# Position 6:    partially visible under the black marker edge - top curves
-#                suggest 6, 8, or 9 based on emboss shadow
-# Position 7:    fully occluded
-# Position 8-9:  fully occluded
-# Position 10:   fully occluded
-# Position 11:   partially visible - the right edge of the emboss shows
-#                a vertical stroke, suggesting 1, 4, or 7
-# Position 12-15: 0 6 6 5  (clear)
-
-# We encode partial pixel evidence as weighted preferences:
 PIXEL_HINTS: dict[int, dict[str, float]] = {
-    # Position 6: edge shadow suggests rounded top (6, 8, 9, 0)
     6: {"6": 0.3, "8": 0.25, "9": 0.2, "0": 0.15, "3": 0.1},
-    # Position 7: no pixel evidence, all equally likely
     7: {str(d): 0.1 for d in range(10)},
-    # Position 8: no pixel evidence
     8: {str(d): 0.1 for d in range(10)},
-    # Position 9: no pixel evidence
     9: {str(d): 0.1 for d in range(10)},
-    # Position 10: no pixel evidence
     10: {str(d): 0.1 for d in range(10)},
-    # Position 11: right edge suggests vertical stroke (1, 4, 7)
     11: {"1": 0.25, "4": 0.2, "7": 0.2, "0": 0.1, "9": 0.1,
          "2": 0.05, "3": 0.03, "5": 0.03, "6": 0.02, "8": 0.02},
 }
@@ -78,11 +49,7 @@ def pixel_confidence(pan: str) -> float:
     return score
 
 
-# ---------------------------------------------------------------------------
-# Brute-force reconstruction
-# ---------------------------------------------------------------------------
-
-def reconstruct(  # pylint: disable=too-many-locals
+def reconstruct(
     prefix: str,
     suffix: str,
     total_length: int = 16,
@@ -113,7 +80,6 @@ def reconstruct(  # pylint: disable=too-many-locals
         f"(positions {len(prefix)}-{len(prefix) + unknown_count - 1})"
     )
 
-    # Build per-position digit sets and constraints for generic generator.
     all_digits = "0123456789"
     constraints: dict[int, set[int]] = {}
     position_digits: list[str] = []
@@ -161,27 +127,20 @@ def reconstruct(  # pylint: disable=too-many-locals
     print(f"Luhn-valid Visa candidates: {len(valid_candidates)}")
     print()
 
-    # Sort by pixel confidence (descending)
     if use_pixel_hints:
         valid_candidates.sort(key=lambda c: c["pixel_score"], reverse=True)
 
     return valid_candidates
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
 def parse_known_pattern(known: str) -> tuple[str, str, int]:
     """Parse a pattern like '4388 54?? ???? 0665' into prefix, suffix, total."""
     clean = re.sub(r"[\s\-]", "", known)
     total = len(clean)
 
-    # Find prefix (leading digits before first ?)
     prefix_match = re.match(r"^(\d+)", clean)
     prefix = prefix_match[1] if prefix_match else ""
 
-    # Find suffix (trailing digits after last ?)
     suffix_match = re.search(r"(\d+)$", clean)
     suffix = suffix_match[1] if suffix_match else ""
 

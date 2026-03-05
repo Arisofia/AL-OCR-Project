@@ -13,7 +13,6 @@ from typing import Optional
 
 import httpx
 
-# Add project root to sys.path for local development
 with contextlib.suppress(Exception):
     sys.path.append(str(Path(__file__).parent.parent))
 
@@ -21,7 +20,6 @@ _providers_mod = importlib.import_module("ocr_service.modules.ai_providers")
 AIProviderError = _providers_mod.AIProviderError
 OpenAIVisionProvider = _providers_mod.OpenAIVisionProvider
 
-# Use a stable, minimal binary file for image bytes (no external deps)
 img_path = Path("test_image.bin")
 if not img_path.exists():
     img_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 64)
@@ -114,7 +112,7 @@ async def run_scenario(name: str, status_code: int, body: Optional[dict] = None)
     Executes a test scenario with a specific HTTP status code and response body.
     """
     original_client = httpx.AsyncClient
-    httpx.AsyncClient = lambda *a, **k: _MockAsyncClient(  # type: ignore
+    httpx.AsyncClient = lambda *a, **k: _MockAsyncClient(
         status_code=status_code, body=body
     )
 
@@ -128,7 +126,7 @@ async def run_scenario(name: str, status_code: int, body: Optional[dict] = None)
         logger.exception("[%s] Provider raised expected exception", name)
         print(f"[{name}] Exception:", repr(exc))
     finally:
-        httpx.AsyncClient = original_client  # type: ignore
+        httpx.AsyncClient = original_client
 
 
 async def main():

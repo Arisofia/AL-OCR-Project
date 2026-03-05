@@ -3,21 +3,17 @@
 import sys
 from unittest.mock import MagicMock, patch
 
-# Mangum isn't available in test env; provide a dummy before importing main
 sys.modules.setdefault("mangum", MagicMock(Mangum=MagicMock()))
 
-# Some modules import heavy native libs (pytesseract, cv2). Provide light-weight dummies
 sys.modules.setdefault("modules", MagicMock())
 sys.modules.setdefault("modules.ocr_engine", MagicMock(IterativeOCREngine=MagicMock()))
 sys.modules.setdefault("modules.ocr_config", MagicMock(EngineConfig=MagicMock()))
 sys.modules.setdefault("modules.processor", MagicMock(OCRProcessor=MagicMock()))
 
-# Some tests need to import after stubbing heavy dependencies
-# pylint: disable=wrong-import-position
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi.testclient import TestClient
 
-from ocr_service.config import get_settings  # noqa: E402
-from ocr_service.main import app  # noqa: E402
+from ocr_service.config import get_settings
+from ocr_service.main import app
 
 client = TestClient(app)
 

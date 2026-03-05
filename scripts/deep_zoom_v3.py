@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# pylint: disable=duplicate-code
 """Lean deep zoom on PAN positions 10-11 with minimal OCR calls."""
 
 from __future__ import annotations
@@ -211,7 +209,7 @@ def print_ranked_votes(votes: Counter[str], limit: int = 8) -> None:
         print(f"      '{digit}': {count:4d} ({percentage:5.1f}%)  {bar_graph}")
 
 
-def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-many-statements  # NOSONAR
+def main() -> None:
     """Run lean deep-zoom OCR on PAN positions 10 and 11."""
     path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_IMAGE_PATH
     image = load(path)

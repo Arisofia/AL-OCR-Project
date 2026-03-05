@@ -3,9 +3,6 @@ Core OCR Orchestration Engine for high-fidelity document intelligence.
 Refactored into modular components for better maintainability and performance.
 """
 
-# This engine intentionally catches broad exceptions at API and provider boundaries
-# to preserve fallback behavior and service availability.
-# pylint: disable=broad-exception-caught,too-many-lines
 
 import asyncio
 import logging
@@ -21,7 +18,7 @@ import boto3
 import cv2
 import httpx
 import numpy as np
-import pytesseract  # type: ignore
+import pytesseract
 from botocore.exceptions import BotoCoreError, ClientError
 from PIL import Image, UnidentifiedImageError
 
@@ -135,7 +132,6 @@ class DocumentProcessor:
 
             img = ctx.original_img
 
-            # Adaptive upscaling before any further enhancement.
             if self.engine_config.max_upscale_factor > 1.0:
                 img = ImageToolkit.upscale_for_ocr(
                     img,
@@ -310,10 +306,8 @@ class DocumentProcessor:
             return ""
 
         try:
-            # Ensure valid UTF-8 encoding
             text = text.encode("utf-8", errors="ignore").decode("utf-8")
 
-            # Remove non-printable characters but keep basic punctuation
             allowed_chars = (
                 string.ascii_letters
                 + string.digits
@@ -324,12 +318,8 @@ class DocumentProcessor:
                 c for c in text if c in allowed_chars or ord(c) > 127
             )
 
-            # Remove excessive whitespace
             sanitized = re.sub(r"\s+", " ", sanitized).strip()
 
-            # Normalize OCR punctuation noise inside long digit sequences
-            # (likely IDs/cards). This is intentionally conservative:
-            # it only applies when the sequence contains 11-19 digits.
             def _normalize_long_digit_span(match: re.Match[str]) -> str:
                 span = match.group(0)
                 span = re.sub(
@@ -345,9 +335,6 @@ class DocumentProcessor:
                 sanitized,
             )
 
-            # Normalize OCR punctuation noise inside grouped numeric sequences
-            # (e.g., "4048-. 3700 045—" -> "4048 3700 045") while preserving
-            # common decimal formats like "1.250,00".
             previous = ""
             while previous != sanitized:
                 previous = sanitized
@@ -362,7 +349,6 @@ class DocumentProcessor:
                 sanitized,
             )
 
-            # Limit reasonable text length (prevent memory issues)
             if len(sanitized) > 10000:
                 sanitized = f"{sanitized[:10000]}..."
 
@@ -409,21 +395,18 @@ class DocumentProcessor:
         if len(img.shape) == 3:
             gray = cast(
                 np.ndarray,
-                cv2.cvtColor(  # pylint: disable=no-member
-                    img, cv2.COLOR_BGR2GRAY  # pylint: disable=no-member
+                cv2.cvtColor(
+                    img, cv2.COLOR_BGR2GRAY
                 ),
             )
         else:
             gray = img
 
-        # 3x upscale for higher fidelity on small/obscured digits
         height, width = gray.shape[:2]
         upscaled = cv2.resize(
             gray, (width * 3, height * 3), interpolation=cv2.INTER_CUBIC
         )
 
-        # Contrast Limited Adaptive Histogram Equalization (CLAHE)
-        # Specifically targets faint pixel remnants under thin occlusions.
         clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(8, 8))
         enhanced = clahe.apply(upscaled)
 
@@ -480,16 +463,16 @@ class DocumentProcessor:
         if len(roi.shape) == 3:
             gray = cast(
                 np.ndarray,
-                cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY),  # pylint: disable=no-member
+                cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY),
             )
         else:
             gray = roi
 
-        _, binary = cv2.threshold(  # pylint: disable=no-member
+        _, binary = cv2.threshold(
             gray,
             0,
             255,
-            cv2.THRESH_BINARY + cv2.THRESH_OTSU,  # pylint: disable=no-member
+            cv2.THRESH_BINARY + cv2.THRESH_OTSU,
         )
         return float(np.mean(binary < 200))
 
@@ -615,8 +598,6 @@ class DocumentProcessor:
         if len(compact) < base_digits:
             if not allow_digit_drop:
                 return ""
-            # Card mode can drop up to one dubious trailing glyph if re-reading
-            # indicates it was likely OCR noise.
             if len(compact) < max(8, base_digits - 1):
                 return ""
         if len(compact) < 8:
@@ -680,8 +661,6 @@ class DocumentProcessor:
             )
             return best_text
 
-        # If multi-pass full-frame OCR did not improve, inspect ambiguous glyph
-        # boxes one by one and re-read each box in single-digit mode.
         if self._needs_digit_rescue(best_text):
             try:
                 boxed_candidate = await asyncio.to_thread(
@@ -772,8 +751,7 @@ class DocumentProcessor:
         sync for small docs, async for large/complex docs.
         """
 
-        # Use sync API for smaller documents (< 5MB), async for larger ones
-        if len(image_bytes) < 5 * 1024 * 1024:  # 5MB threshold
+        if len(image_bytes) < 5 * 1024 * 1024:
             text = await self._extract_text_textract_sync(image_bytes)
         else:
             text = await self._extract_text_textract_async(image_bytes)
@@ -873,7 +851,6 @@ class DocumentProcessor:
         status = "failure"
         try:
             logger.info("Executing reconstruction preprocessor pipeline")
-            # process_bytes is CPU bound, run in thread
             recon_text, recon_img_bytes, recon_meta = await asyncio.to_thread(
                 recon_process_bytes, ctx.image_bytes, iterations=max_iterations
             )
@@ -917,13 +894,13 @@ class DocumentProcessor:
 
         hsv = cast(
             np.ndarray,
-            cv2.cvtColor(  # pylint: disable=no-member
-                img, cv2.COLOR_BGR2HSV  # pylint: disable=no-member
+            cv2.cvtColor(
+                img, cv2.COLOR_BGR2HSV
             ),
         )
         lower_skin = np.array([0, 40, 80], dtype=np.uint8)
         upper_skin = np.array([25, 255, 255], dtype=np.uint8)
-        skin_mask = cv2.inRange(  # pylint: disable=no-member
+        skin_mask = cv2.inRange(
             hsv, lower_skin, upper_skin
         )
 
@@ -947,7 +924,7 @@ class DocumentProcessor:
 
         hsv = cast(
             np.ndarray,
-            cv2.cvtColor(img, cv2.COLOR_BGR2HSV),  # pylint: disable=no-member
+            cv2.cvtColor(img, cv2.COLOR_BGR2HSV),
         )
 
         green_lo, green_hi = np.array([35, 80, 60]), np.array([85, 255, 255])
@@ -964,9 +941,9 @@ class DocumentProcessor:
             (red_lo1, red_hi1),
             (red_lo2, red_hi2),
         ):
-            combined = cv2.bitwise_or(  # pylint: disable=no-member
+            combined = cv2.bitwise_or(
                 combined,
-                cv2.inRange(hsv, lo, hi),  # pylint: disable=no-member
+                cv2.inRange(hsv, lo, hi),
             )
 
         ratio = float(np.count_nonzero(combined)) / float(combined.size or 1)
@@ -974,17 +951,16 @@ class DocumentProcessor:
             return img
 
         kernel = np.ones((3, 3), np.uint8)
-        combined = cv2.dilate(  # pylint: disable=no-member
+        combined = cv2.dilate(
             combined, kernel, iterations=1
         )
 
-        # Double-pass inpainting: TELEA for texture, NS for structural smooth
-        telea = cv2.inpaint(  # pylint: disable=no-member
+        telea = cv2.inpaint(
             img, combined, 7, cv2.INPAINT_TELEA
         )
         return cast(
             np.ndarray,
-            cv2.inpaint(  # pylint: disable=no-member
+            cv2.inpaint(
                 telea, combined, 3, cv2.INPAINT_NS
             ),
         )
@@ -1003,7 +979,6 @@ class DocumentProcessor:
             working = self.reconstructor.remove_color_overlay(rectified)
 
         if self._is_card_doc_type():
-            # Pad before thresholding/morphology so edge-touching digits are not lost.
             try:
                 h, w = working.shape[:2]
                 pad = min(32, max(8, int(round(0.02 * max(h, w)))))
@@ -1017,8 +992,8 @@ class DocumentProcessor:
         gray = (
             cast(
                 np.ndarray,
-                cv2.cvtColor(  # pylint: disable=no-member
-                    working, cv2.COLOR_BGR2GRAY  # pylint: disable=no-member
+                cv2.cvtColor(
+                    working, cv2.COLOR_BGR2GRAY
                 ),
             )
             if len(working.shape) == 3
@@ -1027,7 +1002,6 @@ class DocumentProcessor:
         if iteration == 1:
             return self.enhancer.apply_threshold(self.enhancer.sharpen(gray))
 
-        # Later passes prioritize faint-pixel recovery over aggressiveness.
         upscaled = self.enhancer.upscale_and_smooth(gray, scale=2)
         denoised = self.enhancer.denoise(upscaled)
         return self.enhancer.apply_threshold(denoised)
@@ -1399,7 +1373,7 @@ class DocumentProcessor:
         if original_bytes:
             return await self.extract_text_textract(original_bytes)
 
-        ok, encoded = cv2.imencode(".png", img)  # pylint: disable=no-member
+        ok, encoded = cv2.imencode(".png", img)
         return await self.extract_text_textract(encoded.tobytes()) if ok else ""
 
     async def extract_text(
@@ -1604,14 +1578,11 @@ class IterativeOCREngine:
                     }
                 return {"error": "Corrupted or unsupported image format"}
 
-            # Parallel initialization: Layout + Reconstruction
             await asyncio.gather(
                 self.processor.run_reconstruction(ctx, self.config.max_iterations),
                 self._analyze_layout(ctx),
             )
 
-            # Iteration loop. Card mode has a tighter budget to reduce
-            # serverless timeout risk on low-CPU runtimes.
             iterations = self.config.max_iterations
             if self.processor.is_card_doc_type():
                 iterations = min(
@@ -1664,7 +1635,6 @@ class IterativeOCREngine:
                 doc_type=doc_type or self.config.default_doc_type,
             )
 
-            # Parallel initialization
             layout_task = self._analyze_layout(ctx)
             learning_task = self.learning_engine.get_pattern_knowledge(ctx.doc_type)
 
@@ -1844,8 +1814,6 @@ class IterativeOCREngine:
         }
 
         try:
-            # Send the preprocessed image (with colored stroke removed) to the LLM
-            # instead of the raw original for significantly better fidelity.
             multimodal_img_bytes = ctx.image_bytes
             if ctx.current_img is not None:
                 preprocessed_bytes = await ImageToolkit.encode_image_async(
@@ -2081,18 +2049,18 @@ class IterativeOCREngine:
             gray = (
                 cast(
                     np.ndarray,
-                    cv2.cvtColor(  # pylint: disable=no-member
-                        img, cv2.COLOR_BGR2GRAY  # pylint: disable=no-member
+                    cv2.cvtColor(
+                        img, cv2.COLOR_BGR2GRAY
                     ),
                 )
                 if len(img.shape) == 3
                 else img
             )
-            _, binary = cv2.threshold(  # pylint: disable=no-member
+            _, binary = cv2.threshold(
                 gray,
                 0,
                 255,
-                cv2.THRESH_BINARY + cv2.THRESH_OTSU,  # pylint: disable=no-member
+                cv2.THRESH_BINARY + cv2.THRESH_OTSU,
             )
             total = float(binary.size or 1)
             foreground = float(np.count_nonzero(binary == 0))
@@ -2140,7 +2108,6 @@ class IterativeOCREngine:
             "credit_card",
             "debit_card",
         }
-        # Final sanitization of the best text before response
         final_text = self.processor.sanitize_text(ctx.best_text)
         final_text = self.processor.mark_uncertain_partial_card_tail(final_text)
         card_text_usable = (
@@ -2174,8 +2141,6 @@ class IterativeOCREngine:
             **analysis,
         }
 
-        # Override detected type with requested type if the user was explicit.
-        # We use a strict check here: if the user said it's a card, it's a card.
         if requested_type and requested_type not in {"generic", "unknown"}:
             resp["document_type"] = requested_type
             if requested_card_type and not card_text_usable:
@@ -2192,7 +2157,7 @@ class IterativeOCREngine:
                 )
                 resp["card_analysis"] = card_analysis
             else:
-                resp["type_confidence"] = 1.0  # Force maximum confidence for user intent
+                resp["type_confidence"] = 1.0
 
         if ctx.reconstruction_info:
             resp["reconstruction"] = ctx.reconstruction_info

@@ -24,7 +24,6 @@ class FailingRedis:
 
     async def delete(self, _key):
         """Simulate Redis delete (no-op for this test)."""
-        # No operation needed for this test
 
 
 @pytest.mark.xfail(
@@ -40,7 +39,6 @@ def test_redis_get_failure_raises_idempotency_error():
 
     redis = FailingRedis()
 
-    # Cast to redis.Redis for mypy compatibility in tests
     processor = OCRProcessor(engine, storage, cast(redis_mod.Redis, redis))
 
     with pytest.raises(OCRPipelineError) as exc:

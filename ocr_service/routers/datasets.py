@@ -53,7 +53,6 @@ async def upload_dataset_image(
 
     This endpoint is protected by X-API-KEY and X-DATASET-KEY.
     """
-    # SlowAPI's limiter requires `request` in the endpoint signature.
     _ = request
 
     if not storage.bucket_name:
@@ -72,7 +71,6 @@ async def upload_dataset_image(
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     unique = uuid.uuid4().hex[:10]
 
-    # Keep dataset keys predictable and scoped.
     dataset_key = re.sub(r"[^A-Za-z0-9_-]+", "_", (dataset or "unknown").strip())
     split_key = re.sub(r"[^A-Za-z0-9_-]+", "_", (split or "inbox").strip())
     base_prefix = f"datasets/{dataset_key}/{split_key}"

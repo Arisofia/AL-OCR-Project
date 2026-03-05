@@ -52,11 +52,9 @@ class _MockClient:
 
 
 def test_huggingface_provider_uses_router_and_auth_and_retries(monkeypatch):
-    # First response is 429, second is 200
     responses = [_MockResponse(429, {}), _MockResponse(200, {"generated_text": "ok"})]
     mock_client = _MockClient(responses)
 
-    # Patch httpx.AsyncClient to use our mock client
     monkeypatch.setattr(httpx, "AsyncClient", lambda: mock_client)
 
     provider = HuggingFaceVisionProvider(token="fake-token", model="test-model")
@@ -66,7 +64,6 @@ def test_huggingface_provider_uses_router_and_auth_and_retries(monkeypatch):
     assert res["text"] == "ok"
     assert res["model"] == "test-model"
 
-    # Ensure the first call used the router host and included Authorization header
     first_call = mock_client.calls[0]
     assert first_call["url"].startswith(
         "https://router.huggingface.co/models/test-model"

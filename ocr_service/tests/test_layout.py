@@ -7,14 +7,12 @@ from ocr_service.modules.layout import DocumentLayoutAnalyzer
 
 
 def test_detect_regions_empty():
-    # Test with empty bytes
     regions = DocumentLayoutAnalyzer.detect_regions(b"")
     assert not regions
 
 
 def test_detect_regions_real_image():
     """Test layout detection on a synthetic image."""
-    # Create a dummy image with two white blocks on black background
     img = np.zeros((100, 100, 3), dtype=np.uint8)
     cv2.rectangle(img, (10, 10), (30, 30), (255, 255, 255), -1)
     cv2.rectangle(img, (50, 50), (80, 80), (255, 255, 255), -1)
@@ -23,7 +21,6 @@ def test_detect_regions_real_image():
 
     regions = DocumentLayoutAnalyzer.detect_regions(img_bytes.tobytes())
 
-    # It should find at least 2 regions (depending on dilation)
     assert len(regions) >= 2
     assert all("bbox" in r for r in regions)
     assert all("rel_bbox" in r for r in regions)

@@ -32,7 +32,6 @@ class RedisWorker:
         self.settings = settings or get_settings()
         self.redis_client = redis_client or get_redis_client(self.settings)
 
-        # Initialize OCR engine with configuration from settings
         engine_config = EngineConfig(
             max_iterations=self.settings.ocr_iterations,
             enable_reconstruction=self.settings.enable_reconstruction,
@@ -49,8 +48,7 @@ class RedisWorker:
 
         while True:
             try:
-                # Blocking pop from the queue
-                task = await self.redis_client.blpop(  # type: ignore[misc]
+                task = await self.redis_client.blpop(
                     [self.queue_name], timeout=5
                 )
                 if not task:
@@ -64,7 +62,7 @@ class RedisWorker:
             except redis.ConnectionError:
                 logger.error("Redis connection lost | Retrying in 5s...")
                 await asyncio.sleep(5)
-            except Exception as e:  # pylint: disable=broad-exception-caught
+            except Exception as e:
                 logger.exception("Unexpected error in worker loop: %s", e)
                 await asyncio.sleep(1)
 
@@ -75,20 +73,17 @@ class RedisWorker:
         request_id = "N/A"
 
         try:
-            # Atomic claim and status check
             initial_status = {
                 "status": JobStatus.PROCESSING,
                 "updated_at": time.time(),
                 "request_id": request_id,
             }
 
-            # Try to claim the job using SET NX
             claimed = await self.redis_client.set(
                 idempotency_key, json.dumps(initial_status), nx=True, ex=3600
             )
 
             if not claimed:
-                # Job already exists in idempotency cache, check status
                 cached_status_raw = await self.redis_client.get(idempotency_key)
                 if cached_status_raw:
                     cached_data = json.loads(cached_status_raw)
@@ -103,8 +98,6 @@ class RedisWorker:
                         )
                         return
 
-                # If FAILED or missing, try to reclaim (NX prevented above)
-                # For simplicity, we just return if we couldn't claim it.
                 return
 
             job_data_raw = await self.redis_client.get(job_key)
@@ -116,7 +109,6 @@ class RedisWorker:
             job_data = json.loads(job_data_raw.decode("utf-8"))
             request_id = job_data.get("request_id", request_id)
 
-            # Update idempotency with correct request_id
             initial_status["request_id"] = request_id
             await self.redis_client.set(
                 idempotency_key, json.dumps(initial_status), ex=3600
@@ -124,10 +116,8 @@ class RedisWorker:
 
             logger.info("Processing job | ID: %s | RID: %s", job_id, request_id)
 
-            # OCR Execution
             result = await self._execute_ocr(job_data)
 
-            # Completion
             final_status = {
                 "status": JobStatus.COMPLETED,
                 "result": result,
@@ -143,7 +133,7 @@ class RedisWorker:
 
             logger.info("Job completed | ID: %s | RID: %s", job_id, request_id)
 
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except Exception as e:
             logger.exception("Job failed | ID: %s | RID: %s", job_id, request_id)
             await self._handle_job_failure(job_key, job_id, e, request_id)
 
@@ -196,7 +186,7 @@ class RedisWorker:
                     }
                 )
                 await self.redis_client.set(job_key, json.dumps(job_data))
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             logger.exception("Failed to record job failure for ID: %s", job_id)
 
 

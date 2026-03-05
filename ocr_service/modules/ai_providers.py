@@ -3,17 +3,13 @@ AI Provider implementations for document intelligence.
 Provides vision-based reconstruction using multiple vendors (OpenAI, Google).
 """
 
-# pylint: disable=broad-except,too-few-public-methods
 
-
-# Standard library imports
 import asyncio
 import base64
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Optional, Union, cast
 
-# Third-party imports
 import httpx
 
 try:
@@ -260,9 +256,8 @@ class GeminiVisionProvider(BaseVisionProvider):
             configure_fn(api_key=self.api_key)
             model = model_cls("gemini-1.5-flash")
             image_part = {"mime_type": "image/jpeg", "data": image_bytes}
-            # Cast to Any to satisfy mypy
             response = await model.generate_content_async(
-                [prompt, image_part]  # type: ignore[arg-type]
+                [prompt, image_part]
             )
             return {"text": response.text, "model": "gemini-1.5-flash"}
         except AttributeError as e:
@@ -308,7 +303,6 @@ class HuggingFaceVisionProvider(BaseVisionProvider):
         )
 
         try:
-            # Many HF vision/text models return different shapes; be permissive
             text = None
             if isinstance(data, dict):
                 text = (

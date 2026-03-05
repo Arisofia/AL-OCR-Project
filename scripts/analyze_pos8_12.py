@@ -1,39 +1,33 @@
-#!/usr/bin/env python3
 """Analyze the OCR reads captured from minimal_pos8_12.py run."""
 
-# === Captured data ===
-# Full-row reads (PSM13):
 FULL_READS = [
-    "4388540665",     # c8i/x2/psm13
-    "4388540665",     # c8i/x3/psm13
-    "4388540665",     # c32i/x2/psm13
-    "4388540665",     # c32i/x3/psm13
-    "438854290665",   # c64i/x2/psm13 — sees hidden digits '29'
-    "43885420665",    # c64i/x3/psm13 — sees hidden digit '2'
-    "4388546",        # tophat/x2/psm13 — partial
-    "43885426",       # tophat/x3/psm13 — sees '26'
-    "438854665",      # g03i/x2/psm13 — no leading 0!
-    "4388546658",     # g03i/x3/psm13
+    "4388540665",
+    "4388540665",
+    "4388540665",
+    "4388540665",
+    "438854290665",
+    "43885420665",
+    "4388546",
+    "43885426",
+    "438854665",
+    "4388546658",
 ]
 
-# Suffix-zone reads:
 SUFFIX_READS = [
-    "0665",  # c8i/psm13
-    "0665",  # c32i/psm13
-    "0665",  # c64i/psm13
-    "2665",  # tophat/psm13 ← sees '2' not '0'!
+    "0665",
+    "0665",
+    "0665",
+    "2665",
 ]
 
-# Previous PSM13 reads from extract_card_digits.py (session history):
 PREV_PSM13 = [
-    "43885400665",   # sees 1 hidden digit '0' before 0665
-    "43885470665",   # sees '7'
-    "43885460665",   # sees '6'
-    "43885450665",   # sees '5'
-    "43885452665",   # sees '52' and suffix is '2665' not '0665'!
+    "43885400665",
+    "43885470665",
+    "43885460665",
+    "43885450665",
+    "43885452665",
 ]
 
-# Previous per-position evidence from extract_boundary_digits.py:
 PREV_EVIDENCE = {
     6:  {"4": 0.87, "7": 0.05, "5": 0.05, "1": 0.02, "6": 0.01},
     7:  {"8": 0.47, "3": 0.43, "2": 0.08, "4": 0.02},
@@ -69,7 +63,6 @@ for r in PREV_PSM13:
         before = r[idx-1]
         print(f"   '{r}' → before 665: '{before}'")
 
-# Count votes for digit before 665
 from collections import Counter
 votes12 = Counter()
 for r in FULL_READS + SUFFIX_READS + PREV_PSM13:
@@ -83,7 +76,6 @@ for d, n in votes12.most_common():
     bar = "█" * max(1, int(n / total * 40))
     print(f"   '{d}': {n}/{total} = {n/total:.0%}  {bar}")
 
-# Special case analysis
 print("\n5. KEY OBSERVATION:")
 print("   - g03i reads: '438854665' and '4388546658'")
 print("     These SKIP position 12 entirely, going from prefix right to '665'")
@@ -108,7 +100,6 @@ for r in FULL_READS:
     si = r.rfind("665")
     if pi >= 0 and si > pi:
         hidden = r[pi+6:si]
-        # Remove trailing '0' if it's part of 0665
         if hidden.endswith("0") and r[si-1:si+3] == "0665":
             pre_suffix = hidden[:-1]
             suffix_start = "0665"
@@ -183,7 +174,6 @@ print("  Re-ranking needed with these two scenarios:")
 print("  Scenario 1: suffix = 0665, pos8 uncertain (5/8/2)")
 print("  Scenario 2: suffix = 2665, different Luhn constraints")
 
-# Luhn check both scenarios
 def luhn(pan):
     t = 0
     for i, c in enumerate(reversed(pan)):
@@ -200,7 +190,6 @@ print("\n" + "=" * 60)
 print("LUHN RECOMPUTE — BOTH SUFFIX SCENARIOS")
 print("=" * 60)
 
-# Updated evidence incorporating new reads
 UPDATED = {
     6: {"4": 0.80, "7": 0.05, "5": 0.05, "2": 0.05, "6": 0.03, "1": 0.02},
     7: {"8": 0.40, "3": 0.38, "2": 0.10, "9": 0.05, "6": 0.05, "4": 0.02},
@@ -213,7 +202,6 @@ UPDATED = {
 for suffix, suffix_label in [("0665", "SCENARIO A (suffix=0665)"), ("2665", "SCENARIO B (suffix=2665)")]:
     print(f"\n--- {suffix_label} ---")
     prefix = "438854"
-    # Top 4 per position
     top_per_pos = {}
     for pos in range(6, 12):
         sorted_d = sorted(UPDATED[pos].items(), key=lambda x: -x[1])[:4]

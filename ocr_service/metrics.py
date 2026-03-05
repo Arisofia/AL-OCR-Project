@@ -1,6 +1,5 @@
 from prometheus_client import Counter, Histogram
 
-# Histograms for latency
 OCR_REQUEST_LATENCY = Histogram(
     "ocr_request_latency_seconds", "Latency of OCR requests", ["method", "status"]
 )
@@ -27,7 +26,6 @@ OCR_EXTRACTION_LATENCY = Histogram(
 )
 
 
-# Counters for total requests and errors
 OCR_REQUEST_COUNT = Counter(
     "ocr_request_total", "Total number of OCR requests", ["method", "status"]
 )
@@ -44,7 +42,6 @@ OCR_IDEMPOTENCY_MISS_COUNT = Counter(
     "ocr_idempotency_miss_total", "Number of times idempotency cache was missed"
 )
 
-# Redis-related error counts impacting idempotency operations (get/set/delete)
 OCR_IDEMPOTENCY_REDIS_ERROR_COUNT = Counter(
     "ocr_idempotency_redis_errors_total",
     "Redis errors impacting idempotency operations",

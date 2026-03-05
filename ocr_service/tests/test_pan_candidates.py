@@ -17,7 +17,6 @@ def test_luhn_ok_known_valid_and_invalid() -> None:
 
 
 def test_compute_luhn_check_digit_known_value() -> None:
-    # Canonical Luhn sample: 7992739871 + 3 -> 79927398713
     assert compute_luhn_check_digit("7992739871") == 3
 
 
@@ -49,7 +48,6 @@ def test_generate_pan_candidates_no_luhn_simple_case() -> None:
 
 
 def test_generate_pan_candidates_applies_position_constraints() -> None:
-    # Only position 1 varies and is constrained.
     candidates = generate_pan_candidates(
         "4X11",
         constraints={1: {3, 8}},
@@ -59,7 +57,6 @@ def test_generate_pan_candidates_applies_position_constraints() -> None:
 
 
 def test_generate_pan_candidates_luhn_single_unknown_check_digit() -> None:
-    # Exactly one Luhn-valid completion should exist for this body.
     candidates = generate_pan_candidates("7992739871X", enforce_luhn=True)
     assert candidates == ["79927398713"]
 

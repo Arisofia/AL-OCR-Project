@@ -32,10 +32,8 @@ def _get_test_image(base_path, tmp_path):
 
 
 def test_reconstruction_enabled(tmp_path, monkeypatch):
-    # Clear lru_cache for settings to ensure environment variables are picked up
     get_settings.cache_clear()
 
-    # Ensure reconstruction is enabled for this test (monkeypatch used)
     test_key = "test_recon_key"
     monkeypatch.setenv("ENABLE_RECONSTRUCTION", "true")
     monkeypatch.setenv("OCR_ITERATIONS", "1")
@@ -43,7 +41,6 @@ def test_reconstruction_enabled(tmp_path, monkeypatch):
 
     client = TestClient(app)
 
-    # Use the synthetic pixelated sample generated in ocr_reconstruct tests
     base_dir = os.path.dirname(__file__)
     sample = os.path.join(
         base_dir,
@@ -62,7 +59,6 @@ def test_reconstruction_enabled(tmp_path, monkeypatch):
         }
         headers = {"X-API-KEY": test_key}
 
-        # Mock the processor's run_reconstruction to return something
         with patch(
             "ocr_service.modules.ocr_engine.DocumentProcessor.run_reconstruction",
             new_callable=AsyncMock,

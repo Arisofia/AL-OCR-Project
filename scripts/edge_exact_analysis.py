@@ -1,4 +1,3 @@
-    #!/usr/bin/env python3
 """
 Exact edge-based observation of hidden positions 6-11.
 
@@ -24,7 +23,7 @@ h, w = img_bgr.shape[:2]
 y0, y1 = int(h * 0.25), int(h * 0.55)
 roi_bgr = img_bgr[y0:y1]
 roi_gray = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2GRAY)
-roi_r = roi_bgr[:, :, 2]  # Red channel
+roi_r = roi_bgr[:, :, 2]
 rh, rw = roi_gray.shape
 
 CENTERS = {
@@ -56,20 +55,16 @@ def enhance_for_edges(zone):
     """Multiple enhancements to extract edges through marker occlusion."""
     results = []
     
-    # CLAHE inverted (strong)
     for clip in [16, 32, 64]:
         enh = cv2.createCLAHE(clipLimit=float(clip), tileGridSize=(3,3)).apply(zone)
         results.append(cv2.bitwise_not(enh))
     
-    # Gamma 0.3 (very bright) inverted
     lut = np.array([((i/255.0)**0.3)*255 for i in range(256)], np.uint8)
     results.append(cv2.bitwise_not(cv2.LUT(zone, lut)))
     
-    # Top-hat
     kern = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
     results.append(cv2.morphologyEx(zone, cv2.MORPH_TOPHAT, kern))
     
-    # Unsharp + CLAHE
     usm = cv2.addWeighted(zone, 2.5, cv2.GaussianBlur(zone, (0,0), 3), -1.5, 0)
     results.append(cv2.bitwise_not(cv2.createCLAHE(clipLimit=32.0, tileGridSize=(3,3)).apply(usm)))
     
@@ -83,7 +78,6 @@ def get_edge_map(zone, low=30, high=90):
     for enh in enhancements:
         edges = cv2.Canny(enh, low, high)
         composite += edges.astype(np.float64)
-    # Normalize
     if composite.max() > 0:
         composite = (composite / composite.max() * 255).astype(np.uint8)
     _, bw = cv2.threshold(composite, 40, 255, cv2.THRESH_BINARY)
@@ -100,13 +94,11 @@ def edge_features(edge_map):
     cmh, cmw = ch // 2, cw // 2
     th = ch // 3
 
-    # Quadrant edge density
     tl = crop[:cmh, :cmw].astype(float).mean()
     tr = crop[:cmh, cmw:].astype(float).mean()
     bl = crop[cmh:, :cmw].astype(float).mean()
     br = crop[cmh:, cmw:].astype(float).mean()
 
-    # 6-zone
     t_l = crop[:th, :cmw].astype(float).mean()
     t_r = crop[:th, cmw:].astype(float).mean()
     m_l = crop[th:2*th, :cmw].astype(float).mean()
@@ -114,11 +106,9 @@ def edge_features(edge_map):
     b_l = crop[2*th:, :cmw].astype(float).mean()
     b_r = crop[2*th:, cmw:].astype(float).mean()
 
-    # Column-wise edge density in right half
     right_cols = crop[:, cmw:]
     col_density = right_cols.astype(float).mean(axis=0) / 255.0
 
-    # Right gap: longest run of low-density columns
     gap_r = 0
     run = 0
     for v in col_density:
@@ -128,7 +118,6 @@ def edge_features(edge_map):
         else:
             run = 0
 
-    # Left gap
     left_cols = crop[:, :cmw]
     col_density_l = left_cols.astype(float).mean(axis=0) / 255.0
     gap_l = 0
@@ -140,27 +129,22 @@ def edge_features(edge_map):
         else:
             run = 0
 
-    # Row coverage: fraction of rows with ANY edge in right half
     row_has_edge_r = (right_cols.astype(float).max(axis=1) > 0).mean()
     row_has_edge_l = (left_cols.astype(float).max(axis=1) > 0).mean()
 
-    # Top-third right density vs bottom-third right density
     t_r_dens = crop[:th, cmw:].astype(float).mean()
     b_r_dens = crop[2*th:, cmw:].astype(float).mean()
 
-    # Mid crossings
     mid_row = crop[cmh-2:cmh+2, :].astype(float).mean(axis=0)
     h_cross = int(np.sum(np.abs(np.diff((mid_row > 30).astype(int)))))
 
     mid_col = crop[:, cmw-2:cmw+2].astype(float).mean(axis=1)
     v_cross = int(np.sum(np.abs(np.diff((mid_col > 30).astype(int)))))
 
-    # Overall edge density
     total = crop.astype(float).mean()
 
-    # Connected components
     num_cc, _ = cv2.connectedComponents(crop)
-    num_cc -= 1  # subtract background
+    num_cc -= 1
 
     return {
         "TL": tl, "TR": tr, "BL": bl, "BR": br,
@@ -177,7 +161,6 @@ def edge_features(edge_map):
 def ascii_art(edge_map, max_w=60, max_h=30):
     """Create ASCII representation of edge map for terminal inspection."""
     zh, zw = edge_map.shape
-    # Downsample
     step_y = max(1, zh // max_h)
     step_x = max(1, zw // max_w)
     lines = []
@@ -198,10 +181,8 @@ def ascii_art(edge_map, max_w=60, max_h=30):
     return "\n".join(lines)
 
 
-# =============================================================================
 print(f"Image: {w}x{h}, ROI: {rw}x{rh}, Scale: {SCALE}x\n")
 
-# Build known digit edge features
 print("=" * 70)
 print("KNOWN DIGITS — EDGE FEATURES")
 print("=" * 70)
@@ -215,13 +196,11 @@ print("-" * 70)
 
 for pos in sorted(KNOWN.keys()):
     digit = KNOWN[pos]
-    # Use GRAY for known (no marker), also try R-channel
     zone_gray = extract_zone_gray(pos)
     zone_r = extract_zone_r(pos)
     
     edge_g = get_edge_map(zone_gray)
     edge_r = get_edge_map(zone_r)
-    # Combine
     edge_combined = cv2.bitwise_or(edge_g, edge_r)
     
     f = edge_features(edge_combined)
@@ -231,7 +210,6 @@ for pos in sorted(KNOWN.keys()):
           f"{f['gap_r']:>3} {f['gap_l']:>3} {f['row_R']:4.2f} "
           f"{f['h_cross']:>2} {f['v_cross']:>2} {f['cc']:>3} {f['density']:5.1f}")
 
-# Average per digit
 avg_ef: dict[str, dict] = {}
 for digit, flist in digit_edge_features.items():
     avg = {}
@@ -246,7 +224,6 @@ for digit in sorted(avg_ef.keys()):
           f"{f['gap_r']:>3.0f} {f['gap_l']:>3.0f} {f['row_R']:4.2f} "
           f"{f['h_cross']:>2.0f} {f['v_cross']:>2.0f} {f['cc']:>3.0f} {f['density']:5.1f}")
 
-# Show ASCII art of known digits for reference
 print("\n" + "=" * 70)
 print("KNOWN DIGITS — EDGE ASCII ART")
 print("=" * 70)
@@ -259,7 +236,6 @@ for pos in sorted(KNOWN.keys()):
     print(ascii_art(edges, max_w=36, max_h=18))
 
 
-# =============================================================================
 print("\n" + "=" * 70)
 print("HIDDEN POSITIONS — EDGE ANALYSIS + ASCII ART")
 print("=" * 70)
@@ -268,12 +244,10 @@ for pos in range(6, 12):
     zone_gray = extract_zone_gray(pos)
     zone_r = extract_zone_r(pos)
     
-    # For hidden positions, R-channel is KEY (penetrates marker)
     edge_g = get_edge_map(zone_gray)
     edge_r = get_edge_map(zone_r)
     edge_combined = cv2.bitwise_or(edge_g, edge_r)
     
-    # Also try with higher CLAHE and lower Canny thresholds (more sensitive)
     edge_sensitive = get_edge_map(zone_r, low=15, high=50)
     edge_final = cv2.bitwise_or(edge_combined, edge_sensitive)
     
@@ -288,7 +262,6 @@ for pos in range(6, 12):
     print(f"  6-zone: tL={f['t_l']:.0f} tR={f['t_r']:.0f} mL={f['m_l']:.0f} mR={f['m_r']:.0f} bL={f['b_l']:.0f} bR={f['b_r']:.0f}")
     print(f"  top-right vs bot-right: {f['t_r_dens']:.1f} vs {f['b_r_dens']:.1f}")
     
-    # ASCII art of the edge map
     print("\n  Edge map (gray-based):")
     print("  " + ascii_art(edge_g, max_w=46, max_h=20).replace("\n", "\n  "))
     
@@ -298,7 +271,6 @@ for pos in range(6, 12):
     print("\n  Combined edge map:")
     print("  " + ascii_art(edge_final, max_w=46, max_h=20).replace("\n", "\n  "))
     
-    # Distance to known digits
     print("\n  Similarity to known digits (edge-based, lower=better):")
     distances = {}
     for digit, avg_f in sorted(avg_ef.items()):
@@ -318,17 +290,14 @@ for pos in range(6, 12):
         marker = " ◄◄◄" if i == 0 else ""
         print(f"    '{d}': {dist:8.1f}{marker}")
 
-    # Save images
     cv2.imwrite(f"/tmp/pos{pos}_edge_gray.png", edge_g)
     cv2.imwrite(f"/tmp/pos{pos}_edge_r.png", edge_r)
     cv2.imwrite(f"/tmp/pos{pos}_edge_combined.png", edge_final)
     
-    # Save enhancements
     for i, enh in enumerate(enhance_for_edges(zone_r)):
         cv2.imwrite(f"/tmp/pos{pos}_r_enh{i}.png", enh)
 
 
-# =============================================================================
 print("\n\n" + "=" * 70)
 print("FINAL SUMMARY — EDGE-BASED BEST MATCH")
 print("=" * 70)
@@ -359,7 +328,6 @@ for pos in range(6, 12):
     ranked = sorted(distances.items(), key=lambda x: x[1])
     top3 = ", ".join(f"'{d}'({v:.0f})" for d, v in ranked[:3])
     
-    # Observations
     obs = []
     if f["gap_r"] > 3: obs.append(f"RIGHT_GAP={f['gap_r']}")
     if f["gap_l"] > 3: obs.append(f"LEFT_GAP={f['gap_l']}")

@@ -43,7 +43,7 @@ def test_build_response_prefers_requested_doc_type_when_text_is_empty(monkeypatc
         best_confidence=0.0,
     )
 
-    resp = engine._build_response(ctx)  # pylint: disable=protected-access
+    resp = engine._build_response(ctx)
 
     assert resp["document_type"] == "bank_card"
     assert resp["type_confidence"] >= 0.50

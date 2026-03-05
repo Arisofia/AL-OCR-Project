@@ -37,8 +37,6 @@ def get_redis_client(settings: Settings) -> redis.Redis:
         db,
     )
 
-    # Create the Redis client instance with conservative timeouts to
-    # avoid long blocking calls in high-concurrency environments.
     return redis.Redis(
         host=host,
         port=port,
@@ -59,13 +57,12 @@ async def verify_redis_connection(client: redis.Redis, timeout: float = 1.0) -> 
 
     start = _time.time()
     try:
-        # Bound the ping with asyncio.wait_for to avoid long hangs
         import asyncio
 
         await asyncio.wait_for(client.ping(), timeout=timeout)
         latency = round(((_time.time() - start) * 1000), 2)
         return {"ok": True, "latency_ms": latency}
-    except Exception as e:  # pragma: no cover - defensive
+    except Exception as e:
         latency = round(((_time.time() - start) * 1000), 2)
         logger.exception("Redis ping failed: %s", e)
         error_detail = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__

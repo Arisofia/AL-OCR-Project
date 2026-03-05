@@ -22,7 +22,6 @@ def test_process_bytes_mocked(mock_tesseract):
     """Test process_bytes with a mocked Tesseract call to ensure logic flow."""
     mock_tesseract.return_value = "Mocked OCR Result"
 
-    # Create a simple 10x10 white square image bytes
     img = np.ones((10, 10, 3), dtype=np.uint8) * 255
     _, img_encoded = cv2.imencode(".png", img)
     img_bytes = img_encoded.tobytes()

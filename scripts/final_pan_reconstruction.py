@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Final PAN reconstruction combining per-position pixel evidence with Luhn."""
 
 from __future__ import annotations
@@ -10,35 +9,30 @@ from typing import Final
 try:
     from ocr_service.modules.pan_candidates import generate_pan_candidates
 except ModuleNotFoundError:
-    # Allow running this script directly without installing the package.
     sys.path.append(str(Path(__file__).resolve().parents[1]))
     from ocr_service.modules.pan_candidates import generate_pan_candidates
 
 Candidate = tuple[str, float, str]
 
-# Per-position evidence — improved pipeline (template match + expanded OCR)
-# Template matching (pos6→'5' best among 0,3,4,5,6,8; pos11→'3'/'8')
-# OCR sweep (corrected regex, 8 enhancements, R-channel, 7 offsets)
 WEIGHTS: Final[dict[int, dict[str, float]]] = {
     6: {"0": 0.30, "5": 0.25, "4": 0.20, "2": 0.15, "7": 0.10},
-    7: {"4": 0.30, "7": 0.25, "3": 0.20, "2": 0.15, "8": 0.10}, # edges:'4'>'8'>'3'; OCR:'7'~'2'
+    7: {"4": 0.30, "7": 0.25, "3": 0.20, "2": 0.15, "8": 0.10},
     8: {"3": 0.30, "7": 0.25, "8": 0.20, "4": 0.15, "5": 0.10},
     9: {"3": 0.30, "7": 0.25, "8": 0.20, "4": 0.15, "2": 0.10},
-    10: {"3": 0.30, "7": 0.20, "4": 0.20, "8": 0.15, "1": 0.15},# edges:'3'>'8'>'4'; OCR:'7'~'4'
+    10: {"3": 0.30, "7": 0.20, "4": 0.20, "8": 0.15, "1": 0.15},
     11: {"5": 0.35, "3": 0.25, "6": 0.20, "8": 0.15, "0": 0.05},
 }
 
 PREFIX: Final = "438854"
 SUFFIX: Final = "0665"
 
-# Top candidates per position (improved pipeline — template + OCR)
 TOP_PER_POS: Final[dict[int, str]] = {
-    6: "05427",      # edges+template+OCR combined
-    7: "47328",      # edges:'4'; OCR:'7'~'2'; template:N/A
+    6: "05427",
+    7: "47328",
     8: "37845",
     9: "37842",
-    10: "37418",     # edges:'3'; OCR:'7'~'4'
-    11: "53680",     # edges:'5'; template:'3'; visual: gap on right
+    10: "37418",
+    11: "53680",
 }
 
 

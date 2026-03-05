@@ -14,7 +14,6 @@ from ocr_service.services.storage import StorageService
 from ocr_service.utils.context import get_request_id_from_scope
 from ocr_service.utils.redis_factory import get_redis_client as create_redis_client
 
-# Security and Identity Management
 api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
 dataset_key_header = APIKeyHeader(name="X-DATASET-KEY", auto_error=False)
 
@@ -24,7 +23,6 @@ def get_api_key(
     curr_settings: Settings = Depends(get_settings),
 ) -> str:
     """Enforces API Key authentication for protected resources."""
-    # Ensure api_key_header name matches settings if dynamic name is needed
     if header_value is not None and header_value == curr_settings.ocr_api_key:
         return header_value
     raise HTTPException(

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Use feature matching (ORB/SIFT) between original and new card images
 to find homography and map digit positions precisely.
@@ -26,7 +25,6 @@ gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
 print(f"Image 1: {w1}x{h1}")
 print(f"Image 2: {w2}x{h2}")
 
-# ─── Step 1: Feature matching ───
 print("\n=== FEATURE MATCHING ===\n")
 
 orb_create = getattr(cv2, "ORB_create", None)
@@ -42,13 +40,11 @@ matches = bf.match(des1, des2)
 matches = sorted(matches, key=lambda m: m.distance)
 print(f"Matches: {len(matches)} (best dist={matches[0].distance if matches else -1})")
 
-# Show top matches
 for m in matches[:10]:
     pt1 = kp1[m.queryIdx].pt
     pt2 = kp2[m.trainIdx].pt
     print(f"  ({pt1[0]:.0f},{pt1[1]:.0f}) -> ({pt2[0]:.0f},{pt2[1]:.0f})  dist={m.distance}")
 
-# Try homography with good matches
 good = matches[:100]
 if len(good) >= 4:
     pts1 = np.array([kp1[m.queryIdx].pt for m in good], dtype=np.float32).reshape((-1, 1, 2))
@@ -66,7 +62,6 @@ if len(good) >= 4:
     if H is not None:
         print(f"Homography matrix:\n{H}")
         
-        # Map digit centers from image 1 to image 2
         ORIG_CENTERS = {
             0: 197, 1: 272, 2: 347, 3: 422,
             4: 497, 5: 572, 6: 647, 7: 722,
@@ -74,8 +69,7 @@ if len(good) >= 4:
             12: 1133, 13: 1208, 14: 1283, 15: 1358,
         }
         
-        # Y center of digit row in original image
-        digit_y_orig = int(h1 * 0.40)  # approximately 40% from top
+        digit_y_orig = int(h1 * 0.40)
         
         print("\n=== MAPPED DIGIT POSITIONS ===\n")
         mapped_centers = {}
@@ -88,14 +82,12 @@ if len(good) >= 4:
             known = "✓" if pos in {0,1,2,3,4,5,12,13,14,15} else "?"
             print(f"  pos{pos:2d}: ({cx},{digit_y_orig}) -> ({int(mx)},{int(my)}) [{known}]")
         
-        # ─── Step 2: Read digits using mapped positions ───
         print("\n=== READING DIGITS AT MAPPED POSITIONS ===\n")
         
         KNOWN = {0:"4", 1:"3", 2:"8", 3:"8", 4:"5", 5:"4", 12:"0", 13:"6", 14:"6", 15:"5"}
-        r2 = img2[:,:,2]  # R-channel
+        r2 = img2[:,:,2]
         
-        # Try different Y offsets from mapped position
-        HALF = 12  # Half-width of digit zone in new image
+        HALF = 12
         
         for y_offset in range(-15, 20, 5):
             correct = 0
@@ -106,7 +98,6 @@ if len(good) >= 4:
                 mx, my = mapped_centers[pos]
                 cy = my + y_offset
                 
-                # ROI around digit
                 y0 = max(0, cy - 20)
                 y1 = min(h2, cy + 20)
                 x0 = max(0, mx - HALF)
@@ -130,7 +121,6 @@ if len(good) >= 4:
                                 d = re.sub(r'\D', '', txt)
                                 if d: votes[d[0]] += 1
                             except Exception: pass
-                            # Binary threshold
                             for thr in [120, 150]:
                                 try:
                                     _, bw = cv2.threshold(inv, thr, 255, cv2.THRESH_BINARY)
@@ -149,7 +139,6 @@ if len(good) >= 4:
             if pct >= 50:
                 print(f"\n  >>> USING y_offset={y_offset} <<<\n")
                 
-                # Read ALL positions including hidden
                 print("  Known digit verification:")
                 for pos in sorted(KNOWN.keys()):
                     expected = KNOWN[pos]
@@ -195,7 +184,6 @@ if len(good) >= 4:
                     cy = my + y_offset
                     
                     votes = Counter()
-                    # Try multiple x-offsets too
                     for dx in range(-4, 5, 2):
                         y0 = max(0, cy - 20)
                         y1 = min(h2, cy + 20)
@@ -223,7 +211,6 @@ if len(good) >= 4:
                                             d = re.sub(r'\D', '', txt)
                                             if d: votes[d[0]] += 1
                                         except Exception: pass
-                            # Gamma
                             for gamma in [0.3, 0.5]:
                                 lut = np.array([((i/255.0)**gamma)*255 for i in range(256)], np.uint8)
                                 bright = cv2.bitwise_not(cv2.LUT(up, lut))
@@ -233,7 +220,6 @@ if len(good) >= 4:
                                         d = re.sub(r'\D', '', txt)
                                         if d: votes[d[0]] += 1
                                     except Exception: pass
-                            # Tophat
                             kern = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9,9))
                             tophat = cv2.morphologyEx(up, cv2.MORPH_TOPHAT, kern)
                             for psm in [10, 13]:
@@ -249,7 +235,6 @@ if len(good) >= 4:
                     best = votes.most_common(1)[0][0] if votes else "?"
                     print(f"    pos{pos:2d}: BEST='{best}'  ({top5})  total={total_v}")
                 
-                # Save enhanced hidden zones
                 for pos in range(6, 12):
                     mx, my = mapped_centers[pos]
                     cy = my + y_offset
@@ -266,10 +251,8 @@ if len(good) >= 4:
                     cv2.imwrite(f"/tmp/new2_pos{pos}_gray.png", enh_g)
                     cv2.imwrite(f"/tmp/new2_pos{pos}_rchan.png", enh_r)
                 
-                # ─── Luhn with new image evidence ───
                 print("\n  LUHN CHECK on pattern 4388 5454 ???5 0665:")
                 
-                # Focus on positions 8, 9, 10 which are the unknowns
                 def luhn(pan):
                     t = 0
                     for i, c in enumerate(reversed(pan)):
@@ -278,7 +261,6 @@ if len(good) >= 4:
                         t += d
                     return t % 10 == 0
                 
-                # Get top candidates for pos 8, 9, 10
                 for pos in [8, 9, 10]:
                     v = hidden_votes.get(pos, Counter())
                     total_v = sum(v.values())
@@ -286,7 +268,6 @@ if len(good) >= 4:
                         probs = ", ".join(f"'{k}'={v_/total_v:.0%}" for k, v_ in v.most_common(5))
                         print(f"    pos{pos}: {probs}")
                 
-                # Check all 100 Luhn-valid candidates
                 print("\n  Ranking among 100 Luhn-valid candidates for 4388 5454 ???5 0665:")
                 candidates = []
                 for d8 in range(10):
@@ -294,7 +275,6 @@ if len(good) >= 4:
                         for d10 in range(10):
                             pan = f"43885454{d8}{d9}{d10}50665"
                             if luhn(pan):
-                                # Score from new image
                                 v8 = hidden_votes.get(8, Counter())
                                 v9 = hidden_votes.get(9, Counter())
                                 v10 = hidden_votes.get(10, Counter())
@@ -309,13 +289,12 @@ if len(good) >= 4:
                     formatted = f"{pan[:4]} {pan[4:8]} {pan[8:12]} {pan[12:16]}"
                     print(f"    {i:3d}. {formatted}  score={s:.6e}")
                 
-                break  # Use first good y_offset
+                break
     else:
         print("\nHomography failed!")
 else:
     print("\nNot enough matches for homography!")
 
-# ─── Also try SIFT ───
 print("\n\n=== TRYING SIFT ===\n")
 try:
     sift_create = getattr(cv2, "SIFT_create", None)
@@ -329,7 +308,6 @@ try:
     bf2 = cv2.BFMatcher(cv2.NORM_L2)
     matches_s = bf2.knnMatch(des1s, des2s, k=2)
     
-    # Lowe's ratio test
     good_s = [m for m, n in matches_s if m.distance < 0.7 * n.distance]
     
     print(f"Good SIFT matches: {len(good_s)}")
@@ -348,7 +326,6 @@ try:
         print(f"SIFT Homography inliers: {inliers_s}/{len(good_s)}")
         
         if Hs is not None:
-            # Map digit positions
             digit_y_orig = int(h1 * 0.40)
             ORIG_CENTERS = {
                 0: 197, 1: 272, 2: 347, 3: 422,

@@ -250,10 +250,9 @@ async def perform_ocr(
     Processes uploaded documents with optional AI-driven pixel reconstruction.
     """
     start_time = time.time()
-    status = "failure"  # Default status
+    status = "failure"
 
     try:
-        # SlowAPI uses 'request' via decorator internally
         redis_client = getattr(request.app.state, "redis_client", None)
 
         config = ProcessingConfig(
@@ -277,7 +276,7 @@ async def perform_ocr(
         return OCRResponse(**result)
     except OCRPipelineError as e:
         OCR_ERROR_COUNT.labels(phase=e.phase, error_type=type(e).__name__).inc()
-        raise  # Re-raise the exception after logging
+        raise
     except Exception:
         trace_id = get_current_trace_id()
         logger.exception(
@@ -289,7 +288,7 @@ async def perform_ocr(
         OCR_ERROR_COUNT.labels(
             phase="request_handling", error_type="UnexpectedError"
         ).inc()
-        raise  # Re-raise unexpected exceptions
+        raise
     finally:
         latency = time.time() - start_time
         OCR_REQUEST_LATENCY.labels(method=request.method, status=status).observe(

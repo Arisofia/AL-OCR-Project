@@ -1,10 +1,8 @@
-#!/usr/bin/env python3
 
 """
 CLI tool to interact with the Hugging Face Vision Provider for testing and
 reconstruction.
 """
-# pylint: disable=duplicate-code
 
 import argparse
 import asyncio
@@ -13,7 +11,6 @@ import importlib
 import sys
 from pathlib import Path
 
-# Add project root to sys.path for local development
 with contextlib.suppress(Exception):
     sys.path.append(str(Path(__file__).parent.parent))
 
@@ -56,7 +53,6 @@ async def main():
     )
     args = parser.parse_args()
 
-    # Get Hugging Face Token from env var or CLI arg
     settings = get_settings()
     token = args.token or settings.hugging_face_hub_token
 
@@ -68,23 +64,18 @@ async def main():
         sys.exit(1)
 
     image_path = Path(args.image_path)
-    # Check if image file exists
     if not image_path.exists():
         print(f"Error: Image file not found at {args.image_path}")
         sys.exit(1)
 
-    # Initialize Hugging Face Vision Provider
     print(f"Initializing HuggingFaceVisionProvider with model {args.model}...")
     provider = HuggingFaceVisionProvider(token=token, model=args.model)
 
-    # Read image file asynchronously
     print(f"Reading image: {args.image_path}")
     image_bytes = await asyncio.to_thread(image_path.read_bytes)
 
-    # Send request to Hugging Face
     print(f"Sending request to Hugging Face (prompt: '{args.prompt[:50]}...')...")
     try:
-        # Send image file and prompt to the Hugging Face Vision Provider
         result = await provider.reconstruct(image_bytes, args.prompt)
         if "error" in result:
             print(f"Error from provider: {result['error']}")

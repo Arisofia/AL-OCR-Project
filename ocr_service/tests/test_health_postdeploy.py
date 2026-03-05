@@ -3,7 +3,7 @@
 import os
 
 import pytest
-import requests  # type: ignore
+import requests
 from requests.exceptions import RequestException
 
 
@@ -11,18 +11,15 @@ from requests.exceptions import RequestException
     os.environ.get("SKIP_HEALTH_CHECK") == "true", reason="Skipping post-deploy test"
 )
 def test_health_check():
-    # Default to local FastAPI dev server
     url = os.environ.get("OCR_HEALTH_URL", "http://127.0.0.1:8000/health")
     try:
         resp = requests.get(url, timeout=5)
     except RequestException:
         pytest.skip(f"Health check server not reachable at {url}")
 
-    # Ensure a successful status
     resp.raise_for_status()
 
     data = resp.json()
-    # Check for required keys
     assert "status" in data, f"Missing 'status' in health response: {data}"
     assert data["status"] in (
         "healthy",

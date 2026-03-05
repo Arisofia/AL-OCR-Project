@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Fast re-examination of PAN positions 8 and 12."""
 
 from __future__ import annotations

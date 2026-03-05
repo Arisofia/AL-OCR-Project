@@ -9,9 +9,6 @@ import pytest
 from ocr_service.modules.learning_engine import LearningEngine
 
 
-# pylint: disable=protected-access
-
-
 def test_load_patterns_logs_on_invalid_json(caplog):
     caplog.set_level(logging.ERROR)
     with tempfile.NamedTemporaryFile("w", delete=False) as tmp:

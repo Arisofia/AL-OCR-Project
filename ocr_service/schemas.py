@@ -63,7 +63,7 @@ class DocumentAnalytics(BaseModel):
     decision_readiness: Optional[dict[str, Any]] = None
     iteration_convergence: Optional[float] = None
     pixel_rescue_applied: bool = False
-    quality_band: Optional[str] = None  # "excellent" | "good" | "fair" | "poor"
+    quality_band: Optional[str] = None
     requires_manual_review: bool = False
     remediation_hints: list[str] = []
     field_completeness_ratio: Optional[float] = None

@@ -16,7 +16,7 @@ async def test_verify_redis_success():
             await asyncio.sleep(0)
             return True
 
-    res = await verify_redis_connection(DummyClient())  # type: ignore[arg-type]
+    res = await verify_redis_connection(DummyClient())
     assert res["ok"] is True
     assert "latency_ms" in res
 
@@ -30,6 +30,6 @@ async def test_verify_redis_failure():
             await asyncio.sleep(0)
             raise RuntimeError("no conn")
 
-    res = await verify_redis_connection(DummyClient())  # type: ignore[arg-type]
+    res = await verify_redis_connection(DummyClient())
     assert res["ok"] is False
     assert "error" in res

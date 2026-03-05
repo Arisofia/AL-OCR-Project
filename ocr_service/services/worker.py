@@ -54,7 +54,6 @@ class WorkerService:
 
         storage_service = StorageService(bucket_name=bucket)
 
-        # Standardize output naming convention
         out_key = (
             f"{self.settings.output_prefix.rstrip('/')}/{os.path.basename(key)}.json"
         )
@@ -85,7 +84,7 @@ class WorkerService:
         except TextractServiceError as e:
             self._handle_textract_error(e, context)
             raise
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except Exception as e:
             self._handle_generic_error(e, context)
             raise
 
@@ -167,5 +166,5 @@ class WorkerService:
         }
         try:
             context.storage.save_json(err_obj, context.out_key)
-        except Exception as se:  # pylint: disable=broad-exception-caught
+        except Exception as se:
             logger.error("Critical storage failure during error logging: %s", se)

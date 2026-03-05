@@ -10,7 +10,6 @@ from ocr_service.modules.processor import OCRProcessor, ProcessingConfig
 
 
 def test_processor_returns_request_id():
-    # Arrange: fake engine (async) and storage service (sync)
     engine = MagicMock()
     engine.process_image = AsyncMock(
         return_value={"text": "dummy", "reconstruction": {}}
@@ -42,7 +41,6 @@ def test_processor_returns_request_id():
             await asyncio.sleep(0)
             return b"image-bytes"
 
-    # Act
     config = ProcessingConfig(
         reconstruct=False,
         advanced=False,
@@ -55,6 +53,5 @@ def test_processor_returns_request_id():
         )
     )
 
-    # Assert
     assert "request_id" in res
     assert res["request_id"] == "RID-123"

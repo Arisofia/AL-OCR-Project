@@ -8,9 +8,9 @@ import time
 import uuid
 from typing import Any, Optional, cast
 
-import boto3  # type: ignore
-from botocore.config import Config  # type: ignore
-from botocore.exceptions import BotoCoreError, ClientError  # type: ignore
+import boto3
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -50,7 +50,6 @@ class StorageService:
             settings = get_settings()
 
         self.bucket_name = bucket_name or getattr(settings, "s3_bucket_name", None)
-        # Use explicit fallback if the setting is None or falsy
         self.max_retries = getattr(settings, "aws_max_retries", None) or 3
         self.region = getattr(settings, "aws_region", "us-east-1")
         self._last_check_time = 0.0
@@ -61,7 +60,6 @@ class StorageService:
                 "S3 bucket name not provided; StorageService will run in degraded mode."
             )
 
-        # Disable botocore automatic retries when we use a local manual retry loop
         config = Config(retries={"max_attempts": 1, "mode": "standard"})
         try:
             client_factory = cast(Any, boto3.client)
@@ -89,7 +87,6 @@ class StorageService:
             )
             return False
 
-        # Return cached result if fresh
         if time.time() - self._last_check_time < 60:
             return self._last_check_result
 
@@ -121,7 +118,6 @@ class StorageService:
         bucket = self.bucket_name
 
         if not client or not bucket:
-            # Fallback to local client if not initialized (similar to main.py logic)
             logger.debug(
                 "S3 client not initialized, creating a temporary one for presigning"
             )

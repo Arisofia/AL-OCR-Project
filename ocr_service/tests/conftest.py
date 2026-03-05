@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Set dummy environment variables for Pydantic Settings validation
 os.environ.setdefault("OCR_API_KEY", "test-api-key")
 os.environ.setdefault("ENVIRONMENT", "development")
 os.environ.setdefault("REDIS_STARTUP_CHECK", "false")

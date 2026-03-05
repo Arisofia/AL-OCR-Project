@@ -7,9 +7,9 @@ import time
 from typing import TYPE_CHECKING, Any, Optional, cast
 
 import boto3
-from botocore.config import Config  # type: ignore
-from botocore.exceptions import BotoCoreError, ClientError  # type: ignore
-from tenacity import (  # type: ignore
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
+from tenacity import (
     retry,
     retry_if_exception_type,
     stop_after_attempt,
@@ -44,7 +44,6 @@ class TextractService:
 
         self.max_retries = getattr(settings, "aws_max_retries", 3)
 
-        # Optimize botocore configuration for deterministic retry management
         config = Config(retries={"max_attempts": 1, "mode": "standard"})
         client_factory = cast(Any, boto3.client)
         self.client = cast(

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Read the full number line from new card image using mapped positions.
 Also use edge-based structural analysis on hidden positions.
@@ -18,29 +17,22 @@ h2, w2 = img2.shape[:2]
 gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
 r2 = img2[:, :, 2]
 
-# From feature matching: digit positions in new image
-# pos0=(45,165), pos15=(382,160)
-# digit row y ≈ 160-165
-# Try whole number strip
 
 print(f"Image: {w2}x{h2}\n")
 
-# Mapped positions from SIFT (confirmed by ORB)
 POS_X = {
     0:45, 1:66, 2:88, 3:110, 4:131, 5:153,
     6:175, 7:197, 8:229, 9:251, 10:273, 11:294,
     12:316, 13:338, 14:360, 15:382
 }
-POS_Y = 162  # average y from mapping
+POS_Y = 162
 
-# ─── PART 1: Full number line OCR ───
 print("=" * 60)
 print("PART 1: Full number line OCR")
 print("=" * 60)
 
-# Extract the full number strip
-x_left = POS_X[0] - 15  # a bit left of first digit
-x_right = POS_X[15] + 15  # a bit right of last digit
+x_left = POS_X[0] - 15
+x_right = POS_X[15] + 15
 
 all_line_reads = []
 
@@ -77,7 +69,6 @@ for y_offset in range(-20, 25, 3):
                         except Exception:
                             pass
                     
-                    # Binary threshold
                     for thr in [120, 140, 160]:
                         _, bw = cv2.threshold(inv, thr, 255, cv2.THRESH_BINARY)
                         for psm in [6, 7]:
@@ -93,7 +84,6 @@ for y_offset in range(-20, 25, 3):
                             except Exception:
                                 pass
                 
-                # Gamma
                 for gamma in [0.3, 0.5]:
                     lut = np.array([((i/255.0)**gamma)*255 for i in range(256)], np.uint8)
                     bright = cv2.LUT(up, lut)
@@ -121,16 +111,13 @@ for score, digits, info in all_line_reads[:30]:
     if "0665" in digits: marks += " HAS_0665"
     print(f"  [{score:3d}] '{digits}' ({info}){marks}")
 
-# ─── Extract 16-digit PANs ───
 print("\n--- Extracted PANs ---")
 pan_votes = Counter()
 for score, digits, info in all_line_reads:
-    # Try to find 438854 and take 16 chars
     idx = digits.find("438854")
     if idx >= 0 and len(digits) >= idx + 16:
         pan = digits[idx:idx+16]
         pan_votes[pan] += 1
-    # Also try anchoring on 0665
     idx = digits.find("0665")
     if idx >= 0 and idx + 4 == len(digits) or (idx >= 0 and idx + 4 <= len(digits)):
         end = idx + 4
@@ -144,7 +131,6 @@ print(f"\nPANs found (unique): {len(pan_votes)}")
 for pan, count in pan_votes.most_common(20):
     formatted = f"{pan[:4]} {pan[4:8]} {pan[8:12]} {pan[12:16]}"
     
-    # Luhn check
     t = 0
     for i, c in enumerate(reversed(pan)):
         d = int(c)
@@ -154,7 +140,6 @@ for pan, count in pan_votes.most_common(20):
     
     print(f"  {formatted}  x{count}  {valid}")
 
-# ─── PART 2: Edge-based structural analysis on new image ───
 print(f"\n{'='*60}")
 print("PART 2: Edge-based structural analysis (positions 8-10)")
 print(f"{'='*60}")
@@ -168,10 +153,8 @@ def analyze_structure(zone):
     
     h_z, w_z = zone.shape
     
-    # Canny edges
     edges = cv2.Canny(zone, 30, 100)
     
-    # Divide into quadrants
     mid_y = h_z // 2
     mid_x = w_z // 2
     
@@ -196,7 +179,6 @@ def analyze_structure(zone):
         "br": br / total,
     }
     
-    # Horizontal/vertical edge ratio
     sobelx = cv2.Sobel(zone, cv2.CV_64F, 1, 0, ksize=3)
     sobely = cv2.Sobel(zone, cv2.CV_64F, 0, 1, ksize=3)
     h_edges = np.abs(sobely).sum()
@@ -205,7 +187,6 @@ def analyze_structure(zone):
     
     return features
 
-# Digit structural templates (approximate)
 DIGIT_PROFILES = {
     '0': {"top": 0.50, "bottom": 0.50, "left": 0.50, "right": 0.50, "h_v": 0.8},
     '1': {"top": 0.40, "bottom": 0.60, "left": 0.30, "right": 0.70, "h_v": 0.5},
@@ -226,7 +207,6 @@ def match_digit(features):
     
     scores = {}
     for d, prof in DIGIT_PROFILES.items():
-        # Euclidean distance in feature space
         dist = 0
         dist += (features["top"] - prof["top"]) ** 2
         dist += (features["bottom"] - prof["bottom"]) ** 2
@@ -237,7 +217,6 @@ def match_digit(features):
     
     return sorted(scores.items(), key=lambda x: x[1])
 
-# First validate on known digits
 print("\nValidating on known digits:")
 KNOWN = {0:"4", 1:"3", 2:"8", 3:"8", 4:"5", 5:"4", 12:"0", 13:"6", 14:"6", 15:"5"}
 correct = 0
@@ -274,7 +253,6 @@ for pos in sorted(KNOWN.keys()):
 
 print(f"\nKnown accuracy: {correct}/{len(KNOWN)} ({correct/len(KNOWN)*100:.0f}%)")
 
-# Now hidden positions
 print("\nHidden positions (6-11) edge analysis:")
 hidden_edge = {}
 for pos in range(6, 12):
@@ -306,26 +284,21 @@ for pos in range(6, 12):
     best = votes.most_common(1)[0][0] if votes else "?"
     print(f"  pos{pos:2d}: BEST='{best}'  ({top5})")
 
-# ─── PART 3: Combined Luhn analysis ───
 print(f"\n{'='*60}")
 print("PART 3: Combined evidence + Luhn for 4388 5454 ???5 0665")
 print(f"{'='*60}")
 
-# From original image edge analysis:
 orig_evidence = {
     8: {'3': 30, '8': 20, '4': 15, '7': 25, '5': 10},
     9: {'3': 30, '8': 20, '4': 15, '7': 25, '2': 10},
     10: {'3': 30, '4': 20, '8': 15, '7': 20, '1': 15},
 }
 
-# Combine with new image evidence
 combined = {}
 for pos in [8, 9, 10]:
     combined[pos] = Counter()
-    # Original evidence (weight 2x since higher resolution)
     for d, w in orig_evidence[pos].items():
         combined[pos][d] += w * 2
-    # New image edge evidence
     for d, w in hidden_edge.get(pos, Counter()).items():
         combined[pos][d] += w
     
@@ -333,7 +306,6 @@ for pos in [8, 9, 10]:
     top5 = ", ".join(f"'{k}'={v/total:.0%}" for k,v in combined[pos].most_common(5))
     print(f"  pos{pos}: {top5}")
 
-# Luhn ranking
 print("\nFinal Luhn-valid ranking for 4388 5454 ???5 0665:")
 
 def luhn(pan):

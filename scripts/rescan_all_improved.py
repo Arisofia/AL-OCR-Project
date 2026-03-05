@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Rescan ALL hidden positions 6-11 with improved pipeline."""
 import contextlib
 import re
@@ -22,7 +21,6 @@ roi = img[y0:y1]
 gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
 rh, rw = gray.shape
 
-# From column brightness analysis (corrected geometry)
 CENTERS = {6: 647, 7: 722, 8: 833, 9: 908, 10: 983, 11: 1058}
 HALF = 34
 SCALE = 4
@@ -132,7 +130,6 @@ for pos, cx in sorted(CENTERS.items()):
             if budget_remaining <= 0:
                 break
 
-        # R channel
         if budget_remaining <= 0:
             break
         zone_r = roi[:, x0:x1, 2]
@@ -161,7 +158,6 @@ for pos, cx in sorted(CENTERS.items()):
         print(f"  >>> '{best[0]}' ({best[1]/total:.0%})")
     print()
 
-# Summary table
 print("=" * 50)
 print("SUMMARY — Updated evidence for all hidden positions")
 print("=" * 50)
@@ -175,7 +171,6 @@ for pos in range(6, 12):
         cols.append("")
     print(f"  {pos}  {cols[0]:>8}  {cols[1]:>8}  {cols[2]:>8}  {total:>5}")
 
-# Output for easy copy into final_pan_reconstruction.py
 print("\n# Python dict for WEIGHTS update:")
 print("WEIGHTS = {")
 for pos in range(6, 12):

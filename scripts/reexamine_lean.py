@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Lean re-examination of PAN positions 8 and 12. Minimal OCR calls."""
 
 import re
@@ -205,7 +204,6 @@ def main() -> None:
 
     channels = [gray, row[:, :, 0], row[:, :, 1], row[:, :, 2]]
 
-    # ── POSITION 12 ──
     _print_section("POSITION 12 (assumed '0' of '0665')")
 
     pos12_votes = _scan_position(
@@ -216,7 +214,6 @@ def main() -> None:
     )
     _print_votes(pos12_votes)
 
-    # ── POSITION 8 ──
     _print_section("POSITION 8 (3rd hidden digit, 1st of group 3)")
     print("(Previous: '5'=48%, '8'=41%)\n")
 
@@ -228,7 +225,6 @@ def main() -> None:
     )
     _print_votes(pos8_votes)
 
-    # ── Also scan POS 9, 10, 11 ──
     for pos_name, pos_offset in [("POS 9 (4th hidden)", 2.5), ("POS 10 (5th hidden)", 1.5), ("POS 11 (6th hidden)", 0.5)]:
         _print_section(pos_name)
         votes = _scan_position(
@@ -239,7 +235,6 @@ def main() -> None:
         )
         _print_votes(votes)
 
-    # ── Luhn recompute ──
     _print_section("LUHN RECOMPUTE with updated evidence")
 
 

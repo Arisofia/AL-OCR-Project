@@ -1,11 +1,8 @@
-#!/usr/bin/env python3
 """Final analysis: combine all evidence and produce ranked Luhn-valid PANs."""
 
 import itertools
 from collections import Counter
 
-# 60 OCR HIT reads from the new card image (quick_new_card.py)
-# These all contain "4388" or "0665"
 hits = [
     "292251224634388548403283",
     "031414654438890020328403",
@@ -73,7 +70,6 @@ print("=" * 60)
 print("PART 1: Statistical analysis of new image OCR reads")
 print("=" * 60)
 
-# 1) Extract digits right after "438854"
 after_438854 = []
 for s in hits:
     idx = s.find("438854")
@@ -91,7 +87,6 @@ for a in after_438854:
 for d, c in d1.most_common():
     print(f"  '{d}': {c} ({100*c/sum(d1.values()):.0f}%)")
 
-# 2) Reads with both 438854 and 0665
 print("\n--- Reads containing BOTH '438854' AND '0665' ---")
 both_count = 0
 for s in hits:
@@ -103,7 +98,6 @@ for s in hits:
         print(f"  between='{between}' | full: ...{s[max(0,i1-2):i2+8]}...")
 print(f"  Total: {both_count} reads")
 
-# 3) What precedes 0665?
 print("\n--- Digits before '0665' ---")
 for s in hits:
     idx = s.find("0665")
@@ -111,7 +105,6 @@ for s in hits:
         quad = s[idx - 4 : idx]
         print(f"  ...{quad}0665... from '{s}'")
 
-# 4) Digit frequency at each offset after "438854"
 print("\n--- Digit frequency at offsets after '438854' ---")
 for pos in range(8):
     freq = Counter()
@@ -121,7 +114,6 @@ for pos in range(8):
     top = freq.most_common(5)
     print(f"  offset+{pos}: {top}")
 
-# 5) First 10 chars after 438854 (sorted)
 print("\n--- First 10 chars after '438854' (sorted) ---")
 for a in sorted(after_438854):
     print(f"  '{a[:12]}'")
@@ -136,7 +128,6 @@ suffix = "50665"
 valid = []
 for d8, d9, d10 in itertools.product(range(10), repeat=3):
     pan = prefix + str(d8) + str(d9) + str(d10) + suffix
-    # Luhn check
     digits = [int(c) for c in pan]
     total = 0
     for i, d in enumerate(digits):
@@ -156,41 +147,10 @@ print("\n" + "=" * 60)
 print("PART 3: Score and rank candidates using combined evidence")
 print("=" * 60)
 
-# Evidence from ORIGINAL image analysis:
-# Edge-based (Canny on R-channel): pos8='3'(629), pos9='3'(705), pos10='3'(749)
-#   Also strong: pos8='8'(743), pos9='8'(914), pos10='8'(1041)
-#   But '8' had high edge count because of its structure (two loops)
-#   '3' is the best non-trivial match
 
-# OCR from original (multi-config):
-# pos8: '3' and '7' were most common
-# pos9: '3' and '7' were most common
-# pos10: '3' and '7' were most common
-
-# Template matching from original:
-# pos8: '3', '7', '8' all appeared
-# pos9: '3', '7' appeared
-# pos10: '3', '4', '7' appeared
-
-# NEW IMAGE evidence (from 60 OCR reads):
-# First digit after 438854 is very noisy (image includes pos6=5, pos7=4 before pos8)
-# But the reads with both "438854" and "0665" show what's between them
-# Key reads: "0665170743" has between="" (OCR skipped the occluded section)
-#            "066503282" has between="" (same)
-#            "0664203282" -- misread of 0665
-
-# Weight system for scoring (position 8, 9, 10)
-# Original image edge analysis strongly favored '3' for all three
-# OCR evidence mixed but '3' and '7' most common
-# '7' and '4' also appeared in some reads
-
-# Score each valid PAN
 edge_scores = {
-    # pos8 scores (lower edge distance = better match to '3')
     8: {'3': 0.35, '7': 0.25, '8': 0.10, '0': 0.05, '4': 0.05, '5': 0.05, '1': 0.03, '2': 0.03, '6': 0.03, '9': 0.03},
-    # pos9 scores
     9: {'3': 0.35, '7': 0.25, '8': 0.10, '0': 0.05, '4': 0.05, '5': 0.05, '1': 0.03, '2': 0.03, '6': 0.03, '9': 0.03},
-    # pos10 scores
     10: {'3': 0.35, '7': 0.25, '4': 0.10, '8': 0.08, '0': 0.05, '5': 0.05, '1': 0.03, '2': 0.03, '6': 0.03, '9': 0.03},
 }
 

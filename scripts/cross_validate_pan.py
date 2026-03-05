@@ -1,7 +1,5 @@
-#!/usr/bin/env python3
 """Cross-validate top PAN candidates against partial OCR reads."""
 
-# Partial reads from PSM13 full-line extraction (scripts/extract_card_digits.py)
 PARTIAL_READS = [
     "43885400665",
     "43885470665",
@@ -11,11 +9,11 @@ PARTIAL_READS = [
 ]
 
 TOP_CANDIDATES = [
-    "4388544354740665",  # #1
-    "4388544884570665",  # #2
-    "4388544854040665",  # #3
-    "4388544880770665",  # #4
-    "4388544850570665",  # #5
+    "4388544354740665",
+    "4388544884570665",
+    "4388544854040665",
+    "4388544880770665",
+    "4388544850570665",
 ]
 
 

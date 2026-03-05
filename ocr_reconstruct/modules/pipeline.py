@@ -63,7 +63,6 @@ class IterativeOCR:
         best_local_text = ""
         best_local_img = current
 
-        # Strategy Phase 1: Naive Depixelation for pattern recovery
         depixelated = self.reconstructor.depixelate_naive(current)
         dep_th = self.enhancer.apply_threshold(depixelated)
         text_dep = image_to_text(dep_th)
@@ -76,7 +75,6 @@ class IterativeOCR:
             best_local_text = text_dep
             best_local_img = depixelated
 
-        # Strategy Phase 2: Telea Inpainting for foreground isolation
         mask = (thresholded == 255).astype("uint8") * 255
         inpainted = cv2.inpaint(current, mask, 3, cv2.INPAINT_TELEA)
         inp_th = self.enhancer.apply_threshold(inpainted)
@@ -101,7 +99,6 @@ class IterativeOCR:
         meta: dict[str, Any] = {"iterations": []}
 
         for i in range(self.iterations):
-            # Step 1: Sequential Enhancement and Extraction
             enhanced = self.enhancer.sharpen(current)
             denoised = self.enhancer.denoise(enhanced)
             thresholded = self.enhancer.apply_threshold(denoised)
@@ -112,7 +109,6 @@ class IterativeOCR:
             current_meta = {"iteration": i + 1, "type": "standard", "text": text}
             meta["iterations"].append(current_meta)
 
-            # Step 2: Trigger Heuristic Feedback Loop for sparse results
             if len(text) < 10:
                 fb_text, fb_img, fb_meta = self._apply_feedback_strategies(
                     current,
@@ -125,11 +121,9 @@ class IterativeOCR:
                     text = fb_text
                     current = fb_img
 
-            # Step 3: Best result retention logic
             if len(text) > len(best_overall_text):
                 best_overall_text = text
 
-            # Step 4: Early exit strategy for high-confidence matches
             if len(best_overall_text) > 20:
                 break
 
@@ -169,7 +163,6 @@ class IterativeOCR:
 
         text, final_img, meta = self.process_image(img)
 
-        # Re-encode for downstream presentation or storage
         success, buf = cv2.imencode(".png", final_img)
         img_bytes = buf.tobytes() if success else None
 

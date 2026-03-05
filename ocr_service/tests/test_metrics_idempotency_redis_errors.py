@@ -1,6 +1,5 @@
 """Test metrics increment on Redis failure for idempotency logic."""
 
-# pylint: disable=protected-access
 import asyncio
 import contextlib
 from typing import cast
@@ -43,7 +42,6 @@ def test_metrics_increment_on_redis_get_failure():
 
     redis = FailingRedis()
 
-    # Cast to redis.Redis for mypy compatibility
     processor = OCRProcessor(engine, storage, cast(redis_mod.Redis, redis))
 
     before = metrics.OCR_IDEMPOTENCY_REDIS_ERROR_COUNT.labels(

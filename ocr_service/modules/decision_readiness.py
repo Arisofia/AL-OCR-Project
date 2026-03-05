@@ -17,9 +17,6 @@ from typing import Any
 
 __all__ = ["compute_decision_readiness", "quality_band", "MANDATORY_FIELDS"]
 
-# ---------------------------------------------------------------------------
-# Mandatory field definitions per document type
-# ---------------------------------------------------------------------------
 
 MANDATORY_FIELDS: dict[str, list[str]] = {
     "passport": ["full_name", "document_number", "date_of_birth", "expiry_date"],
@@ -39,7 +36,6 @@ MANDATORY_FIELDS: dict[str, list[str]] = {
     "residence_permit": ["full_name", "document_number", "expiry_date"],
 }
 
-# Confidence level → numeric weight
 _CONFIDENCE_WEIGHTS: dict[str, float] = {
     "high": 1.0,
     "medium": 0.7,
@@ -62,11 +58,6 @@ def quality_band(confidence: float) -> str:
     if confidence >= 0.40:
         return "fair"
     return "poor"
-
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 
 def compute_decision_readiness(
@@ -108,12 +99,10 @@ def compute_decision_readiness(
         f.name: f.confidence_level for f in fields
     }
 
-    # --- presence ratio (mandatory fields present vs total mandatory) --------
     present = [f for f in mandatory if f in extracted]
     missing = [f for f in mandatory if f not in extracted]
     presence_ratio = len(present) / len(mandatory) if mandatory else 1.0
 
-    # --- average confidence of mandatory fields that are present -------------
     confidence_scores = [
         _CONFIDENCE_WEIGHTS.get(extracted[f], 0.3) for f in present
     ]
@@ -121,7 +110,6 @@ def compute_decision_readiness(
         sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.0
     )
 
-    # --- composite score -----------------------------------------------------
     score = (
         presence_ratio * 0.50
         + avg_field_confidence * 0.30
@@ -130,7 +118,6 @@ def compute_decision_readiness(
     score = round(min(max(score, 0.0), 1.0), 4)
     ready = score >= _READY_THRESHOLD
 
-    # --- recommendation ------------------------------------------------------
     if ready:
         recommendation = "Document is ready for automated processing."
     elif missing:

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Exact pixel observation for ALL hidden positions (6-11).
 
@@ -67,20 +66,17 @@ def features(binary):
     """Compute structural features from a binarized digit image."""
     zh, zw = binary.shape
     _, _ = zh // 2, zw // 2
-    # Trim 10% margins to avoid border noise
     margin_x = int(zw * 0.10)
     margin_y = int(zh * 0.10)
     crop = binary[margin_y:zh-margin_y, margin_x:zw-margin_x]
     ch, cw = crop.shape
     cmh, cmw = ch // 2, cw // 2
 
-    # Quadrant densities (% of white pixels)
     tl = crop[:cmh, :cmw].astype(float).mean()
     tr = crop[:cmh, cmw:].astype(float).mean()
     bl = crop[cmh:, :cmw].astype(float).mean()
     br = crop[cmh:, cmw:].astype(float).mean()
 
-    # Third-based densities (top/mid/bot x left/right)
     th3 = ch // 3
     t_left = crop[:th3, :cmw].astype(float).mean()
     t_right = crop[:th3, cmw:].astype(float).mean()
@@ -89,29 +85,23 @@ def features(binary):
     b_left = crop[2*th3:, :cmw].astype(float).mean()
     b_right = crop[2*th3:, cmw:].astype(float).mean()
 
-    # Right-half gap: max run of consecutive columns with <15% white
     right_half = crop[:, cmw:]
     col_dens = right_half.astype(float).mean(axis=0) / 255.0
     max_gap_r = _max_run_below(col_dens, 0.15)
 
-    # Left-half gap
     left_half = crop[:, :cmw]
     col_dens_l = left_half.astype(float).mean(axis=0) / 255.0
     max_gap_l = _max_run_below(col_dens_l, 0.15)
 
-    # Right-side: row-by-row presence
     right_row_presence = (right_half.astype(float).mean(axis=1) > 25.5).astype(int)
-    right_coverage = right_row_presence.mean()  # fraction of rows with stuff on right
+    right_coverage = right_row_presence.mean()
 
-    # Horizontal midline crossings (transitions white↔black along middle row band)
     mid_band = crop[cmh-3:cmh+3, :].mean(axis=0)
     h_cross = _count_crossings(mid_band, 128)
 
-    # Vertical midline crossings
     vmid_band = crop[:, cmw-3:cmw+3].mean(axis=1)
     v_cross = _count_crossings(vmid_band, 128)
 
-    # Overall density
     total_dens = crop.astype(float).mean()
 
     return {
@@ -145,9 +135,6 @@ def _count_crossings(profile, threshold):
     return int(np.sum(np.abs(np.diff(above.astype(int)))))
 
 
-# =============================================================================
-# Build feature database from known digits
-# =============================================================================
 print(f"Image: {w}x{h}, ROI: {rw}x{rh}")
 print(f"Scale: {SCALE}x\n")
 
@@ -155,7 +142,6 @@ print("=" * 70)
 print("KNOWN DIGIT FEATURES (ground truth)")
 print("=" * 70)
 
-# Store per-digit (average across occurrences)
 digit_features: dict[str, list[dict]] = defaultdict(list)
 
 header = (f"{'Pos':>3} {'D':>1}  {'TL':>5} {'TR':>5} {'BL':>5} {'BR':>5} "
@@ -176,7 +162,6 @@ for pos in sorted(KNOWN.keys()):
           f"{f['gap_r']:>4} {f['gap_l']:>4} {f['right_coverage']:5.2f} "
           f"{f['h_cross']:>2} {f['v_cross']:>2} {f['density']:5.0f}")
 
-# Compute average features per digit
 avg_features: dict[str, dict] = {}
 for digit, flist in digit_features.items():
     avg = {}
@@ -194,9 +179,6 @@ for digit in sorted(avg_features.keys()):
           f"{f['h_cross']:>2.0f} {f['v_cross']:>2.0f} {f['density']:5.0f}")
 
 
-# =============================================================================
-# Analyse each hidden position
-# =============================================================================
 print("\n" + "=" * 70)
 print("HIDDEN POSITION ANALYSIS")
 print("=" * 70)
@@ -215,18 +197,15 @@ for pos in range(6, 12):
     print(f"  gap_R={f['gap_r']}  gap_L={f['gap_l']}  right_coverage={f['right_coverage']:.2f}")
     print(f"  h_cross={f['h_cross']}  v_cross={f['v_cross']}  density={f['density']:.0f}")
 
-    # 6-zone detail
     print(f"  6-zone: tL={f['t_left']:.0f} tR={f['t_right']:.0f} "
           f"mL={f['m_left']:.0f} mR={f['m_right']:.0f} "
           f"bL={f['b_left']:.0f} bR={f['b_right']:.0f}")
 
-    # Feature distance to each known digit
     print("\n  Distance to known digits (lower = more similar):")
     distances = {}
     for digit, avg_f in sorted(avg_features.items()):
-        # Weighted L1 distance across structural features
         keys_weights = [
-            ("TL", 1), ("TR", 2), ("BL", 1), ("BR", 2),  # right side matters more
+            ("TL", 1), ("TR", 2), ("BL", 1), ("BR", 2),
             ("gap_r", 15), ("gap_l", 10),
             ("right_coverage", 80),
             ("h_cross", 20), ("v_cross", 15),
@@ -242,11 +221,9 @@ for pos in range(6, 12):
         marker = " <<<" if i == 0 else ""
         print(f"    '{d}': {dist:8.1f}{marker}")
 
-    # Save debug images
     cv2.imwrite(f"/tmp/pos{pos}_6x_enhanced.png", enh)
     cv2.imwrite(f"/tmp/pos{pos}_6x_binary.png", bn)
 
-    # Also save with multiple enhancements for visual inspection
     variants = []
     for clip in [4, 8, 16, 32, 64]:
         c = cv2.createCLAHE(clipLimit=float(clip), tileGridSize=(3,3))
@@ -254,11 +231,9 @@ for pos in range(6, 12):
     for gamma in [0.3, 0.5]:
         lut = np.array([((i/255.0)**gamma)*255 for i in range(256)], np.uint8)
         variants.append(cv2.bitwise_not(cv2.LUT(zone_up, lut)))
-    # tophat
     kern = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9,9))
     variants.append(cv2.morphologyEx(zone_up, cv2.MORPH_TOPHAT, kern))
 
-    # Stack vertically with labels
     labeled_strips = []
     labels = ["C4","C8","C16","C32","C64","G0.3","G0.5","TopH"]
     for lbl, var in zip(labels, variants):
@@ -279,9 +254,6 @@ for pos in range(6, 12):
 print("\n\nDebug images saved to /tmp/pos*_6x_*.png and /tmp/pos*_multi_enhance.png")
 
 
-# =============================================================================
-# Summary: best structural match per position
-# =============================================================================
 print("\n" + "=" * 70)
 print("SUMMARY: Best structural match per hidden position")
 print("=" * 70)
@@ -309,7 +281,6 @@ for pos in range(6, 12):
     top3 = ", ".join(f"'{d}'({v:.0f})" for d, v in ranked[:3])
     print(f"  POS {pos}: {top3}")
 
-    # Key observations
     obs = []
     if f["gap_r"] > 5:
         obs.append(f"right_gap={f['gap_r']}")

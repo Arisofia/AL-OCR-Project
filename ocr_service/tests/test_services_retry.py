@@ -3,7 +3,7 @@
 from unittest.mock import patch
 
 import pytest
-from botocore.exceptions import ClientError  # type: ignore
+from botocore.exceptions import ClientError
 
 from ocr_service.services.storage import StorageService
 from ocr_service.services.textract import TextractService
@@ -13,7 +13,6 @@ def test_storage_put_object_retry_success(mock_s3_client):
     """Test S3 put_object success after retries."""
     service = StorageService(bucket_name="test-bucket")
 
-    # Fail once, then succeed
     mock_s3_client.put_object.side_effect = [
         ClientError(
             {"Error": {"Code": "Throttling", "Message": "Rate exceeded"}},
@@ -22,7 +21,7 @@ def test_storage_put_object_retry_success(mock_s3_client):
         {"ResponseMetadata": {"HTTPStatusCode": 200}},
     ]
 
-    with patch("time.sleep", return_value=None):  # Skip actual sleeping
+    with patch("time.sleep", return_value=None):
         success = service.put_object("key", b"body", "text/plain")
 
     assert success is True

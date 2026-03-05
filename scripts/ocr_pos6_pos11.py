@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Fast OCR sweep for positions 6 and 11 only — lean and corrected."""
 import re
 from collections import Counter
@@ -37,14 +36,11 @@ def enhance_variants(zone):
     for clip in [8, 16, 32, 64]:
         c = cv2.createCLAHE(clipLimit=float(clip), tileGridSize=(3, 3))
         out.append(cv2.bitwise_not(c.apply(zone)))
-    # Gamma
     for gamma in [0.3, 0.5]:
         lut = np.array([((i/255.0)**gamma)*255 for i in range(256)], np.uint8)
         out.append(cv2.bitwise_not(cv2.LUT(zone, lut)))
-    # Top-hat
     kern = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
     out.append(cv2.morphologyEx(zone, cv2.MORPH_TOPHAT, kern))
-    # Unsharp
     blur = cv2.GaussianBlur(zone, (0, 0), 3)
     out.append(cv2.bitwise_not(cv2.addWeighted(zone, 2.0, blur, -1.0, 0)))
     return out
@@ -87,7 +83,6 @@ for pos, cx in POSITIONS.items():
             for d in ocr_digit(enh):
                 votes[d] += 1
 
-        # Also R channel (often best for embossed)
         zone_r = roi[:, x0:x1, 2]
         zone_r_up = upscale(zone_r)
         for enh in enhance_variants(zone_r_up)[:4]:

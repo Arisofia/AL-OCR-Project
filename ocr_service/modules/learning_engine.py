@@ -32,11 +32,8 @@ class LearningEngine:
         self.client: Optional[Client] = None
         self._knowledge_cache: dict[str, Any] = {}
 
-        # Initialize Supabase with short timeout for Free Tier resilience
         if self.settings.supabase_url and self.settings.supabase_service_role:
             try:
-                # Use a specific configuration if available in newer versions,
-                # or just handle the flow gracefully
                 self.client = create_client(
                     self.settings.supabase_url, self.settings.supabase_service_role
                 )
@@ -49,7 +46,6 @@ class LearningEngine:
                     e,
                 )
 
-        # Ensure local directory exists
         os.makedirs(os.path.dirname(self.storage_path), exist_ok=True)
 
     def check_connection(self) -> bool:
@@ -80,19 +76,15 @@ class LearningEngine:
             "created_at": time.time(),
         }
 
-        # 1. Background task for Local Persistence (Always)
         save_task = asyncio.create_task(self._save_local(data))
 
-        # 2. Attempt Supabase Upsert (If active)
         if self.client:
             try:
 
                 def _upsert() -> None:
                     if self.client:
-                        # Use type ignore as Supabase's JSON type is slightly
-                        # incompatible with inferred dict[str, object]
                         self.client.table("learning_patterns").upsert(
-                            data  # type: ignore[arg-type]
+                            data
                         ).execute()
 
                 await asyncio.to_thread(_upsert)
@@ -108,7 +100,6 @@ class LearningEngine:
 
     async def get_pattern_knowledge(self, doc_type: str) -> Optional[dict[str, Any]]:
         """Retrieves best pattern, prioritizing Supabase then Local."""
-        # Try Cloud first
         if self.client:
             try:
 
@@ -135,7 +126,6 @@ class LearningEngine:
                     e,
                 )
 
-        # Fallback to Local
         return await self._fetch_local(doc_type)
 
     async def _save_local(self, data: dict[str, Any]) -> None:

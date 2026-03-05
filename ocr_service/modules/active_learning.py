@@ -45,19 +45,16 @@ class HybridSampling(QueryStrategy):
 
     def __init__(self, n_clusters: int = 10, diversity_ratio: float = 0.3):
         self.n_clusters = n_clusters
-        self.diversity_ratio = diversity_ratio  # 30% diversity, 70% uncertainty
+        self.diversity_ratio = diversity_ratio
 
     def select_indices(
         self, model: OCRModel, unlabeled_data: np.ndarray, n_samples: int
     ) -> list[int]:
-        # 1. Get Embeddings (Feature Vectors) from the model backbone
         embeddings = model.get_embeddings(unlabeled_data)
 
-        # 2. Get Uncertainty Scores (Least Confidence)
         probs = model.predict_proba(unlabeled_data)
         uncertainty = 1 - np.max(probs, axis=1)
 
-        # --- Diversity Step: K-Means Clustering ---
         actual_n_clusters = min(self.n_clusters, len(unlabeled_data))
         if actual_n_clusters < 1:
             return []
@@ -68,25 +65,19 @@ class HybridSampling(QueryStrategy):
         selected_indices: list[int] = []
         samples_per_cluster = max(1, n_samples // actual_n_clusters)
 
-        # Select samples from each cluster to ensure coverage
         for i in range(actual_n_clusters):
-            # Get indices belonging to this cluster
             cluster_indices = np.nonzero(cluster_labels == i)[0]
 
             if len(cluster_indices) == 0:
                 continue
 
-            # Within this cluster, pick the most UNCERTAIN ones
             cluster_uncertainties = uncertainty[cluster_indices]
 
-            # Sort by uncertainty (descending)
             sorted_idx_local = np.argsort(cluster_uncertainties)[::-1]
 
-            # Select top K from this cluster
             top_k_local = sorted_idx_local[:samples_per_cluster]
             selected_indices.extend(cluster_indices[top_k_local].tolist())
 
-        # Handle remainder or over-sampling
         if len(selected_indices) > n_samples:
             selected_indices = selected_indices[:n_samples]
         elif len(selected_indices) < n_samples:

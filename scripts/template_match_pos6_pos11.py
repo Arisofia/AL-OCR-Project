@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Template-matching analysis for positions 6 and 11.
 
@@ -44,15 +43,11 @@ OCR_SWEEP_DX = [-8, -3, 0, 3, 8] if FAST_OCR_SWEEP else [-12, -8, -5, -3, 0, 3, 
 GRAY_ENH_LIMIT = 10 if FAST_OCR_SWEEP else None
 BGR_ENH_LIMIT = 3 if FAST_OCR_SWEEP else 6
 
-# =============================================================================
-# Geometry
-# =============================================================================
 KNOWN_DIGITS: dict[int, str] = {
     0: "4", 1: "3", 2: "8", 3: "8", 4: "5", 5: "4",
     12: "0", 13: "6", 14: "6", 15: "5",
 }
 
-# X-centres of ALL 16 digit positions (estimated from column analysis + pitch)
 CENTERS: dict[int, int] = {
     0: 197,  1: 272,  2: 347,  3: 422,
     4: 497,  5: 572,  6: 647,  7: 722,
@@ -60,13 +55,10 @@ CENTERS: dict[int, int] = {
     12: 1133, 13: 1208, 14: 1283, 15: 1358,
 }
 
-HALF = 34          # half-width of extraction window
-SCALE = 4          # upscale factor
-TARGET_POS = [6, 11]  # positions to analyse
+HALF = 34
+SCALE = 4
+TARGET_POS = [6, 11]
 
-# =============================================================================
-# Image loading
-# =============================================================================
 img_bgr = cv2.imread(IMG)
 if img_bgr is None:
     raise FileNotFoundError(f"Cannot load image: {IMG}")
@@ -81,9 +73,6 @@ print(f"Image: {w}x{h}, ROI: {rw}x{rh}")
 print(f"ROI y-range: [{y0}, {y1}]\n")
 
 
-# =============================================================================
-# Enhancement pipelines
-# =============================================================================
 def make_enhancements(zone_gray: np.ndarray) -> list[tuple[str, np.ndarray]]:
     """Return multiple enhanced versions of a digit zone."""
     variants: list[tuple[str, np.ndarray]] = []
@@ -97,15 +86,12 @@ def make_enhancements(zone_gray: np.ndarray) -> list[tuple[str, np.ndarray]]:
             ]
         )
 
-    # Histogram eq inverted
     variants.append(("histeq_inv", cv2.bitwise_not(cv2.equalizeHist(zone_gray))))
 
-    # Gamma corrections
     for gamma in [0.3, 0.5, 2.0]:
         lut = np.array([((i / 255.0) ** gamma) * 255 for i in range(256)], np.uint8)
         variants.append((f"gamma{gamma}_inv", cv2.bitwise_not(cv2.LUT(zone_gray, lut))))
 
-    # Top-hat (extract bright features)
     tophat = cv2.morphologyEx(
         zone_gray,
         cv2.MORPH_TOPHAT,
@@ -113,12 +99,10 @@ def make_enhancements(zone_gray: np.ndarray) -> list[tuple[str, np.ndarray]]:
     )
     variants.append(("tophat", tophat))
 
-    # Morphological gradient
     grad = cv2.morphologyEx(zone_gray, cv2.MORPH_GRADIENT,
                             np.ones((3, 3), np.uint8))
     variants.append(("morph_grad", grad))
 
-    # Sobel magnitude
     sobel_mag = np.hypot(
         cv2.Sobel(zone_gray, cv2.CV_64F, 1, 0, ksize=3),
         cv2.Sobel(zone_gray, cv2.CV_64F, 0, 1, ksize=3),
@@ -130,12 +114,10 @@ def make_enhancements(zone_gray: np.ndarray) -> list[tuple[str, np.ndarray]]:
     )
     variants.append(("sobel_mag", sobel_mag))
 
-    # Laplacian
     lap = cv2.Laplacian(zone_gray, cv2.CV_64F)
     lap = np.clip(np.abs(lap) / (np.abs(lap).max() + 1e-9) * 255, 0, 255).astype(np.uint8)
     variants.append(("laplacian", lap))
 
-    # Unsharp mask
     usm = cv2.addWeighted(zone_gray, 2.0, cv2.GaussianBlur(zone_gray, (0, 0), 3), -1.0, 0)
     variants.append(("unsharp_inv", cv2.bitwise_not(usm)))
 
@@ -148,9 +130,6 @@ def upscale(img: np.ndarray, factor: int = SCALE) -> np.ndarray:
     return cv2.resize(img, (w2 * factor, h2 * factor), interpolation=cv2.INTER_CUBIC)
 
 
-# =============================================================================
-# Extract a digit zone (returns gray patch at SCALE resolution)
-# =============================================================================
 def extract_zone(position: int, x_shift: int = 0) -> np.ndarray:
     """Extract and upscale the zone for position `pos` with optional x-offset."""
     cx = CENTERS[position] + x_shift
@@ -168,12 +147,8 @@ def extract_zone_bgr(position: int, x_shift: int = 0) -> np.ndarray:
     return roi_bgr[:, x0:x1]
 
 
-# =============================================================================
-# Template matching score
-# =============================================================================
 def ncc_score(template: np.ndarray, target: np.ndarray) -> float:
     """Normalised cross-correlation between two same-size images."""
-    # resize to same size
     th, tw = template.shape[:2]
     tgt = cv2.resize(target, (tw, th), interpolation=cv2.INTER_CUBIC)
     t_f = template.astype(np.float64)
@@ -197,11 +172,9 @@ def profile_similarity(template: np.ndarray, target: np.ndarray) -> float:
     th, tw = template.shape[:2]
     tgt = cv2.resize(target, (tw, th), interpolation=cv2.INTER_CUBIC)
 
-    # Horizontal profile (mean per row)
     hp_t = template.astype(np.float64).mean(axis=1)
     hp_g = tgt.astype(np.float64).mean(axis=1)
 
-    # Vertical profile (mean per column)
     vp_t = template.astype(np.float64).mean(axis=0)
     vp_g = tgt.astype(np.float64).mean(axis=0)
 
@@ -214,43 +187,32 @@ def profile_similarity(template: np.ndarray, target: np.ndarray) -> float:
     return (corr(hp_t, hp_g) + corr(vp_t, vp_g)) / 2.0
 
 
-# =============================================================================
-# Build digit templates from known positions
-# =============================================================================
 print("=" * 60)
 print("STEP 1: Build digit templates from known visible positions")
 print("=" * 60)
 
-# For each known digit, we store multiple enhanced versions
 digit_templates: dict[str, list[np.ndarray]] = defaultdict(list)
 
 for pos, digit in KNOWN_DIGITS.items():
     zone_gray_raw = extract_zone(pos)
     for _, enh_img in make_enhancements(zone_gray_raw):
         digit_templates[digit].append(enh_img)
-    # Also BGR channels
     zone_bgr_raw = extract_zone_bgr(pos)
     zone_up = upscale(zone_bgr_raw)
     for ch_idx, _ in enumerate(["B", "G", "R"]):
         ch = zone_up[:, :, ch_idx]
-        for _, enh_img in make_enhancements(ch)[:4]:  # top 4 for channels
+        for _, enh_img in make_enhancements(ch)[:4]:
             digit_templates[digit].append(enh_img)
 
-# Deduplicate template digits
 unique_template_digits = sorted(digit_templates.keys())
 print(f"Template digits available: {unique_template_digits}")
 for d in unique_template_digits:
     print(f"  '{d}': {len(digit_templates[d])} template variants")
 
-# We also need templates for digits we DON'T have on the card: 1, 2, 7, 9
-# We can't template-match these, but OCR can still suggest them
 print("\nDigits WITHOUT templates on card: 1, 2, 7, 9")
 print("These will rely on OCR evidence + structural inference\n")
 
 
-# =============================================================================
-# STEP 2: Template-match hidden positions against known templates
-# =============================================================================
 print("=" * 60)
 print("STEP 2: Template matching for positions 6 and 11")
 print("=" * 60)
@@ -258,24 +220,19 @@ print("=" * 60)
 for target_pos in TARGET_POS:
     print(f"\n--- POSITION {target_pos} (cx={CENTERS[target_pos]}) ---")
 
-    # Aggregate NCC and profile scores per candidate digit
     ncc_totals: dict[str, list[float]] = defaultdict(list)
     prof_totals: dict[str, list[float]] = defaultdict(list)
     mse_totals: dict[str, list[float]] = defaultdict(list)
 
-    # Try multiple x-offsets to handle small alignment errors
     for dx in [-8, -4, -2, 0, 2, 4, 8]:
         target_zone_raw = extract_zone(target_pos, dx)
 
-        # Apply same enhancements to target
         for _, enh_target in make_enhancements(target_zone_raw):
-            # Compare against each digit's templates (same enhancement)
             for digit, templates in digit_templates.items():
                 best_ncc = -1.0
                 best_prof = -1.0
                 best_mse = 1e12
 
-                # Compare against a subset of templates to keep it fast
                 for tmpl in templates[:8]:
                     n = ncc_score(tmpl, enh_target)
                     p = profile_similarity(tmpl, enh_target)
@@ -288,7 +245,6 @@ for target_pos in TARGET_POS:
                 prof_totals[digit].append(best_prof)
                 mse_totals[digit].append(best_mse)
 
-    # Print aggregated results
     print("\n  Template matching results (higher NCC/Profile = better match):\n")
     print(
         "  "
@@ -304,8 +260,6 @@ for target_pos in TARGET_POS:
         avg_prof = np.mean(prof_totals[digit])
         avg_mse = np.mean(mse_totals[digit])
 
-        # Combined score: weight NCC and profile equally, subtract normalised MSE
-        # Higher is better
         comb = avg_ncc * 0.4 + max_ncc * 0.3 + avg_prof * 0.3
         combined[digit] = comb
         print(
@@ -319,9 +273,6 @@ for target_pos in TARGET_POS:
         print(f"      {i}. '{d}' (combined={sc:+.4f})")
 
 
-# =============================================================================
-# STEP 3: Expanded OCR sweep for positions 6 and 11
-# =============================================================================
 print("\n" + "=" * 60)
 print("STEP 3: Deep OCR sweep for positions 6 and 11")
 print("=" * 60)
@@ -385,7 +336,6 @@ for target_pos in TARGET_POS:
             break
         zone_raw = extract_zone(target_pos, dx)
 
-        # Gray enhancements
         gray_enhs = make_enhancements(zone_raw)
         if GRAY_ENH_LIMIT is not None:
             gray_enhs = gray_enhs[:GRAY_ENH_LIMIT]
@@ -397,7 +347,6 @@ for target_pos in TARGET_POS:
             if budget_remaining <= 0:
                 break
 
-        # BGR channels
         if budget_remaining <= 0:
             break
         zone_bgr = extract_zone_bgr(target_pos, dx)
@@ -435,9 +384,6 @@ for target_pos in TARGET_POS:
         )
 
 
-# =============================================================================
-# STEP 4: Pixel-level structural analysis
-# =============================================================================
 print("\n" + "=" * 60)
 print("STEP 4: Pixel structure analysis (edge density, symmetry)")
 print("=" * 60)
@@ -446,21 +392,15 @@ for target_pos in TARGET_POS:
     zone_raw = extract_zone(target_pos)
     zone_enh = cv2.bitwise_not(cv2.createCLAHE(clipLimit=16.0, tileGridSize=(3, 3)).apply(zone_raw))
 
-    # Edge map of target
     edges_target = cv2.Canny(zone_enh, 50, 150)
     edge_density_target = np.count_nonzero(edges_target) / edges_target.size
 
-    # Vertical symmetry ratio
     half_w = zone_enh.shape[1] // 2
     left = zone_enh[:, :half_w]
     right = cv2.flip(zone_enh[:, -half_w:], 1)
     sym_score = ncc_score(left, right)
 
-    # Horizontal projection profile shape
     h_profile = zone_enh.astype(np.float64).mean(axis=1)
-    # Number of peaks suggests digit identity:
-    # 0,6,8,9 → 2 horizontal peaks (top+bottom loops)
-    # 1,4,7 → top-heavy or single-peak
     h_smooth = cv2.GaussianBlur(h_profile.reshape(-1, 1), (15, 1), 0).flatten()
     h_diff = np.diff(h_smooth)
     sign_changes = np.sum(np.diff(np.sign(h_diff)) != 0)
@@ -468,7 +408,6 @@ for target_pos in TARGET_POS:
     print(f"\n  POS {target_pos}: edge_density={edge_density_target:.3f}, "
           f"v_symmetry={sym_score:.3f}, h_profile_peaks~{sign_changes}")
 
-    # Compare edge density against known digits
     print("  Edge density comparison vs known digits:")
     for kpos, kdigit in sorted(KNOWN_DIGITS.items()):
         kzone = extract_zone(kpos)
@@ -484,22 +423,17 @@ for target_pos in TARGET_POS:
               f"(Δ={diff:.3f}), sym={k_sym:.3f}")
 
 
-# =============================================================================
-# STEP 5: Save debug images
-# =============================================================================
 print("\n" + "=" * 60)
 print("STEP 5: Saving debug comparison images")
 print("=" * 60)
 
 for target_pos in TARGET_POS:
     zone_raw = extract_zone(target_pos)
-    # Best enhancement
     clahe16 = cv2.bitwise_not(
         cv2.createCLAHE(clipLimit=16.0, tileGridSize=(3, 3)).apply(zone_raw)
     )
     cv2.imwrite(f"/tmp/pos{target_pos}_clahe16_inv.png", clahe16)
 
-    # Sobel
     sx = cv2.Sobel(zone_raw, cv2.CV_64F, 1, 0, ksize=3)
     sy = cv2.Sobel(zone_raw, cv2.CV_64F, 0, 1, ksize=3)
     mag = np.sqrt(sx ** 2 + sy ** 2)
@@ -507,30 +441,25 @@ for target_pos in TARGET_POS:
         mag = (mag / mag.max() * 255).astype(np.uint8)
     cv2.imwrite(f"/tmp/pos{target_pos}_sobel.png", mag)
 
-    # Save raw zone for visual comparison
     cv2.imwrite(f"/tmp/pos{target_pos}_raw_4x.png", zone_raw)
 
-    # Side-by-side with all known templates (best enhancement)
     panels = []
     for kpos in sorted(KNOWN_DIGITS.keys()):
         kzone = extract_zone(kpos)
         kenh = cv2.bitwise_not(
             cv2.createCLAHE(clipLimit=16.0, tileGridSize=(3, 3)).apply(kzone)
         )
-        # Label
         labeled = kenh.copy()
         digit_label = KNOWN_DIGITS[kpos]
         cv2.putText(labeled, f"p{kpos}={digit_label}", (5, 25),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (128.0, 128.0, 128.0), 2)
         panels.append(labeled)
 
-    # Add the target
     target_labeled = clahe16.copy()
     cv2.putText(target_labeled, f"p{target_pos}=?", (5, 25),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (128.0, 128.0, 128.0), 2)
     panels.append(target_labeled)
 
-    # Ensure all same height
     max_h = max(p.shape[0] for p in panels)
     max_w = max(p.shape[1] for p in panels)
     padded = []

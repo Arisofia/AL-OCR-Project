@@ -17,7 +17,6 @@ logger = logging.getLogger("ocr-service.routers.system")
 router = APIRouter()
 
 
-# Wrappers keep health checks patchable in tests while remaining runtime-simple.
 def get_redis_client(settings: Settings):
     return redis_factory.get_redis_client(settings)
 
@@ -35,7 +34,6 @@ async def health_check() -> HealthResponse:
     curr_settings = get_settings()
     components: dict[str, Any] = {}
 
-    # Redis check
     if not curr_settings.redis_startup_check:
         components["redis"] = {
             "ok": True,
@@ -49,11 +47,10 @@ async def health_check() -> HealthResponse:
             if inspect.isawaitable(redis_res):
                 redis_res = await redis_res
             components["redis"] = redis_res
-        except Exception as exc:  # pragma: no cover - defensive
+        except Exception as exc:
             logger.exception("Health check redis dependency failed")
             components["redis"] = {"ok": False, "error": str(exc)}
 
-    # Storage (S3) check
     if not curr_settings.s3_bucket_name:
         components["s3"] = {
             "ok": True,
@@ -64,7 +61,7 @@ async def health_check() -> HealthResponse:
         try:
             storage_service = StorageService()
             components["s3"] = {"ok": storage_service.check_connection()}
-        except Exception as exc:  # pragma: no cover - defensive
+        except Exception as exc:
             logger.exception("Health check storage dependency failed")
             components["s3"] = {"ok": False, "error": str(exc)}
 

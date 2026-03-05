@@ -13,7 +13,6 @@ def test_health_check_ok(monkeypatch):
     settings = Settings(ocr_api_key="fake")
     app = create_app(settings=settings)
 
-    # Patch redis and storage checks to return healthy
     def _fake_get_redis_client(_settings):
         return MagicMock()
 

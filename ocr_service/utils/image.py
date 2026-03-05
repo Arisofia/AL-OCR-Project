@@ -17,7 +17,6 @@ def decode_image(data: Union[str, bytes]) -> Optional[bytes]:
 
     try:
         data_str: str = data
-        # Check if it's a data URL
         if data_str.startswith("data:image"):
             data_str = data_str.split(",", 1)[1]
         return base64.b64decode(data_str)

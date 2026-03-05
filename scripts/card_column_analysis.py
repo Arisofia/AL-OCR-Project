@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Analyze the card image column-by-column to find actual text vs occlusion zones.
 Saves intensity profile and diagnostic images.
@@ -9,7 +8,7 @@ import numpy as np
 IMAGE_PATH = "/Users/jenineferderas/Desktop/card_image.jpg"
 
 
-def analyze_card_columns():  # pylint: disable=too-many-locals,too-many-branches,too-many-statements  # NOSONAR
+def analyze_card_columns():
     """Perform column-wise intensity analysis on the card image strip."""
     img = cv2.imread(IMAGE_PATH)
     if img is None:
@@ -18,28 +17,22 @@ def analyze_card_columns():  # pylint: disable=too-many-locals,too-many-branches
     img_h, img_w = img.shape[:2]
     print(f"Image: {img_w}x{img_h}")
 
-    # Card number Y region (embossed text)
     y0_roi, y1_roi = int(img_h * 0.25), int(img_h * 0.55)
     number_strip = img[y0_roi:y1_roi]
     gray = cv2.cvtColor(number_strip, cv2.COLOR_BGR2GRAY)
     print(f"Number strip: y=[{y0_roi},{y1_roi}], height={y1_roi-y0_roi}")
 
-    # Column statistics
     col_mean = np.mean(gray, axis=0)
     col_max = np.max(gray, axis=0)
     col_min = np.min(gray, axis=0)
     col_range = col_max.astype(float) - col_min.astype(float)
 
-    # Overall stats
     print(f"\nOverall: mean={np.mean(col_mean):.1f}, std of means={np.std(col_mean):.1f}")
     print(f"Column range stats: mean={np.mean(col_range):.1f}, std={np.std(col_range):.1f}")
 
-    # Find columns with high variability (text regions have more variation)
-    # vs very uniform columns (solid marker)
     var_threshold = np.percentile(col_range, 40)
     text_cols = col_range > var_threshold
 
-    # Find contiguous text and uniform regions
     regions = []
     current_region_type = "text" if text_cols[0] else "uniform"
     region_start = 0
@@ -51,7 +44,6 @@ def analyze_card_columns():  # pylint: disable=too-many-locals,too-many-branches
             region_start = i
     regions.append((current_region_type, region_start, len(text_cols) - 1))
 
-    # Filter small regions (noise)
     sig_regions = [(t, s, e) for t, s, e in regions if (e - s) > 15]
     print("\nSignificant regions (width>15px):")
     for rtype, rs, re_ in sig_regions:
@@ -62,7 +54,6 @@ def analyze_card_columns():  # pylint: disable=too-many-locals,too-many-branches
             f"type={rtype:7s}  avg_bright={avg_bright:.1f}"
         )
 
-    # Look for the darkest contiguous region (likely the marker/occlusion)
     print("\nLooking for darkest uniform regions (potential occlusion marker):")
     uniform_regs = [(t, s, e) for t, s, e in sig_regions if t == "uniform" and (e - s) > 30]
     for _, s, e in sorted(uniform_regs, key=lambda x: np.mean(col_mean[x[1] : x[2] + 1])):
@@ -70,7 +61,6 @@ def analyze_card_columns():  # pylint: disable=too-many-locals,too-many-branches
         w_len = e - s
         print(f"  x=[{s:4d}, {e:4d}] width={w_len:4d}  avg_brightness={avg:.1f}")
 
-    # Enhanced approach: look at CLAHE enhanced image
     clahe = cv2.createCLAHE(clipLimit=16.0, tileGridSize=(4, 4))
     enh = clahe.apply(gray)
     col_std_enh = np.std(enh, axis=0)
@@ -78,7 +68,6 @@ def analyze_card_columns():  # pylint: disable=too-many-locals,too-many-branches
     print("\nAfter CLAHE enhancement:")
     print(f"  Column std stats: mean={np.mean(col_std_enh):.1f}, max={np.max(col_std_enh):.1f}")
 
-    # Find columns where CLAHE std is very low (dead zone = heavy occlusion)
     low_var_mask = col_std_enh < np.percentile(col_std_enh, 20)
     dead_regions = []
     is_in_dead_zone = False
@@ -98,11 +87,9 @@ def analyze_card_columns():  # pylint: disable=too-many-locals,too-many-branches
     for d_start, d_end in dead_regions:
         print(f"  x=[{d_start:4d}, {d_end:4d}] width={d_end-d_start:4d}")
 
-    # Save diagnostic images
     cv2.imwrite("/tmp/card_number_strip.png", number_strip)
     cv2.imwrite("/tmp/card_number_clahe.png", enh)
 
-    # Column intensity plot as image
     plot_height = 200
     plot = np.ones((plot_height, img_w, 3), dtype=np.uint8) * 255
     for x in range(img_w):
@@ -114,10 +101,9 @@ def analyze_card_columns():  # pylint: disable=too-many-locals,too-many-branches
         cv2.circle(plot, (x, plot_height - 1 - y_std), 1, (0, 255, 0), -1)
     cv2.imwrite("/tmp/card_intensity_profile.png", plot)
 
-    # Overlay column variance on the strip for visual alignment
     overlay = cv2.cvtColor(enh, cv2.COLOR_GRAY2BGR)
     for x in range(img_w):
-        if low_var_mask[x]:  # dead zone - mark red
+        if low_var_mask[x]:
             overlay[:, x, 2] = np.minimum(overlay[:, x, 2].astype(int) + 80, 255).astype(np.uint8)
     cv2.imwrite("/tmp/card_dead_zones.png", overlay)
 

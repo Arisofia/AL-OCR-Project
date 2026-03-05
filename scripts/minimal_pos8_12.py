@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Absolute minimum OCR for POS 8 & 12 analysis. ~20 total Tesseract calls."""
 import re, sys
 from collections import Counter
@@ -14,7 +13,6 @@ row = img[y0:y1]
 gray = cv2.cvtColor(row, cv2.COLOR_BGR2GRAY)
 rh, rw = gray.shape
 
-# Build 5 key variants
 variants = []
 for clip in [8, 32, 64]:
     c = cv2.createCLAHE(clipLimit=float(clip), tileGridSize=(3,3))
@@ -26,7 +24,6 @@ variants.append(("g03i", cv2.bitwise_not(cv2.LUT(gray, lut))))
 
 print(f"Row: {rw}x{rh}, {len(variants)} variants\n")
 
-# Full-row reads (5 variants × 2 psm × 2 scale = 20 calls)
 all_reads = []
 for label, src in variants:
     for scale in [2, 3]:
@@ -41,12 +38,11 @@ for label, src in variants:
             except Exception:
                 pass
 
-# Also suffix zone (right 35%) — 5 variants × 2 configs = 10 calls
 print("\nSuffix zone:")
 sz = gray[:, int(rw*0.65):]
 szh, szw = sz.shape
 for label, src in variants:
-    crop = src[:, int(rw*0.65):]  # same enhancement, cropped
+    crop = src[:, int(rw*0.65):]
     big = cv2.resize(crop, (crop.shape[1]*4, crop.shape[0]*4), interpolation=cv2.INTER_CUBIC)
     for psm in [7, 13]:
         try:
@@ -58,7 +54,6 @@ for label, src in variants:
         except Exception:
             pass
 
-# === Analysis ===
 full = [r for r in all_reads if not r.startswith("S:")]
 suffix = [r[2:] for r in all_reads if r.startswith("S:")]
 
@@ -66,7 +61,6 @@ print(f"\n{'='*50}")
 print(f"Total full-row reads: {len(full)}")
 print(f"Total suffix reads: {len(suffix)}")
 
-# POS 12: digit before 665
 print(f"\n{'='*50}")
 print("POS 12 — digit immediately before '665'")
 print('='*50)
@@ -81,7 +75,6 @@ if votes12:
     for d, n in votes12.most_common(6):
         print(f"  '{d}': {n}/{total} = {n/total:.1%}")
 
-# Also: what 4-digit suffix patterns appear?
 print("\nLast-4-digit patterns:")
 last4 = Counter()
 for r in full + suffix:
@@ -90,7 +83,6 @@ for r in full + suffix:
 for seq, cnt in last4.most_common(10):
     print(f"  '{seq}' x{cnt}")
 
-# X665 patterns
 print("\n?665 patterns (digit + 665):")
 x665 = Counter()
 for r in full + suffix:
@@ -100,7 +92,6 @@ for r in full + suffix:
 for seq, cnt in x665.most_common(10):
     print(f"  '{seq}' x{cnt}")
 
-# POS 8: 3rd char after 438854 (index 8 in full PAN)
 print(f"\n{'='*50}")
 print("POS 8 — 3rd character after '438854'")
 print('='*50)
@@ -117,7 +108,6 @@ if votes8:
 else:
     print("  Not enough reads with >8 chars after prefix!")
 
-# Show reads that have both 438854 and 665
 print("\nReads with both '438854' AND '665':")
 for r in full:
     if "438854" in r and "665" in r:
@@ -127,7 +117,6 @@ for r in full:
         mid = pan[6:-3] if len(pan) > 9 else ""
         print(f"  '{pan}'  middle='{mid}'  (len={len(pan)})")
 
-# Show ALL unique reads
 print(f"\nALL unique full-row reads ({len(set(full))}):")
 for seq, cnt in Counter(full).most_common(30):
     tags = []

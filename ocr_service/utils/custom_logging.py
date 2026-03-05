@@ -15,7 +15,6 @@ def setup_logging(level=logging.INFO):
     """
     handler = logging.StreamHandler(sys.stdout)
 
-    # Define the fields to be included in the JSON output
     fmt = (
         "%(asctime)s %(name)s %(levelname)s %(message)s "
         "%(request_id)s %(method)s %(path)s"
@@ -25,13 +24,11 @@ def setup_logging(level=logging.INFO):
     handler.setFormatter(formatter)
 
     root_logger = logging.getLogger()
-    # Remove existing handlers to avoid duplicate logs
     for h in root_logger.handlers[:]:
         root_logger.removeHandler(h)
 
     root_logger.addHandler(handler)
     root_logger.setLevel(level)
 
-    # Set some specific loggers to higher levels to reduce noise
     for name in ("boto3", "botocore", "uvicorn.access"):
         logging.getLogger(name).setLevel(logging.WARNING)

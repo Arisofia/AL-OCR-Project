@@ -45,7 +45,6 @@ def test_trace_id_propagation_on_extraction_error(monkeypatch, trace_val, expect
     - If the span context has an integer trace id, it should be formatted as
       a hex string.
     """
-    # Arrange
     engine = MagicMock()
     engine.process_image = AsyncMock(return_value={"error": "boom"})
     engine.process_image_advanced = AsyncMock(return_value={"error": "boom"})
@@ -59,7 +58,6 @@ def test_trace_id_propagation_on_extraction_error(monkeypatch, trace_val, expect
 
     processor = OCRProcessor(engine, storage, cast(redis.Redis, fake_redis))
 
-    # Act / Assert
     with pytest.raises(OCRPipelineError) as exc:
         asyncio.run(
             processor.process_bytes(

@@ -5,10 +5,6 @@ import pytest
 from ocr_service.modules.decision_readiness import quality_band as _quality_band
 from ocr_service.schemas import DocumentAnalytics, DocumentResponse
 
-# ---------------------------------------------------------------------------
-# Schema unit tests
-# ---------------------------------------------------------------------------
-
 
 def test_analytics_field_present_in_document_response():
     """DocumentResponse must have an optional analytics field."""
@@ -89,11 +85,6 @@ def test_analytics_defaults():
     assert a.requires_manual_review is False
     assert a.fields_extracted_count == 0
     assert a.fields_expected_count == 0
-
-
-# ---------------------------------------------------------------------------
-# Quality band logic (from decision_readiness module)
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("confidence,expected", [

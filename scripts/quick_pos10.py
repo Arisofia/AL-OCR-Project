@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Quick scan of PAN positions 10 and 11 using fallback coordinates."""
 
 from __future__ import annotations
@@ -20,7 +19,6 @@ PAIR_CONFIGS = (TESSERACT_PSM7, TESSERACT_PSM13)
 THRESHOLDS = (120, 160)
 OCR_EXCEPTIONS = (pytesseract.TesseractError, RuntimeError, TypeError, ValueError)
 
-# Fallback geometry based on prior deep-zoom runs.
 FALLBACK_PITCH = 40.0
 FALLBACK_X_ZERO = 1050.0
 FALLBACK_Y_RANGE = (40, 160)
@@ -127,7 +125,6 @@ def build_channels(roi: np.ndarray, gray: np.ndarray) -> tuple[np.ndarray, ...]:
     return (gray, roi[:, :, 0], roi[:, :, 1], roi[:, :, 2])
 
 
-# pylint: disable=too-many-locals
 def scan_position(
     channels: tuple[np.ndarray, ...],
     width: int,
@@ -153,7 +150,6 @@ def scan_position(
                     votes[digit] += 1
 
     return votes
-# pylint: enable=too-many-locals
 
 
 def scan_pair(gray: np.ndarray, width: int) -> Counter[str]:

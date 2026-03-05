@@ -1,6 +1,5 @@
 """Tests for Redis client factory and connectivity diagnostics."""
 
-# pylint: disable=abstract-method,invalid-overridden-method,arguments-differ
 
 import asyncio
 import logging
@@ -29,7 +28,6 @@ def fixture_dummy_settings() -> Settings:
 @pytest.mark.asyncio
 async def test_get_redis_client_success(dummy_settings):
     """`get_redis_client` should return a redis client object."""
-    # Mock fakeredis to simulate a successful connection
     with pytest.MonkeyPatch().context() as m:
         m.setattr("redis.asyncio.Redis", fakeredis.FakeAsyncRedis)
         client = get_redis_client(dummy_settings)
@@ -49,7 +47,6 @@ async def test_verify_redis_connection_success():
 @pytest.mark.asyncio
 async def test_verify_redis_connection_failure(caplog):
     """Connection errors should be reported with `ok=False` and error detail."""
-    # Simulate a Redis connection error
     class BrokenRedis:
         """Redis test double that always raises on ping."""
 
@@ -70,20 +67,19 @@ async def test_verify_redis_connection_failure(caplog):
 @pytest.mark.asyncio
 async def test_verify_redis_connection_timeout(caplog):
     """Timeouts should be reported with `ok=False` and timeout error detail."""
-    # Simulate a Redis timeout
     class SlowRedis:
         """Redis test double that responds too slowly."""
 
         async def ping(self):
             """Sleep long enough to trigger asyncio timeout in the verifier."""
-            await asyncio.sleep(2)  # Simulate a long delay
+            await asyncio.sleep(2)
             return True
 
     with caplog.at_level(logging.ERROR):
         client = SlowRedis()
         result = await verify_redis_connection(
             cast(Any, client), timeout=0.1
-        )  # Shorter timeout
+        )
         assert result["ok"] is False
         assert "latency_ms" in result
         assert "error" in result

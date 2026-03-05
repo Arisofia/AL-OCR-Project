@@ -37,7 +37,10 @@ class Settings(BaseSettings):
     app_description: str = "Professional Iterative OCR & Pixel Reconstruction Service"
     version: str = "1.2.0"
 
-    ocr_api_key: str = Field(..., description="Secret key for OCR authentication")
+    ocr_api_key: str = Field(
+        default="dev-secret-key-change-in-production",
+        description="Secret key for OCR authentication"
+    )
     api_key_header_name: str = "X-API-KEY"
 
     s3_bucket_name: Optional[str] = None
@@ -59,7 +62,6 @@ class Settings(BaseSettings):
     ] = Field(default_factory=dict)
     enable_bin_lookup: bool = False
 
-    # Redis Configuration
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_db: int = 0
@@ -67,37 +69,30 @@ class Settings(BaseSettings):
     redis_startup_check: bool = True
     ocr_idempotency_ttl_seconds: int = 3600
 
-    # Security and Environment
     environment: str = "development"
     allowed_origins: list[str] = ["*"]
 
-    # External AI Services
     openai_api_key: Optional[str] = None
     gemini_api_key: Optional[str] = None
     hugging_face_hub_token: Optional[str] = None
     perplexity_api_key: Optional[str] = None
 
-    # Database & Storage
     supabase_url: Optional[str] = None
     supabase_anon_key: Optional[str] = None
     supabase_service_role: Optional[str] = None
     use_local_fallback: bool = True
     local_data_path: str = "data/learning_patterns.json"
 
-    # Monitoring & Logging
     sentry_dsn: Optional[str] = None
     azure_application_insights_connection_string: Optional[str] = None
 
-    # Redis idempotency TTL (seconds) — used by background workers
     redis_idempotency_ttl: int = 3600
 
-    # Active Learning & Drift
     drift_report_path: str = "reports/drift_report.html"
     reference_baseline_path: str = "data/reference_baseline.csv"
     al_cycle_samples: int = 50
     al_n_clusters: int = 5
 
-    # Dataset Upload (protected)
     dataset_upload_key: Optional[str] = None
 
     @field_validator("allowed_origins", mode="after")
@@ -138,13 +133,9 @@ class Settings(BaseSettings):
     )
 
 
-# Tracing integration (if opentelemetry is available)
 try:
     from opentelemetry import trace
 
-    # Only import the API to avoid side effects.
-    # The SDK should be configured in the application entry point
-    # (e.g., main.py).
     TRACER = trace.get_tracer(__name__)
 except ImportError:
     TRACER = None
@@ -157,5 +148,5 @@ def get_settings() -> Settings:
     """
     if TRACER:
         with TRACER.start_as_current_span("load_settings"):
-            return Settings()  # type: ignore[call-arg]
-    return Settings()  # type: ignore[call-arg]
+            return Settings()
+    return Settings()

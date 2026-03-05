@@ -50,15 +50,12 @@ def _run_drift_report_and_suite(
     test_drifted_columns_cls: Any,
 ) -> bool:
     """Generate Evidently report + test suite and return whether drift is detected."""
-    # 1. Generate Drift Report (for human visualization)
     drift_report = report_cls(metrics=[data_drift_preset_cls()])
     drift_report.run(reference_data=reference_data, current_data=current_data)
 
-    # Ensure directory exists for report
     os.makedirs(os.path.dirname(actual_report_path), exist_ok=True)
     drift_report.save_html(actual_report_path)
 
-    # 2. Run Automated Test Suite
     data_test = test_suite_cls(tests=[test_drifted_columns_cls()])
     data_test.run(reference_data=reference_data, current_data=current_data)
 

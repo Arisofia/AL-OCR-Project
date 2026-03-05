@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Ultra-focused scan of PAN position 11 only.
 

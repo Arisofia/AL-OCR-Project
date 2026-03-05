@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Find exact pixel position of the '0665' suffix on the card."""
 
 from __future__ import annotations

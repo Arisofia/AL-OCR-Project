@@ -12,6 +12,7 @@ Strategy:
 
 from __future__ import annotations
 
+import importlib
 import io
 import logging
 from typing import Any
@@ -24,7 +25,6 @@ logger = logging.getLogger("ocr-service.pdf-converter")
 
 _PDF_MAGIC = b"%PDF-"
 
-# Maximum pages to process per document (guard against huge files)
 _DEFAULT_MAX_PAGES = 20
 _DEFAULT_DPI = 300
 
@@ -64,11 +64,6 @@ def pdf_pages_to_images(
     return []
 
 
-# ---------------------------------------------------------------------------
-# Backend implementations
-# ---------------------------------------------------------------------------
-
-
 def _try_pdf2image(
     pdf_bytes: bytes,
     dpi: int,
@@ -76,7 +71,7 @@ def _try_pdf2image(
 ) -> list[np.ndarray] | None:
     """Attempt conversion via pdf2image (requires poppler)."""
     try:
-        import pdf2image  # type: ignore[import]
+        pdf2image = importlib.import_module("pdf2image")
     except ImportError:
         return None
 
@@ -99,20 +94,20 @@ def _try_pillow(
 ) -> list[np.ndarray] | None:
     """Attempt conversion via Pillow (works for simple single-image PDFs)."""
     try:
-        from PIL import Image
+        image_module = importlib.import_module("PIL.Image")
     except ImportError:
         return None
 
     try:
         results: list[np.ndarray] = []
-        with Image.open(io.BytesIO(pdf_bytes)) as img:
+        with image_module.open(io.BytesIO(pdf_bytes)) as img:
             for page_idx in range(max_pages):
                 try:
                     img.seek(page_idx)
                 except EOFError:
                     break
                 results.append(_pil_to_bgr(img.copy()))
-        return results if results else None
+        return results or None
     except Exception:
         logger.debug("Pillow PDF conversion failed", exc_info=True)
         return None
@@ -120,7 +115,7 @@ def _try_pillow(
 
 def _pil_to_bgr(pil_image: Any) -> np.ndarray:
     """Convert a PIL Image to an OpenCV-compatible BGR numpy array."""
-    import cv2
+    cv2 = importlib.import_module("cv2")
 
     rgb = pil_image.convert("RGB")
     arr = np.array(rgb, dtype=np.uint8)

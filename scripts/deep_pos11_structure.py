@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Ultra-detailed pixel structure analysis for POSITION 11.
 
@@ -54,7 +53,7 @@ KNOWN_DIGITS = {
     12: "0", 13: "6", 14: "6", 15: "5",
 }
 HALF = 34
-SCALE = 6  # Higher res for detailed analysis
+SCALE = 6
 
 
 def upscale(im, factor=SCALE):
@@ -89,53 +88,41 @@ def enhance_unsharp(zone):
     return cv2.bitwise_not(cv2.addWeighted(zone, 2.5, blur, -1.5, 0))
 
 
-# =============================================================================
-# STEP 1: Visual column-by-column profile of position 11
-# =============================================================================
 print("=" * 65)
 print("POSITION 11 — DETAILED PIXEL STRUCTURE ANALYSIS")
 print("=" * 65)
 
-# Try multiple small offsets around the center
 for dx in [-5, -3, 0, 3, 5]:
     zone_raw = get_zone(11, dx)
     zone_up = upscale(zone_raw)
 
-    # Best enhancements for embossed text
     enh_clahe = enhance_clahe(zone_up, 16)
     enh_gamma = enhance_gamma(zone_up, 0.3)
     enh_tophat = enhance_tophat(zone_up)
     enh_unsharp = enhance_unsharp(zone_up)
 
-    # Binarize with Otsu to isolate strokes
     _, binary = cv2.threshold(enh_clahe, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     zh, zw = binary.shape
     mid_col = zw // 2
 
-    # Column intensity profiles
     col_means = binary.astype(np.float64).mean(axis=0)
 
-    # Split into left (0..mid) and right (mid..end)
     left_mean = col_means[:mid_col].mean()
     right_mean = col_means[mid_col:].mean()
 
-    # Row profiles for top/middle/bottom thirds
     third = zh // 3
     top_row_mean = binary[:third].astype(np.float64).mean(axis=1)
     mid_row_mean = binary[third:2*third].astype(np.float64).mean(axis=1)
     bot_row_mean = binary[2*third:].astype(np.float64).mean(axis=1)
 
-    # Right-half: find columns with significant white pixels (stroke presence)
     right_cols = binary[:, mid_col:]
     right_col_means = right_cols.astype(np.float64).mean(axis=0)
 
-    # Check top-right quadrant vs bottom-right quadrant
     tr_density = binary[:zh//2, mid_col:].astype(np.float64).mean()
     br_density = binary[zh//2:, mid_col:].astype(np.float64).mean()
 
-    # Check for "gap" in right side — consecutive low-density columns
-    threshold_for_gap = 30  # columns with mean < this have no stroke
+    threshold_for_gap = 30
     gap_cols = right_col_means < threshold_for_gap
     gap_runs = []
     run_start = None
@@ -163,23 +150,19 @@ for dx in [-5, -3, 0, 3, 5]:
             print(f"      col {start}-{end} (length={length}) {'*** SIGNIFICANT GAP ***' if length > 10 else ''}")
 
     if dx == 0:
-        # Save detailed debug images
         cv2.imwrite("/tmp/pos11_binary_otsu.png", binary)
         cv2.imwrite("/tmp/pos11_clahe16_6x.png", enh_clahe)
         cv2.imwrite("/tmp/pos11_gamma03_6x.png", enh_gamma)
         cv2.imwrite("/tmp/pos11_tophat_6x.png", enh_tophat)
         cv2.imwrite("/tmp/pos11_unsharp_6x.png", enh_unsharp)
 
-        # Draw column profile as image
         profile_img = np.zeros((256, zw), dtype=np.uint8)
         for x, val in enumerate(col_means):
             y_bar = int(min(val, 255))
             profile_img[256-y_bar:, x] = 255
-        # Draw midline
         cv2.line(profile_img, (mid_col, 0), (mid_col, 255), (128.0,), 1)
         cv2.imwrite("/tmp/pos11_column_profile.png", profile_img)
 
-        # Draw row profile
         row_means = binary.astype(np.float64).mean(axis=1)
         row_prof_img = np.zeros((zh, 256), dtype=np.uint8)
         for y, val in enumerate(row_means):
@@ -188,9 +171,6 @@ for dx in [-5, -3, 0, 3, 5]:
         cv2.imwrite("/tmp/pos11_row_profile.png", row_prof_img)
 
 
-# =============================================================================
-# STEP 2: Same analysis for ALL known digits for comparison
-# =============================================================================
 print("\n" + "=" * 65)
 print("COMPARISON: Right-side structure of ALL known digits")
 print("=" * 65)
@@ -225,20 +205,15 @@ for kpos, kdigit in sorted(KNOWN_DIGITS.items()):
           f"TR={tr_density:.0f} BR={br_density:.0f} maxRightGap={max_gap}")
 
 
-# =============================================================================
-# STEP 3: Side-by-side visual comparison
-# =============================================================================
 print("\n" + "=" * 65)
 print("STEP 3: Creating enhanced comparison strips")
 print("=" * 65)
 
-# Create comparison of pos11 vs each known digit at multiple enhancements
 for enh_name, enh_fn in [("clahe16", lambda z: enhance_clahe(z, 16)),
                           ("gamma03", lambda z: enhance_gamma(z, 0.3)),
                           ("tophat", enhance_tophat),
                           ("unsharp", enhance_unsharp)]:
     panels = []
-    # Known digits first
     for kpos in sorted(KNOWN_DIGITS.keys()):
         zone = get_zone(kpos)
         zone_up = upscale(zone)
@@ -254,7 +229,6 @@ for enh_name, enh_fn in [("clahe16", lambda z: enhance_clahe(z, 16)),
             2,
         )
         panels.append(labeled)
-    # Target pos 11
     zone11 = get_zone(11)
     zone11_up = upscale(zone11)
     enh11 = enh_fn(zone11_up)
@@ -270,7 +244,6 @@ for enh_name, enh_fn in [("clahe16", lambda z: enhance_clahe(z, 16)),
     )
     panels.append(labeled11)
 
-    # Also target pos 10 for context
     zone10 = get_zone(10)
     zone10_up = upscale(zone10)
     enh10 = enh_fn(zone10_up)
@@ -299,15 +272,10 @@ for enh_name, enh_fn in [("clahe16", lambda z: enhance_clahe(z, 16)),
     print(f"  Saved: /tmp/pos11_vs_known_{enh_name}.png")
 
 
-# =============================================================================
-# STEP 4: Re-OCR with TIGHTER crop around the digit (remove background noise)
-# =============================================================================
 print("\n" + "=" * 65)
 print("STEP 4: OCR with tighter vertical crops")
 print("=" * 65)
 
-# The embossed digits occupy roughly the middle 60% of the ROI height
-# Try tighter vertical windows to reduce noise
 
 CONFIGS = [
     f"--oem 3 --psm 10 {WL}",
@@ -355,7 +323,6 @@ def ocr_digit(im, budget):
     return reads, calls_used
 
 
-# Different vertical crop strategies
 v_crops = [
     ("full", 0.0, 1.0),
     ("mid70", 0.15, 0.85),
@@ -383,7 +350,6 @@ for target_pos in [11, 10]:
             x1 = min(rw, cx + HALF)
             zone = roi_gray[:, x0:x1]
 
-            # Apply vertical crop
             zh = zone.shape[0]
             vy0 = int(zh * vy0_frac)
             vy1 = int(zh * vy1_frac)
@@ -434,9 +400,6 @@ for target_pos in [11, 10]:
             print(f"      Runner-up: '{top2[1][0]}' ({top2[1][1]/total:.0%})")
 
 
-# =============================================================================
-# STEP 5: Curvature analysis — detect if there's a right curve vs straight line
-# =============================================================================
 print("\n" + "=" * 65)
 print("STEP 5: Curvature detection — right-side stroke analysis")
 print("=" * 65)
@@ -446,16 +409,13 @@ for target_pos in [11]:
     zone_up = upscale(zone)
     enh = enhance_clahe(zone_up, 16)
 
-    # Binarize
     _, binary = cv2.threshold(enh, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     zh, zw = binary.shape
     mid_col = zw // 2
 
-    # For each row in the right half, find the rightmost white pixel
-    # This traces the outer contour of the right side
     rightmost_x = []
-    leftmost_right_x = []  # leftmost white pixel in right half
+    leftmost_right_x = []
     for y in range(zh):
         row = binary[y, mid_col:]
         white_cols = np.nonzero(row > 128)[0]
@@ -469,24 +429,19 @@ for target_pos in [11]:
     rightmost_x = np.array(rightmost_x)
     leftmost_right_x = np.array(leftmost_right_x)
 
-    # Smooth the contour
     valid_mask = rightmost_x >= 0
     if valid_mask.sum() > 10:
-        # Contour analysis
         valid_y = np.nonzero(valid_mask)[0]
         valid_rx = rightmost_x[valid_mask].astype(np.float64)
 
-        # Check if contour curves (2nd derivative) vs straight
         if len(valid_rx) > 5:
             smoothed = cv2.GaussianBlur(valid_rx.reshape(-1, 1), (21, 1), 0).flatten()
             dx = np.gradient(smoothed)
             ddx = np.gradient(dx)
 
-            # Average curvature
             avg_curv = np.mean(np.abs(ddx))
             max_curv = np.max(np.abs(ddx))
 
-            # Curvature in top third vs middle vs bottom third
             third = len(ddx) // 3
             top_curv = np.mean(np.abs(ddx[:third]))
             mid_curv = np.mean(np.abs(ddx[third:2*third]))
@@ -499,20 +454,11 @@ for target_pos in [11]:
             print(f"    Middle 1/3 curv:  {mid_curv:.4f}")
             print(f"    Bottom 1/3 curv:  {bot_curv:.4f}")
 
-            # Width of stroke in right half
             right_widths = rightmost_x[valid_mask] - leftmost_right_x[valid_mask]
             print(f"    Avg right-stroke width: {np.mean(right_widths):.1f} px")
             print(f"    Max right-stroke width: {np.max(right_widths)} px")
 
-            # For digit identification:
-            # '2' has a curve at top-right, then sweeps left → rightmost_x decreases from top to bottom
-            # '7' has a top-right origin, slopes left → rightmost_x also decreases
-            # '3' curves right in top AND bottom → rightmost_x peaks twice
-            # '8' curves right in both halves → rightmost_x peaks twice
-            # '0' nearly circular → rightmost_x peaks in middle
-            # '4' has a vertical right stroke → rightmost_x fairly constant
 
-            # Check monotonicity
             slope_top_half = np.polyfit(np.arange(len(smoothed[:len(smoothed)//2])),
                                          smoothed[:len(smoothed)//2], 1)[0]
             slope_bot_half = np.polyfit(np.arange(len(smoothed[len(smoothed)//2:])),
@@ -521,7 +467,6 @@ for target_pos in [11]:
             print(f"    Right contour slope (top half):    {slope_top_half:+.3f}")
             print(f"    Right contour slope (bottom half): {slope_bot_half:+.3f}")
 
-            # Interpretation
             print("\n    INTERPRETATION:")
             if slope_top_half < -0.05 and slope_bot_half < -0.05:
                 print("      Rightmost edge moves LEFT through both halves")
@@ -533,26 +478,22 @@ for target_pos in [11]:
             else:
                 print(f"      Top slope={slope_top_half:+.3f}, Bot slope={slope_bot_half:+.3f}")
 
-    # Also draw the contour on the image
     contour_img = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
     for y in range(zh):
         if rightmost_x[y] >= 0:
             x = mid_col + rightmost_x[y]
             if 0 <= x < zw:
-                contour_img[y, x] = (0, 0, 255)  # Red dot
+                contour_img[y, x] = (0, 0, 255)
         if leftmost_right_x[y] >= 0:
             x = mid_col + leftmost_right_x[y]
             if 0 <= x < zw:
-                contour_img[y, x] = (0, 255, 0)  # Green dot
+                contour_img[y, x] = (0, 255, 0)
     cv2.line(contour_img, (mid_col, 0), (mid_col, zh-1), (255, 0, 0), 1)
     cv2.imwrite("/tmp/pos11_contour_analysis.png", contour_img)
     print("\n  Saved: /tmp/pos11_contour_analysis.png")
     print("  (Red = rightmost edge, Green = leftmost-in-right-half, Blue = midline)")
 
 
-# =============================================================================
-# STEP 6: Do the SAME contour analysis for known digits for reference
-# =============================================================================
 print("\n" + "=" * 65)
 print("REFERENCE: Right-side contour slopes for known digits")
 print("=" * 65)

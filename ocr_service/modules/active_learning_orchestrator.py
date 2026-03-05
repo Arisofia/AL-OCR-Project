@@ -47,7 +47,6 @@ class ALOrchestrator:
             logger.error("AL cycle aborted: No OCR model provided.")
             return {"status": "error", "message": "No model provided"}
 
-        # 1. Fetch recent results from LearningEngine (Supabase)
         recent_data = await self._fetch_recent_results(limit=200)
         if not recent_data or len(recent_data) < actual_n_samples:
             logger.warning(
@@ -57,20 +56,14 @@ class ALOrchestrator:
 
         df = pd.DataFrame(recent_data)
 
-        # 2. Data Quality Gate: Validate the batch
-        # We need columns: [image_path, ocr_text, confidence, user_label]
-        # In our case, Supabase stores font_metadata and accuracy_score.
-        # We'll map them to the expected schema for validation.
         validation_df = self._prepare_for_validation(df)
         if not validate_ocr_batch(validation_df):
             logger.error("AL cycle aborted: Data quality gate failed.")
             return {"status": "validation_failed"}
 
-        # 3. Hybrid Sampling: Select candidates for labeling
-        # In a real scenario, this would be a loaded PyTorch/TF model.
         selected_indices = self.sampling_strategy.select_indices(
             self.model,
-            np.random.rand(len(df), 128),  # Mock embeddings for now
+            np.random.rand(len(df), 128),
             actual_n_samples,
         )
         candidates = df.iloc[selected_indices]
@@ -78,7 +71,6 @@ class ALOrchestrator:
             "Selected %d candidates for labeling via Hybrid Strategy.", len(candidates)
         )
 
-        # 4. Drift Detection: Compare current batch vs historical baseline
         try:
             reference_df = pd.read_csv(self.settings.reference_baseline_path)
             drift_detected = check_for_drift(reference_df, validation_df)
@@ -94,12 +86,11 @@ class ALOrchestrator:
             "drift_detected": drift_detected,
             "candidates": candidates.to_dict(orient="records")[
                 :5
-            ],  # Return top 5 for preview
+            ],
         }
 
     async def _fetch_recent_results(self, limit: int = 100) -> list[dict[str, Any]]:
         """Retrieves data prioritizing Supabase with Local Fallback."""
-        # Try Cloud
         if self.learning_engine.client:
             try:
 
@@ -120,7 +111,6 @@ class ALOrchestrator:
             except Exception as e:
                 logger.warning("Cloud fetch failed in orchestrator: %s", e)
 
-        # Fallback to Local Engine logic
         def _local():
             return self.learning_engine._load_patterns()[-limit:]
 
@@ -128,7 +118,6 @@ class ALOrchestrator:
 
     def _prepare_for_validation(self, df: pd.DataFrame) -> pd.DataFrame:
         """Maps Supabase schema to Validation Gate schema."""
-        # Schema: [id, doc_type, font_metadata, accuracy_score, created_at]
         v_df = pd.DataFrame()
         ids = df.get("id")
         if ids is not None and hasattr(ids, "apply"):

@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
 """
 CLI tool to interact with the Gemini Vision Provider for testing and reconstruction.
 """
-# pylint: disable=duplicate-code
 
 import argparse
 import asyncio
@@ -11,7 +9,6 @@ import importlib
 import sys
 from pathlib import Path
 
-# Add project root to sys.path for local development
 with contextlib.suppress(Exception):
     sys.path.append(str(Path(__file__).parent.parent))
 

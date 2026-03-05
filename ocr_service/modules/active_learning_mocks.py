@@ -12,9 +12,8 @@ class MockOCRModel:
         return np.random.rand(len(data), 128)
 
     def predict_proba(self, data: np.ndarray) -> np.ndarray:
-        # Return mock high uncertainty for first half, low for second
         n = len(data)
         probs = np.zeros((n, 2))
-        probs[:, 0] = 0.5  # High uncertainty
+        probs[:, 0] = 0.5
         probs[:, 1] = 0.5
         return probs

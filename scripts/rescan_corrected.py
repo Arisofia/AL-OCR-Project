@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Rescan all 6 hidden positions using corrected coordinates from column analysis.
 """

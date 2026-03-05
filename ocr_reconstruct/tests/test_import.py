@@ -4,7 +4,6 @@ from ocr_reconstruct.modules.pipeline import process_bytes
 
 
 def test_import_and_process_sample():
-    # Generate samples if not present
     from ocr_reconstruct.tests.generate_samples import generate_all
 
     generate_all()
@@ -23,5 +22,4 @@ def test_import_and_process_sample():
         text, _out_bytes, meta = process_bytes(img_bytes, iterations=1)
 
     assert isinstance(text, str)
-    # out_bytes may be None if encoding failed, but meta should be present
     assert "iterations" in meta

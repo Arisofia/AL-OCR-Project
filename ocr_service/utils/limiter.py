@@ -9,12 +9,11 @@ from typing import Optional
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-# opentelemetry optional; provide a no-op tracer fallback when missing
 try:
     from opentelemetry import trace
 
     tracer = trace.get_tracer(__name__)
-except ImportError:  # pragma: no cover - fallback if opentelemetry missing
+except ImportError:
 
     class _NoopSpan:
         def __enter__(self):
@@ -28,12 +27,11 @@ except ImportError:  # pragma: no cover - fallback if opentelemetry missing
             """Return a no-op span context manager when tracing is unavailable."""
             return _NoopSpan()
 
-    tracer = _NoopTracer()  # type: ignore
+    tracer = _NoopTracer()
 
-# SlowAPI imports placed near other third-party imports
-from slowapi import Limiter  # type: ignore
-from slowapi.errors import RateLimitExceeded  # type: ignore
-from slowapi.util import get_remote_address  # type: ignore
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 logger = logging.getLogger("ocr-service.limiter")
 
@@ -51,7 +49,6 @@ def _rate_limit_exceeded_handler_with_logging(
 ) -> JSONResponse:
     """Enhanced rate limit handler with structured logging and tracing."""
     with tracer.start_as_current_span("limiter.rate_limit_exceeded"):
-        # Only log once per event, avoid duplicate logs if wrapped
         if not getattr(request.state, "rate_limit_logged", False):
             limit = getattr(request.state, "rate_limit", "unknown")
             logger.warning(
@@ -87,10 +84,9 @@ def init_limiter() -> Optional[Limiter]:
             limiter_instance = Limiter(key_func=get_remote_address)
             logger.info("Limiter initialized successfully.")
             return limiter_instance
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except Exception as e:
             logger.error("Failed to initialize Limiter: %s", e)
             return None
 
 
-# Global limiter instance for use in routers
 limiter = Limiter(key_func=get_remote_address)

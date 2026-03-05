@@ -14,7 +14,7 @@ def test_upscale_for_ocr_does_nothing_on_large_image():
     out = ImageToolkit.upscale_for_ocr(
         img, max_upscale_factor=2.0, max_long_side_px=3000
     )
-    assert out.shape == img.shape  # Already at cap
+    assert out.shape == img.shape
 
 
 def test_upscale_for_ocr_scales_small_image():
@@ -25,7 +25,7 @@ def test_upscale_for_ocr_scales_small_image():
     )
     assert out.shape[0] > img.shape[0] and out.shape[1] > img.shape[1]
 
-    assert max(out.shape[:2]) <= 1000  # Cap enforced
+    assert max(out.shape[:2]) <= 1000
 
 
 def test_decode_image_uses_pillow_fallback_when_cv2_imdecode_fails(monkeypatch):

@@ -17,9 +17,6 @@ from ocr_service.config import get_settings
 from ocr_service.main import app
 from ocr_service.routers.deps import get_ocr_processor
 
-# ---------------------------------------------------------------------------
-# Synthetic OCR processor results
-# ---------------------------------------------------------------------------
 
 _PASSPORT_RESULT = {
     "filename": "passport.jpg",
@@ -49,10 +46,6 @@ _BANK_CARD_RESULT = {
     "method": "gemini",
 }
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 
 def _auth_headers():
     settings = get_settings()
@@ -67,11 +60,6 @@ def _make_mock_processor(result: dict) -> MagicMock:
     mock = MagicMock()
     mock.process_file = AsyncMock(return_value=result)
     return mock
-
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
 
 
 def test_document_endpoint_response_contract():
@@ -98,7 +86,6 @@ def test_document_endpoint_response_contract():
             "warnings",
             "metadata",
             "processing_time",
-            # Optional fields (request_id, s3_key) are not checked here
         )
         for key in required_keys:
             assert key in data, f"Missing required key in DocumentResponse: {key!r}"
@@ -133,14 +120,10 @@ def test_document_endpoint_pan_masked():
             (f for f in data["fields"] if f["name"] == "card_number"), None
         )
         assert card_field is not None, "card_number field should be present"
-        # Last 4 digits visible
         assert "1111" in card_field["value"]
-        # Full PAN must not appear in value
         assert "4111 1111 1111 1111" not in card_field["value"]
-        # Masking format must show leading asterisks followed by last 4 digits
         assert card_field["value"].endswith("1111"), card_field["value"]
         assert "*" in card_field["value"]
-        # raw_ocr must be redacted
         assert card_field["raw_ocr"] == "[REDACTED]"
     finally:
         app.dependency_overrides.pop(get_ocr_processor, None)
@@ -197,7 +180,6 @@ def test_document_endpoint_luhn_note_in_warnings():
         assert response.status_code == 200, response.text
         data = response.json()
         warnings = data.get("warnings", [])
-        # 4111111111111111 is Luhn-valid, so a positive Luhn note must appear
         assert any("Luhn" in w for w in warnings), (
             f"Expected a Luhn advisory note in warnings; got: {warnings}"
         )
@@ -220,7 +202,6 @@ def test_document_endpoint_expiry_format_note_in_warnings():
         assert response.status_code == 200, response.text
         data = response.json()
         warnings = data.get("warnings", [])
-        # EXP 12/26 → "Expiry date format valid (MM/YY)"
         assert any("format valid" in w for w in warnings), (
             f"Expected expiry format note in warnings; got: {warnings}"
         )
